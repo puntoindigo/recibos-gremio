@@ -11,7 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Download, FileUp, Trash2, Eye, Loader2, CheckCircle2, XCircle } from "lucide-react"
 import { toast } from "sonner"
-import { buildCsvFromRecord, buildCsvFromMany } from "@/lib/to-csv"
+import { buildCsvFromRecord } from "@/lib/to-csv"
+import { CODE_LABELS, CODE_KEYS, labelFor } from "@/lib/code-labels";
 
 type ReceiptRow = {
   id: string
@@ -24,12 +25,20 @@ type ReceiptRow = {
 type UploadItem = { name: string; status: "pending" | "ok" | "error" }
 
 const LS_KEY = "recibos_v1"
+const BASE_COLS = ["LEGAJO", "PERIODO", "ARCHIVO"] as const
 
 export default function Page() {
   const [receipts, setReceipts] = useState<ReceiptRow[]>([])
   const [previewCsvId, setPreviewCsvId] = useState<string | null>(null)
   const [uploads, setUploads] = useState<UploadItem[]>([])
+  const [showDebug, setShowDebug] = useState(false) // oculto por defecto
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const isCode = (k: string) => /^\d{5}$/.test(k)
+  const prettyKey = (k: string) => (isCode(k) ? labelFor(k) : k)
+
+  // columnas visibles: base + códigos definidos en CODE_LABELS (orden respetado)
+  const visibleCols = useMemo(() => [...BASE_COLS, ...CODE_KEYS], [])
 
   // Cargar desde localStorage
   useEffect(() => {
@@ -44,12 +53,6 @@ export default function Page() {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(receipts))
     } catch {}
-  }, [receipts])
-
-  const allColumns = useMemo(() => {
-    const set = new Set<string>(["LEGAJO", "PERIODO", "ARCHIVO"])
-    for (const r of receipts) Object.keys(r.data).forEach((k) => set.add(k))
-    return Array.from(set)
   }, [receipts])
 
   function removeReceipt(id: string) {
@@ -83,7 +86,7 @@ export default function Page() {
         const res = await parsePdfReceiptToRecord(file)
         const parsed = (res?.data ?? {}) as Record<string, string>
 
-        // Merge de datos: dejamos base y el parser encima (para incluir 20xxx)
+        // Merge de datos: base + parser (incluye 20xxx)
         const data: Record<string, string> = {
           ARCHIVO: parsed.ARCHIVO ?? file.name,
           LEGAJO: parsed.LEGAJO ?? "-",
@@ -99,11 +102,12 @@ export default function Page() {
         setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "ok" } : u)))
         ok++
         toast.success(`Listo: ${file.name}`, { id: tid })
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("PDF error:", err)
         setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "error" } : u)))
         fail++
-        toast.error(`Error en ${file.name}`, { description: err?.message ?? "Desconocido", id: tid })
+        const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "Desconocido"
+        toast.error(`Error en ${file.name}`, { description: msg, id: tid })
       }
 
       // Ceder el hilo para bajar warnings de "Violation"
@@ -132,7 +136,19 @@ export default function Page() {
     URL.revokeObjectURL(url)
   }
 
-  const aggregatedCsv = useMemo(() => buildCsvFromMany(receipts.map((r) => r.data)), [receipts])
+  // CSV agregado: solo base + códigos de CODE_LABELS, en ese orden, con encabezados ya "bonitos".
+  const aggregatedCsv = useMemo(() => {
+    if (receipts.length === 0) return "LEGAJO,PERIODO,ARCHIVO\n"
+    const headers = visibleCols.map((c) => (isCode(c) ? labelFor(c) : c))
+    const escape = (v: unknown) => {
+      const s = String(v ?? "")
+      return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const rows = receipts.map((r) =>
+      visibleCols.map((c) => r.data[c] ?? "").map(escape).join(",")
+    )
+    return [headers.map(escape).join(","), ...rows].join("\n")
+  }, [receipts, visibleCols])
 
   return (
     <main className="mx-auto max-w-6xl p-6">
@@ -200,8 +216,17 @@ export default function Page() {
         </CardContent>
       </Card>
 
-      {/* Vista rápida (puedes ocultarla con NODE_ENV si quieres) */}
-      {receipts.length > 0 && (
+      <label className="mb-4 flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={showDebug}
+          onChange={(e) => setShowDebug(e.target.checked)}
+        />
+        Mostrar debug
+      </label>
+
+      {/* Vista rápida (debug) — muestra SOLO códigos presentes en CODE_LABELS (en ese orden) */}
+      {receipts.length > 0 && showDebug && (
         <div className="mb-6 rounded-lg border p-4 bg-amber-50/40">
           <div className="mb-2 flex items-center justify-between">
             <div className="font-semibold">Vista rápida (debug)</div>
@@ -218,7 +243,6 @@ export default function Page() {
           </div>
           {(() => {
             const r = receipts[0]
-            const codeKeys = Object.keys(r.data).filter((k) => /^20\d{3}$/.test(k))
             return (
               <div className="rounded-lg border p-4 bg-white">
                 <div className="text-sm text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</div>
@@ -228,9 +252,6 @@ export default function Page() {
                 </div>
                 <div className="text-sm">
                   <b>PERIODO:</b> {r.data.PERIODO ?? "-"}
-                </div>
-                <div className="text-sm">
-                  <b>Códigos:</b> {codeKeys.length}
                 </div>
                 <Separator className="my-3" />
                 <div className="overflow-x-auto">
@@ -242,12 +263,12 @@ export default function Page() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {Object.entries(r.data)
-                        .sort(([a], [b]) => a.localeCompare(b))
-                        .map(([k, v]) => (
-                          <TableRow key={k}>
-                            <TableCell className="font-mono text-xs">{k}</TableCell>
-                            <TableCell className="text-xs">{v}</TableCell>
+                      {CODE_LABELS
+                        .filter(([code]) => (r.data[code] ?? "") !== "")
+                        .map(([code, label]) => (
+                          <TableRow key={code}>
+                            <TableCell className="font-mono text-xs">{label}</TableCell>
+                            <TableCell className="text-xs">{r.data[code]}</TableCell>
                           </TableRow>
                         ))}
                     </TableBody>
@@ -259,117 +280,20 @@ export default function Page() {
         </div>
       )}
 
-      <Tabs defaultValue="recibos" className="w-full">
+      <Tabs defaultValue="agregado" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="recibos">Recibos</TabsTrigger>
           <TabsTrigger value="agregado">Tabla agregada</TabsTrigger>
+          <TabsTrigger value="recibos">Recibos</TabsTrigger>
           <TabsTrigger value="export">Exportación</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="recibos" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recibos procesados</CardTitle>
-              <CardDescription>Cada item corresponde a un CSV independiente.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {receipts.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Aún no hay recibos procesados.</p>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {receipts.map((r) => {
-                    const codeKeys = Object.keys(r.data).filter((k) => /^20\d{3}$/.test(k)).sort()
-                    return (
-                      <div key={r.id} className="rounded-lg border p-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1">
-                            <div className="text-sm text-muted-foreground">
-                              {new Date(r.createdAt).toLocaleString()}
-                            </div>
-                            <div className="font-medium">{r.filename}</div>
-                            <div className="text-sm">
-                              <b>LEGAJO:</b> {r.data.LEGAJO ?? "-"}
-                            </div>
-                            <div className="text-sm">
-                              <b>PERIODO:</b> {r.data.PERIODO ?? "-"}
-                            </div>
-                            <div className="text-sm">
-                              <b>Códigos:</b> {codeKeys.length}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              onClick={() => setPreviewCsvId((id) => (id === r.id ? null : r.id))}
-                              title="Ver CSV"
-                              aria-label="Ver CSV"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              onClick={() => downloadText(r.filename.replace(/\.pdf$/i, ".csv"), r.csv)}
-                            >
-                              <Download className="mr-2 h-4 w-4" />
-                              CSV
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              onClick={() => removeReceipt(r.id)}
-                              aria-label="Eliminar"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        {previewCsvId === r.id && (
-                          <>
-                            <Separator className="my-3" />
-                            <ScrollArea className="h-48 rounded border p-3">
-                              <pre className="text-xs">{r.csv}</pre>
-                            </ScrollArea>
-                          </>
-                        )}
-
-                        <Separator className="my-3" />
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Clave</TableHead>
-                                <TableHead>Valor</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {Object.entries(r.data)
-                                .sort(([a], [b]) => a.localeCompare(b))
-                                .map(([k, v]) => (
-                                  <TableRow key={k}>
-                                    <TableCell className="font-mono text-xs">{k}</TableCell>
-                                    <TableCell className="text-xs">{v}</TableCell>
-                                  </TableRow>
-                                ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
+        {/* TABLA AGREGADA — solo LEGAJO, PERIODO, ARCHIVO + códigos de CODE_LABELS */}
         <TabsContent value="agregado" className="mt-4">
           <Card>
             <CardHeader className="flex items-center justify-between gap-2 sm:flex-row sm:items-center">
               <div>
                 <CardTitle>Tabla agregada</CardTitle>
-                <CardDescription>Vista unificada de todos los recibos (unión de columnas).</CardDescription>
+                <CardDescription>Vista unificada (solo columnas etiquetadas).</CardDescription>
               </div>
               <Button
                 variant="secondary"
@@ -388,9 +312,9 @@ export default function Page() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        {allColumns.map((c) => (
+                        {visibleCols.map((c) => (
                           <TableHead key={c} className="whitespace-nowrap">
-                            {c}
+                            {prettyKey(c)}
                           </TableHead>
                         ))}
                       </TableRow>
@@ -398,7 +322,7 @@ export default function Page() {
                     <TableBody>
                       {receipts.map((r) => (
                         <TableRow key={r.id}>
-                          {allColumns.map((c) => (
+                          {visibleCols.map((c) => (
                             <TableCell key={c} className="text-xs">
                               {(r.data[c] ?? "").toString()}
                             </TableCell>
@@ -407,6 +331,99 @@ export default function Page() {
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* RECIBOS — detalle por recibo, tabla SOLO con códigos de CODE_LABELS */}
+        <TabsContent value="recibos" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Recibos procesados</CardTitle>
+              <CardDescription>Cada item corresponde a un CSV independiente.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {receipts.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aún no hay recibos procesados.</p>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {receipts.map((r) => (
+                    <div key={r.id} className="rounded-lg border p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="text-sm text-muted-foreground">
+                            {new Date(r.createdAt).toLocaleString()}
+                          </div>
+                          <div className="font-medium">{r.filename}</div>
+                          <div className="text-sm">
+                            <b>LEGAJO:</b> {r.data.LEGAJO ?? "-"}
+                          </div>
+                          <div className="text-sm">
+                            <b>PERIODO:</b> {r.data.PERIODO ?? "-"}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => setPreviewCsvId((id) => (id === r.id ? null : r.id))}
+                            title="Ver CSV"
+                            aria-label="Ver CSV"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={() => downloadText(r.filename.replace(/\.pdf$/i, ".csv"), r.csv)}
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            CSV
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => removeReceipt(r.id)}
+                            aria-label="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {previewCsvId === r.id && (
+                        <>
+                          <Separator className="my-3" />
+                          <ScrollArea className="h-48 rounded border p-3">
+                            <pre className="text-xs">{r.csv}</pre>
+                          </ScrollArea>
+                        </>
+                      )}
+
+                      <Separator className="my-3" />
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Clave</TableHead>
+                              <TableHead>Valor</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {CODE_LABELS
+                              .filter(([code]) => (r.data[code] ?? "") !== "")
+                              .map(([code, label]) => (
+                                <TableRow key={code}>
+                                  <TableCell className="font-mono text-xs">{label}</TableCell>
+                                  <TableCell className="text-xs">{r.data[code]}</TableCell>
+                                </TableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
