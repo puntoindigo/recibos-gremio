@@ -19,74 +19,131 @@ type ReceiptRow = {
   filename: string
   createdAt: number
   data: Record<string, string>
-  csv: string
+  hash?: string
+  hashes?: string[]
 }
 
 type UploadItem = { name: string; status: "pending" | "ok" | "error" }
 
 const LS_KEY = "recibos_v1"
+const LS_WARNED_KEY = "recibos_lswarn_v1"
+const MAX_LS_ROWS = 200
+
 const BASE_COLS = ["LEGAJO", "PERIODO", "ARCHIVO"] as const
+
+// --- helpers de consolidación / números ---
+const CODE_RE = /^\d{5}$/
+
+function toNumber(v: unknown): number {
+  if (typeof v === "number") return v
+  const s = String(v ?? "").replace(/\s/g, "").trim()
+  if (!s) return 0
+  if (/,\d{1,2}$/.test(s)) return parseFloat(s.replace(/\./g, "").replace(",", ".")) || 0
+  return parseFloat(s.replace(/,/g, "")) || 0
+}
+function sumAsString(a: unknown, b: unknown): string {
+  return (toNumber(a) + toNumber(b)).toFixed(2)
+}
+function mergeRecords(base: Record<string, string>, incoming: Record<string, string>) {
+  const out: Record<string, string> = { ...base }
+  for (const [k, v] of Object.entries(incoming)) {
+    if (CODE_RE.test(k)) out[k] = sumAsString(base[k], v)
+    else out[k] = String(v ?? base[k] ?? "")
+  }
+  return out
+}
+function mergeFilenames(a?: string, b?: string) {
+  const A = a?.trim() ?? ""
+  const B = b?.trim() ?? ""
+  if (!A) return B
+  if (!B) return A
+  if (A === B || A.includes(` + ${B}`) || B.includes(` + ${A}`)) return A
+  return `${A} + ${B}`
+}
+async function sha256HexOfFile(file: File): Promise<string> {
+  const buf = await file.arrayBuffer()
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buf)
+  const arr = Array.from(new Uint8Array(hashBuffer))
+  return arr.map(b => b.toString(16).padStart(2, "0")).join("")
+}
+// --- fin helpers ---
 
 export default function Page() {
   const [receipts, setReceipts] = useState<ReceiptRow[]>([])
   const [previewCsvId, setPreviewCsvId] = useState<string | null>(null)
   const [uploads, setUploads] = useState<UploadItem[]>([])
-  const [showDebug, setShowDebug] = useState(false) // oculto por defecto
+  const [showDebug, setShowDebug] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isCode = (k: string) => /^\d{5}$/.test(k)
   const prettyKey = (k: string) => (isCode(k) ? labelFor(k) : k)
-
-  // columnas visibles: base + códigos definidos en CODE_LABELS (orden respetado)
   const visibleCols = useMemo(() => [...BASE_COLS, ...CODE_KEYS], [])
 
-  // Cargar desde localStorage
+  // cargar / persistir
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY)
       if (raw) setReceipts(JSON.parse(raw))
     } catch {}
   }, [])
-
-  // Persistir en localStorage
   useEffect(() => {
     try {
+      if (receipts.length > MAX_LS_ROWS) {
+        if (!sessionStorage.getItem(LS_WARNED_KEY)) {
+          toast.warning(
+            `Se dejaron de persistir datos en este punto (>${MAX_LS_ROWS} recibos) para evitar agotar memoria.`
+          )
+          sessionStorage.setItem(LS_WARNED_KEY, "1")
+        }
+        return // no persistimos más allá del límite
+      }
       localStorage.setItem(LS_KEY, JSON.stringify(receipts))
     } catch {}
   }, [receipts])
 
   function removeReceipt(id: string) {
-    setReceipts((prev) => prev.filter((r) => r.id !== id))
+    setReceipts(prev => prev.filter(r => r.id !== id))
   }
 
-  // Procesamiento EN SERIE + progreso visual
+  // subir y procesar
   async function handleFiles(files: FileList) {
     const arr = Array.from(files).filter(
-      (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
+      f => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
     )
     if (arr.length === 0) {
       toast.info("Sin PDFs", { description: "Selecciona al menos un archivo PDF." })
       return
     }
 
-    // Mostrar cola inicial
-    setUploads(arr.map((f) => ({ name: f.name, status: "pending" as const })))
+    setUploads(arr.map(f => ({ name: f.name, status: "pending" as const })))
+
+    // hashes ya vistos (para dedupe)
+    const seenHashes = new Set<string>(
+      receipts.flatMap(r => r.hashes ?? (r.hash ? [r.hash] : []))
+    )
 
     const { parsePdfReceiptToRecord } = await import("@/lib/pdf-parser")
 
-    let ok = 0
-    let fail = 0
+    let ok = 0, fail = 0
 
-    // PROCESAR UNO POR VEZ
     for (let i = 0; i < arr.length; i++) {
       const file = arr[i]
       const tid = toast.loading(`Procesando ${file.name} (${i + 1}/${arr.length})`)
+
       try {
-        // Llamada directa (sin toast.promise para evitar wrappers raros)
+        // 1) dedupe por hash
+        const fileHash = await sha256HexOfFile(file)
+        if (seenHashes.has(fileHash)) {
+          setUploads(prev => prev.map((u, idx) => (idx === i ? { ...u, status: "ok" } : u)))
+          ok++
+          toast.info(`Omitido (duplicado): ${file.name}`, { id: tid })
+          continue
+        }
+
+        // 2) parsear y consolidar
         const res = await parsePdfReceiptToRecord(file)
         const parsed = (res?.data ?? {}) as Record<string, string>
 
-        // Merge de datos: base + parser (incluye 20xxx)
         const data: Record<string, string> = {
           ARCHIVO: parsed.ARCHIVO ?? file.name,
           LEGAJO: parsed.LEGAJO ?? "-",
@@ -94,38 +151,62 @@ export default function Page() {
           ...parsed,
         }
 
-        const csv = buildCsvFromRecord(data)
-        const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`
-        setReceipts((prev) => [{ id, filename: file.name, createdAt: Date.now(), data, csv }, ...prev])
+        setReceipts(prev => {
+          const idx = prev.findIndex(
+            r => (r.data.LEGAJO ?? "") === (data.LEGAJO ?? "") &&
+                 (r.data.PERIODO ?? "") === (data.PERIODO ?? "")
+          )
 
-        // marcar ok
-        setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "ok" } : u)))
+          if (idx === -1) {
+            const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`
+            seenHashes.add(fileHash)
+            return [{ id, filename: file.name, createdAt: Date.now(), data, hashes: [fileHash] }, ...prev]
+          }
+
+          const current = prev[idx]
+          const mergedData = mergeRecords(current.data, data)
+          mergedData.ARCHIVO = mergeFilenames(current.data.ARCHIVO, data.ARCHIVO)
+
+          const mergedHashes = Array.from(
+            new Set([...(current.hashes ?? (current.hash ? [current.hash] : [])), fileHash])
+          )
+
+          const merged: ReceiptRow = {
+            ...current,
+            filename: mergeFilenames(current.filename, file.name),
+            createdAt: Date.now(),
+            data: mergedData,
+            hashes: mergedHashes,
+          }
+          const next = [...prev]
+          next[idx] = merged
+          seenHashes.add(fileHash)
+          return next
+        })
+
+        setUploads(prev => prev.map((u, idx2) => (idx2 === i ? { ...u, status: "ok" } : u)))
         ok++
         toast.success(`Listo: ${file.name}`, { id: tid })
       } catch (err: unknown) {
         console.error("PDF error:", err)
-        setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "error" } : u)))
+        setUploads(prev => prev.map((u, idx2) => (idx2 === i ? { ...u, status: "error" } : u)))
         fail++
         const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "Desconocido"
         toast.error(`Error en ${file.name}`, { description: msg, id: tid })
       }
 
-      // Ceder el hilo para bajar warnings de "Violation"
-      await new Promise((r) => setTimeout(r, 0))
+      await new Promise(r => setTimeout(r, 0))
     }
 
-    // Resumen final
     toast.info(`Completado: ${ok} ok · ${fail} error`, { duration: 4000 })
-
-    // Limpiar input para volver a subir lo mismo
     if (fileInputRef.current) fileInputRef.current.value = ""
-
-    // Ocultar panel luego de un ratito
     setTimeout(() => setUploads([]), 3000)
   }
 
   function downloadText(filename: string, content: string) {
-    const blob = new Blob([content], { type: "text/csv;charset=utf-8" })
+    const bom = "\ufeff"
+    const sep = "sep=,"
+    const blob = new Blob([bom, sep, "\n", content], { type: "text/csv;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
@@ -136,16 +217,15 @@ export default function Page() {
     URL.revokeObjectURL(url)
   }
 
-  // CSV agregado: solo base + códigos de CODE_LABELS, en ese orden, con encabezados ya "bonitos".
   const aggregatedCsv = useMemo(() => {
     if (receipts.length === 0) return "LEGAJO,PERIODO,ARCHIVO\n"
-    const headers = visibleCols.map((c) => (isCode(c) ? labelFor(c) : c))
+    const headers = visibleCols.map(c => (isCode(c) ? labelFor(c) : c))
     const escape = (v: unknown) => {
       const s = String(v ?? "")
       return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
     }
-    const rows = receipts.map((r) =>
-      visibleCols.map((c) => r.data[c] ?? "").map(escape).join(",")
+    const rows = receipts.map(r =>
+      visibleCols.map(c => r.data[c] ?? "").map(escape).join(",")
     )
     return [headers.map(escape).join(","), ...rows].join("\n")
   }, [receipts, visibleCols])
@@ -163,13 +243,12 @@ export default function Page() {
         </p>
       </header>
 
-      {/* Panel de progreso de subidas */}
       {uploads.length > 0 && (
         <div className="mb-4 rounded-lg border p-3 bg-muted/30">
           <div className="mb-2 text-sm font-medium">
-            Procesando {uploads.filter((u) => u.status === "pending").length} pendiente(s) ·{" "}
-            {uploads.filter((u) => u.status === "ok").length} ok ·{" "}
-            {uploads.filter((u) => u.status === "error").length} error
+            Procesando {uploads.filter(u => u.status === "pending").length} pendiente(s) ·{" "}
+            {uploads.filter(u => u.status === "ok").length} ok ·{" "}
+            {uploads.filter(u => u.status === "error").length} error
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {uploads.map((u, i) => (
@@ -217,15 +296,10 @@ export default function Page() {
       </Card>
 
       <label className="mb-4 flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={showDebug}
-          onChange={(e) => setShowDebug(e.target.checked)}
-        />
+        <input type="checkbox" checked={showDebug} onChange={(e) => setShowDebug(e.target.checked)} />
         Mostrar debug
       </label>
 
-      {/* Vista rápida (debug) — muestra SOLO códigos presentes en CODE_LABELS (en ese orden) */}
       {receipts.length > 0 && showDebug && (
         <div className="mb-6 rounded-lg border p-4 bg-amber-50/40">
           <div className="mb-2 flex items-center justify-between">
@@ -247,12 +321,8 @@ export default function Page() {
               <div className="rounded-lg border p-4 bg-white">
                 <div className="text-sm text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</div>
                 <div className="font-medium">{r.filename}</div>
-                <div className="text-sm">
-                  <b>LEGAJO:</b> {r.data.LEGAJO ?? "-"}
-                </div>
-                <div className="text-sm">
-                  <b>PERIODO:</b> {r.data.PERIODO ?? "-"}
-                </div>
+                <div className="text-sm"><b>LEGAJO:</b> {r.data.LEGAJO ?? "-"}</div>
+                <div className="text-sm"><b>PERIODO:</b> {r.data.PERIODO ?? "-"}</div>
                 <Separator className="my-3" />
                 <div className="overflow-x-auto">
                   <Table>
@@ -287,7 +357,6 @@ export default function Page() {
           <TabsTrigger value="export">Exportación</TabsTrigger>
         </TabsList>
 
-        {/* TABLA AGREGADA — solo LEGAJO, PERIODO, ARCHIVO + códigos de CODE_LABELS */}
         <TabsContent value="agregado" className="mt-4">
           <Card>
             <CardHeader className="flex items-center justify-between gap-2 sm:flex-row sm:items-center">
@@ -312,7 +381,7 @@ export default function Page() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        {visibleCols.map((c) => (
+                        {visibleCols.map(c => (
                           <TableHead key={c} className="whitespace-nowrap">
                             {prettyKey(c)}
                           </TableHead>
@@ -320,9 +389,9 @@ export default function Page() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {receipts.map((r) => (
+                      {receipts.map(r => (
                         <TableRow key={r.id}>
-                          {visibleCols.map((c) => (
+                          {visibleCols.map(c => (
                             <TableCell key={c} className="text-xs">
                               {(r.data[c] ?? "").toString()}
                             </TableCell>
@@ -337,7 +406,6 @@ export default function Page() {
           </Card>
         </TabsContent>
 
-        {/* RECIBOS — detalle por recibo, tabla SOLO con códigos de CODE_LABELS */}
         <TabsContent value="recibos" className="mt-4">
           <Card>
             <CardHeader>
@@ -349,81 +417,77 @@ export default function Page() {
                 <p className="text-sm text-muted-foreground">Aún no hay recibos procesados.</p>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
-                  {receipts.map((r) => (
-                    <div key={r.id} className="rounded-lg border p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-1">
-                          <div className="text-sm text-muted-foreground">
-                            {new Date(r.createdAt).toLocaleString()}
+                  {receipts.map(r => {
+                    const csvText = buildCsvFromRecord(r.data)
+                    const sizeBytes = new Blob([csvText]).size
+                    return (
+                      <div key={r.id} className="rounded-lg border p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-1">
+                            <div className="text-sm text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</div>
+                            <div className="font-medium">{r.filename}</div>
+                            <div className="text-sm"><b>LEGAJO:</b> {r.data.LEGAJO ?? "-"}</div>
+                            <div className="text-sm"><b>PERIODO:</b> {r.data.PERIODO ?? "-"}</div>
                           </div>
-                          <div className="font-medium">{r.filename}</div>
-                          <div className="text-sm">
-                            <b>LEGAJO:</b> {r.data.LEGAJO ?? "-"}
-                          </div>
-                          <div className="text-sm">
-                            <b>PERIODO:</b> {r.data.PERIODO ?? "-"}
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => setPreviewCsvId(id => (id === r.id ? null : r.id))}
+                              title="Ver CSV"
+                              aria-label="Ver CSV"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              onClick={() => downloadText(r.filename.replace(/\.pdf$/i, ".csv"), csvText)}
+                            >
+                              <Download className="mr-2 h-4 w-4" />
+                              CSV
+                            </Button>
+                            <Button variant="destructive" size="icon" onClick={() => removeReceipt(r.id)} aria-label="Eliminar">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => setPreviewCsvId((id) => (id === r.id ? null : r.id))}
-                            title="Ver CSV"
-                            aria-label="Ver CSV"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            onClick={() => downloadText(r.filename.replace(/\.pdf$/i, ".csv"), r.csv)}
-                          >
-                            <Download className="mr-2 h-4 w-4" />
-                            CSV
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            onClick={() => removeReceipt(r.id)}
-                            aria-label="Eliminar"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+
+                        {previewCsvId === r.id && (
+                          <>
+                            <Separator className="my-3" />
+                            <ScrollArea className="h-48 rounded border p-3">
+                              <pre className="text-xs">{csvText}</pre>
+                            </ScrollArea>
+                          </>
+                        )}
+
+                        <Separator className="my-3" />
+                        <div className="text-xs text-muted-foreground mb-2">
+                          Tamaño CSV: {sizeBytes} bytes
+                        </div>
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Clave</TableHead>
+                                <TableHead>Valor</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {CODE_LABELS
+                                .filter(([code]) => (r.data[code] ?? "") !== "")
+                                .map(([code, label]) => (
+                                  <TableRow key={code}>
+                                    <TableCell className="font-mono text-xs">{label}</TableCell>
+                                    <TableCell className="text-xs">{r.data[code]}</TableCell>
+                                  </TableRow>
+                                ))}
+                            </TableBody>
+                          </Table>
                         </div>
                       </div>
-
-                      {previewCsvId === r.id && (
-                        <>
-                          <Separator className="my-3" />
-                          <ScrollArea className="h-48 rounded border p-3">
-                            <pre className="text-xs">{r.csv}</pre>
-                          </ScrollArea>
-                        </>
-                      )}
-
-                      <Separator className="my-3" />
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Clave</TableHead>
-                              <TableHead>Valor</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {CODE_LABELS
-                              .filter(([code]) => (r.data[code] ?? "") !== "")
-                              .map(([code, label]) => (
-                                <TableRow key={code}>
-                                  <TableCell className="font-mono text-xs">{label}</TableCell>
-                                  <TableCell className="text-xs">{r.data[code]}</TableCell>
-                                </TableRow>
-                              ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
@@ -440,37 +504,35 @@ export default function Page() {
               {receipts.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No hay archivos para exportar.</p>
               ) : (
-                receipts.map((r) => (
-                  <div key={r.id} className="rounded-lg border p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-sm">
-                        <span className="font-medium">{r.filename.replace(/\.pdf$/i, ".csv")}</span>{" "}
-                        <span className="text-muted-foreground">({new Blob([r.csv]).size} bytes)</span>
+                receipts.map(r => {
+                  const csvText = buildCsvFromRecord(r.data)
+                  const sizeBytes = new Blob([csvText]).size
+                  return (
+                    <div key={r.id} className="rounded-lg border p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm">
+                          <span className="font-medium">{r.filename.replace(/\.pdf$/i, ".csv")}</span>{" "}
+                          <span className="text-muted-foreground">({sizeBytes} bytes)</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="secondary" onClick={() => downloadText(r.filename.replace(/\.pdf$/i, ".csv"), csvText)}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Descargar
+                          </Button>
+                          <Button variant="outline" onClick={() => setPreviewCsvId(id => (id === r.id ? null : r.id))}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            {previewCsvId === r.id ? "Ocultar" : "Ver"}
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="secondary"
-                          onClick={() => downloadText(r.filename.replace(/\.pdf$/i, ".csv"), r.csv)}
-                        >
-                          <Download className="mr-2 h-4 w-4" />
-                          Descargar
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => setPreviewCsvId((id) => (id === r.id ? null : r.id))}
-                        >
-                          <Eye className="mr-2 h-4 w-4" />
-                          {previewCsvId === r.id ? "Ocultar" : "Ver"}
-                        </Button>
-                      </div>
+                      {previewCsvId === r.id && (
+                        <ScrollArea className="mt-3 h-48 rounded border p-3">
+                          <pre className="text-xs">{csvText}</pre>
+                        </ScrollArea>
+                      )}
                     </div>
-                    {previewCsvId === r.id && (
-                      <ScrollArea className="mt-3 h-48 rounded border p-3">
-                        <pre className="text-xs">{r.csv}</pre>
-                      </ScrollArea>
-                    )}
-                  </div>
-                ))
+                  )
+                })
               )}
             </CardContent>
           </Card>
