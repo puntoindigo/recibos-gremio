@@ -1,49 +1,61 @@
 // app/api/cleanup/route.ts
-import { NextResponse } from 'next/server';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { NextResponse } from "next/server";
+import path from "node:path";
+import { promises as fs } from "node:fs";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const DEST_DIR = path.join(process.cwd(), process.env.PUBLIC_RECIBOS_DIR || 'public/recibos');
+// Carpeta donde subís los PDF (coincide con /api/recibos/[name]/route.ts)
+const BASE_DIR = path.join(process.cwd(), "uploads", "recibos");
 
-async function listFiles(dir: string) {
-  try {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    return entries.filter(e => e.isFile()).map(e => path.join(dir, e.name));
-  } catch {
-    return [];
-  }
+function sanitize(name: string): string {
+  const n = (name ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w.\-]/g, "");
+  return n;
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    await fs.mkdir(DEST_DIR, { recursive: true });
-    const files = await listFiles(DEST_DIR);
+    const body = (await req.json().catch(() => ({}))) as { names?: unknown };
+    const names = Array.isArray(body.names) ? (body.names.filter((x) => typeof x === "string") as string[]) : [];
+
+    if (names.length === 0) {
+      return NextResponse.json({ ok: false, error: "Faltan nombres de archivos" }, { status: 400 });
+    }
+
+    const uniq = Array.from(new Set(names.map(sanitize))).filter(Boolean);
 
     let deleted = 0;
-    const errors: string[] = [];
+    const missing: string[] = [];
+    const errors: Array<{ name: string; error: string }> = [];
 
-    for (const abs of files) {
-      // por seguridad, solo borramos PDFs
-      if (!/\.pdf$/i.test(abs)) continue;
+    for (const n of uniq) {
+      const p = path.join(BASE_DIR, n);
+      const resolved = path.resolve(p);
+      // Defensa anti path traversal
+      if (!resolved.startsWith(path.resolve(BASE_DIR))) {
+        errors.push({ name: n, error: "Ruta fuera de BASE_DIR" });
+        continue;
+      }
       try {
-        await fs.unlink(abs);
+        await fs.unlink(resolved);
         deleted++;
-      } catch (e: any) {
-        errors.push(`${path.basename(abs)}: ${e?.message || 'error'}`);
+      } catch (e: unknown) {
+        const err = e as NodeJS.ErrnoException;
+        if (err?.code === "ENOENT") {
+          missing.push(n);
+        } else {
+          errors.push({ name: n, error: (err?.message ?? String(err)) });
+        }
       }
     }
 
-    return NextResponse.json({
-      ok: true,
-      dir: DEST_DIR,
-      deleted,
-      kept: files.length - deleted,
-      errors,
-    });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'cleanup error' }, { status: 500 });
+    return NextResponse.json({ ok: true, deleted, missing, errors });
+  } catch (e: unknown) {
+    const msg = (e as Error)?.message ?? String(e);
+    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
 }

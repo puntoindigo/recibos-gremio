@@ -153,4 +153,36 @@ export const repoDexie = {
       await db.control.clear();
     });
   },
+/** Borrar por clave (LEGAJO||PERIODO): borra recibos históricos y la fila consolidada. */
+async deleteByKey(key: string): Promise<void> {
+  await db.transaction("rw", db.receipts, db.consolidated, async () => {
+    // receipts: puede no tener 'key' como PK; usamos índice 'key' si existe o filtro defensivo
+    try {
+      // @ts-ignore - el índice 'key' puede existir según el schema
+      await db.receipts.where("key").equals(key).delete();
+    } catch {
+      // Fallback defensivo: filtrar
+      // @ts-ignore
+      await db.receipts.filter((r: { key?: string }) => r?.key === key).delete();
+    }
+    // consolidated: la clave 'key' actúa como PK en el código existente (get/put por key)
+    try {
+      await db.consolidated.delete(key);
+    } catch {
+      // Fallback si no fuese PK
+      // @ts-ignore
+      await db.consolidated.where("key").equals(key).delete();
+    }
+  });
+},
+
+/** Alias de compatibilidad */
+async removeByKey(key: string): Promise<void> {
+  await this.deleteByKey(key);
+},
+
+/** Alias de compatibilidad (nombra "receipt" pero aplica a ambas tablas relacionadas) */
+async deleteReceipt(key: string): Promise<void> {
+  await this.deleteByKey(key);
+},
 };

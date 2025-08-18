@@ -12,6 +12,10 @@ export interface AddReceiptInput {
 }
 
 export interface Repo {
+  deleteByKey?(key: string): Promise<void>;
+  removeByKey?(key: string): Promise<void>;
+  deleteReceipt?(key: string): Promise<void>;
+  wipe?(): Promise<void>;
   addReceipt(rec: AddReceiptInput): Promise<void>;
 
   // lectura del consolidado
