@@ -1,87 +1,62 @@
-import { NextResponse } from 'next/server';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { Buffer } from 'node:buffer';
-import { upsertArchivoEnTodos } from '@/lib/todos';
+// app/api/upload/route.ts
+import { NextResponse } from "next/server";
+import path from "node:path";
+import { promises as fs } from "node:fs";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const DEST_DIR = path.join(process.cwd(), process.env.PUBLIC_RECIBOS_DIR || 'public/recibos');
+const BASE_DIR = path.join(process.cwd(), "uploads", "recibos");
 
-function sanitizeName(name: string) {
-  const base = name.replace(/[/\\]/g, '');
-  const cleaned = base.replace(/[^\w.\- ]+/g, '');
-  return cleaned || 'archivo.pdf';
-}
-
-async function ensureUniqueFilePath(dir: string, fileName: string) {
-  const { name, ext } = path.parse(fileName);
-  let candidate = path.join(dir, fileName);
-  let i = 1;
-  for (;;) {
-    try {
-      await fs.access(candidate); // existe
-      candidate = path.join(dir, `${name}-${i}${ext}`);
-      i++;
-    } catch {
-      return candidate; // no existe
-    }
-  }
+function sanitize(name: string): string {
+  const n = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  return n.replace(/[^\w.\-]+/g, "_");
 }
 
 export async function POST(req: Request) {
   try {
     const form = await req.formData();
-    const file = form.get('file') as File | null;
-    if (!file) return NextResponse.json({ error: 'Falta "file"' }, { status: 400 });
-
-    const type = file.type || 'application/octet-stream';
-    if (type !== 'application/pdf') {
-      return NextResponse.json({ error: 'Solo se permiten PDFs' }, { status: 415 });
+    const file = form.get("file");
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: "Archivo no recibido" }, { status: 400 });
     }
 
-    // --- guardar el PDF en /public/recibos ---
-    const rawName = file.name || 'recibo.pdf';
-    const safeName = sanitizeName(rawName);
-    
-    await fs.mkdir(DEST_DIR, { recursive: true });
+    const keyRaw = String(form.get("key") ?? "");
+    const key = sanitize(keyRaw).slice(0, 80);
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    await fs.mkdir(BASE_DIR, { recursive: true });
 
-    const destPath = await ensureUniqueFilePath(DEST_DIR, safeName);
-    await fs.writeFile(destPath, buffer);
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
 
-    const finalName = path.basename(destPath);
-    const link = `/recibos/${encodeURIComponent(finalName)}`;
+    const orig = sanitize(file.name);
+    const base = key ? `${key}__${orig}` : orig;
 
-    // --- metadatos opcionales para actualizar todos.csv ---
-    // Podés mandar cualquiera de estos campos en el form:
-    // - key (formato: LEGAJO||mm/yyyy)
-    // - legajo y periodo (mm/yyyy)
-    const key = (form.get('key') || '').toString().trim();
-    const legajo = (form.get('legajo') || '').toString().trim();
-    const periodo = (form.get('periodo') || '').toString().trim();
+    // limitar longitud
+    const maxLen = 180;
+    let name = base.length > maxLen ? base.slice(base.length - maxLen) : base;
 
-    let csvResult: any = { updated: false, reason: 'Sin key/legajo/periodo, no se actualiza CSV' };
-
-    if (key || (legajo && periodo)) {
-      csvResult = await upsertArchivoEnTodos({
-        key,
-        legajo,
-        periodo,
-        archivo: { name: finalName, id: finalName, link }
-      });
+    // asegurar único
+    let target = path.join(BASE_DIR, name);
+    for (let i = 1; i < 1000; i++) {
+      try {
+        await fs.access(target);
+        const ext = path.extname(name);
+        const stem = path.basename(name, ext);
+        name = `${stem}-${i}${ext}`;
+        target = path.join(BASE_DIR, name);
+      } catch {
+        break; // no existe, listo
+      }
     }
 
-    return NextResponse.json({
-      id: finalName,
-      name: finalName,
-      link,
-      csv: csvResult
-    });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Upload error' }, { status: 500 });
+    await fs.writeFile(target, buffer);
+
+    // Nota: para descargar/ver, usar /api/recibos/[name]
+    return NextResponse.json({ ok: true, name });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[upload] error:", msg);
+    return NextResponse.json({ error: msg || "Upload failed" }, { status: 500 });
   }
 }

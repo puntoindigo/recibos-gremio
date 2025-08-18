@@ -26,6 +26,15 @@ type UploadItem = { name: string; status: "pending" | "ok" | "error" };
 const LS_KEY = "recibos_v1";
 const BASE_COLS = ["LEGAJO", "PERIODO", "NOMBRE", "ARCHIVO"] as const;
 
+/** <<< AJUSTE: solo comparamos estas 5 columnas visibles en Control >>> */
+const CODES_TO_COMPARE: Array<[string, string]> = [
+  ["20540", "CONTRIBUCION SOLIDARIA"],
+  ["20590", "SEGURO DE SEPELIO"],
+  ["20595", "CUOTA MUTUAL"],
+  ["20610", "RESGUARDO MUTUAL"],
+  ["DESC. MUTUAL", "DESC. MUTUAL"],
+];
+
 /* -------------------------- helpers -------------------------- */
 
 function periodoToNum(p: string): number {
@@ -113,6 +122,11 @@ export default function Page() {
   // nombres del Excel oficial (fallback si el PDF no lo trae)
   const [officialNameByKey, setOfficialNameByKey] = useState<Record<string, string>>({});
 
+  // <<< NUEVO: valores a mostrar en las celdas de control (recibo u oficial según corresponda) >>>
+  const [valuesByKey, setValuesByKey] = useState<
+    Record<string, { "20540"?: number; "20590"?: number; "20595"?: number; "20610"?: number; "DESC. MUTUAL"?: number }>
+  >({});
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const visibleCols = useMemo<string[]>(() => [...BASE_COLS, ...CODE_KEYS], []);
 
@@ -187,7 +201,7 @@ export default function Page() {
         let nombre = (parsed.NOMBRE ?? "").trim();
         if (!nombre && officialNameByKey[key]) nombre = officialNameByKey[key];
 
-        // subir archivo a /public/recibos
+        // subir archivo a /api/upload (guarda en uploads/recibos)
         let uploadedName = file.name;
         try {
           const fd = new FormData();
@@ -233,7 +247,6 @@ export default function Page() {
         setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "error" } : u)));
         toast.error(`Error en ${file.name}`, { description: errorMessage(err), id: tid });
       }
-      // ceder control al event loop
       await new Promise((r) => setTimeout(r, 0));
     }
 
@@ -267,6 +280,7 @@ export default function Page() {
       setOpenDetail({});
       setControlStats({ comps: 0, compOk: 0, compDif: 0, okReceipts: 0, difReceipts: 0 });
       setOfficialNameByKey({});
+      setValuesByKey({});
 
       const resp = await fetch("/api/cleanup", { method: "POST" });
       const raw: unknown = await resp.json();
@@ -308,9 +322,22 @@ export default function Page() {
       setControlOKs([]);
       setControlMissing([]);
       setControlStats({ comps: 0, compOk: 0, compDif: 0, okReceipts: 0, difReceipts: 0 });
+      setValuesByKey({});
       return;
     }
 
+    // mapa de valores para las 5 columnas (recibo por default)
+    const valsByKey: Record<string, Record<string, number>> = {};
+    for (const r of rows) {
+      const v: Record<string, number> = {};
+      for (const [code] of CODES_TO_COMPARE) {
+        const n = Number((r.data as Record<string, unknown>)[code] ?? 0);
+        v[code] = Number.isFinite(n) ? n : 0;
+      }
+      valsByKey[r.key] = v;
+    }
+
+    // pair r + oficial
     const pairs = await Promise.all(
       rows.map(async (r: ConsolidatedRow) => {
         const ctl = await repoDexie.getControl(r.key);
@@ -328,8 +355,9 @@ export default function Page() {
       if (!ctl) continue;
       const difs: ControlSummary["difs"] = [];
 
-      for (const [code, label] of CODE_LABELS) {
-        const calc = Number(r.data[code] ?? 0);
+      // <<< AJUSTE: solo estos códigos visibles >>>
+      for (const [code, label] of CODES_TO_COMPARE) {
+        const calc = Number((r.data as Record<string, unknown>)[code] ?? 0);
         const off = Number(ctl.valores[code] ?? 0);
         const delta = off - calc;
         const dentro = Math.abs(delta) <= tolerance;
@@ -348,6 +376,7 @@ export default function Page() {
           dir: delta > 0 ? "a favor" : "en contra",
         });
       }
+
       if (difs.length > 0) summaries.push({ key: r.key, legajo: r.legajo, periodo: r.periodo, difs });
       else oks.push({ key: r.key, legajo: r.legajo, periodo: r.periodo });
     }
@@ -358,6 +387,7 @@ export default function Page() {
     setControlSummaries(summaries);
     setControlOKs(oks);
 
+    // Oficiales sin recibo
     const official = new Set<string>(keysFromExcel ?? officialKeys);
     const consKeys = new Set(rows.map((r) => r.key));
     const missing: Array<{ key: string; legajo: string; periodo: string }> = [];
@@ -366,11 +396,25 @@ export default function Page() {
         if (!consKeys.has(k)) {
           const [legajo = "", periodo = ""] = k.split("||");
           missing.push({ key: k, legajo, periodo });
+
+          // cargar valores oficiales para mostrarlos en la grilla de "FALTA"
+          const ctl = await repoDexie.getControl(k);
+          if (ctl) {
+            const v: Record<string, number> = {};
+            for (const [code] of CODES_TO_COMPARE) {
+              const n = Number(ctl.valores[code] ?? 0);
+              v[code] = Number.isFinite(n) ? n : 0;
+            }
+            valsByKey[k] = v;
+          }
         }
       }
     }
+
+    // también aseguramos que las claves con recibo tengan sus valores cargados (ya lo hicimos arriba)
     setControlMissing(missing);
     setControlStats({ comps, compOk, compDif, okReceipts: oks.length, difReceipts: summaries.length });
+    setValuesByKey(valsByKey);
   }
 
   async function handleRecalc(): Promise<void> {
@@ -543,7 +587,7 @@ export default function Page() {
                 </Button>
                 <Button variant="secondary" onClick={downloadControlCsv} disabled={controlSummaries.length === 0 && !showOks}>
                   <Download className="mr-2 h-4 w-4" />
-                  Descargar CSV (claves con diferencias{showOks ? " + OK" : ""})
+                  Descargar CSV
                 </Button>
               </div>
             </CardHeader>
@@ -556,6 +600,7 @@ export default function Page() {
                 openDetail={openDetail}
                 onToggleDetail={(k) => setOpenDetail((prev) => ({ ...prev, [k]: !prev[k] }))}
                 nameByKey={nameByKey}
+                valuesByKey={valuesByKey}
               />
             </CardContent>
           </Card>
