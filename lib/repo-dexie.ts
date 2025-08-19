@@ -1,188 +1,167 @@
 // lib/repo-dexie.ts
-import { db } from "./db";
-import { toFixed2 } from "./number";
-import type { ConsolidatedRow } from "./repo";
+/* eslint-disable @typescript-eslint/consistent-type-definitions */
+import Dexie, { type Table } from "dexie";
 
-// Helpers
-const isCode = (k: string) => /^\d{5}$/.test(k);
-const makeKey = (legajo: string, periodo: string) =>
-  `${String(legajo).trim()}||${String(periodo).trim()}`;
-const normCuil = (s?: string) => (s || "").replace(/\D+/g, "");
+/** Filas consolidadas que usa la app en memoria / UI */
+export type ConsolidatedRow = {
+  key: string;                          // `${legajo}||${periodo}`
+  legajo: string;
+  periodo: string;                      // MM/YYYY
+  nombre: string;
+  cuil?: string;
+  /** NUEVO: nombre de empresa, si existe */
+  empresa?: string;
+  /** nombre del archivo subido (PDF) */
+  filename?: string;
+  /** hash del archivo para dedupe local */
+  fileHash?: string;
+  /** columnas etiquetadas (20540, 20590, etc) + metadatos como NOMBRE, CUIL… */
+  data: Record<string, string>;
+  createdAt?: number;                   // epoch ms (opcional)
+  updatedAt?: number;                   // epoch ms (opcional)
+};
 
-type AddReceiptInput = {
+export type ControlRow = {
+  key: string;                          // `${legajo}||${periodo}`
+  valores: Record<string, string>;      // valores oficiales por código
+  updatedAt?: number;
+};
+
+class RecibosDB extends Dexie {
+  public receipts!: Table<ConsolidatedRow, string>;
+  public control!: Table<ControlRow, string>;
+
+  public constructor() {
+    super("recibos_gremio_db");
+
+    // Versión base (ajustá si ya tenías otra versión)
+    // Índices: key (PK), legajo, periodo, empresa (nuevo), fileHash
+    this.version(3).stores({
+      receipts: "key, legajo, periodo, empresa, fileHash",
+      control: "key",
+    }).upgrade(async (tx) => {
+      // Backfill: setear empresa = "LIMPAR" SOLO si está vacía/indefinida
+      await tx.table("receipts")
+        .toCollection()
+        .modify((r: ConsolidatedRow) => {
+          const actual = (r.empresa ?? "").trim();
+          if (!actual) r.empresa = "LIMPAR";
+          // Normalizamos timestamps si no existen
+          if (!r.createdAt) r.createdAt = Date.now();
+          r.updatedAt = Date.now();
+        });
+    });
+  }
+}
+
+const db = new RecibosDB();
+
+/* ============================ API ============================ */
+
+async function countConsolidated(): Promise<number> {
+  return db.receipts.count();
+}
+
+async function getConsolidatedPage(opts: { offset: number; limit: number }): Promise<ConsolidatedRow[]> {
+  const { offset, limit } = opts;
+  // devolvemos en cualquier orden; la UI ordena si lo necesita
+  return db.receipts.offset(offset).limit(Math.max(0, limit)).toArray();
+}
+
+async function hasFileHash(hash: string): Promise<boolean> {
+  if (!hash) return false;
+  const n = await db.receipts.where("fileHash").equals(hash).count();
+  return n > 0;
+}
+
+/**
+ * Inserta/actualiza un recibo consolidado.
+ * - No forzamos empresa: si viene, se guarda; si no, queda undefined.
+ * - La clave se arma como `${legajo}||${periodo}`.
+ */
+async function addReceipt(rec: {
   legajo: string;
   periodo: string;
-  nombre?: string;
+  nombre: string;
   cuil?: string;
+  empresa?: string;
+  filename?: string;
+  fileHash?: string;
   data: Record<string, string>;
-  filename: string;
-  fileHash: string;
-};
+}): Promise<void> {
+  const key = `${rec.legajo}||${rec.periodo}`;
+  const now = Date.now();
 
-function mergeSummingCodes(
-  prev: Record<string, string>,
-  next: Record<string, string>
-) {
-  const out: Record<string, string> = { ...prev };
-  for (const [k, v] of Object.entries(next)) {
-    if (isCode(k)) {
-      const a = Number(out[k] ?? 0);
-      const b = Number(v ?? 0);
-      out[k] = toFixed2(a + b);
-    } else if (k === "ARCHIVO" || k === "LEGAJO" || k === "PERIODO") {
-      // no se consolidan como columnas “base”
-      continue;
-    } else {
-      if (String(v ?? "").length) out[k] = String(v);
-    }
-  }
-  return out;
+  // Sanitizamos empresa: solo guardamos si viene con algo
+  const empresa = rec.empresa && rec.empresa.trim() ? rec.empresa.trim() : 'LIMPAR';
+
+  const row: ConsolidatedRow = {
+    key,
+    legajo: rec.legajo,
+    periodo: rec.periodo,
+    nombre: rec.nombre,
+    cuil: rec.cuil,
+    empresa,                        // <-- persistimos si existe
+    filename: rec.filename,
+    fileHash: rec.fileHash,
+    data: rec.data,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await db.receipts.put(row);
 }
 
-async function findReceiptByHash(hash: string) {
-  // Si existe índice multiEntry en `hashes`, esto es O(log n).
-  // Si no, el filter hace un scan pero sigue siendo correcto.
-  try {
-    // @ts-expect-error puede fallar si no hay índice; caemos al filter
-    return await db.receipts.where("hashes").equals(hash).first();
-  } catch {
-    return await db.receipts
-      .filter((r) => Array.isArray(r.hashes) && r.hashes.includes(hash))
-      .first();
-  }
-}
-
-export const repoDexie = {
-  /** Alta + consolidación (suma por LEGAJO+PERIODO) + dedupe por hash (global). */
-  async addReceipt(
-    input: AddReceiptInput
-  ): Promise<"skipped-duplicate" | "added" | "merged"> {
-    const key = makeKey(input.legajo, input.periodo);
-    let result: "skipped-duplicate" | "added" | "merged" = "added";
-
-    await db.transaction("rw", db.receipts, db.consolidated, async () => {
-      // 🔒 Dedupe global por hash (antes de tocar nada)
-      const dupAny = await findReceiptByHash(input.fileHash);
-      if (dupAny) {
-        result = "skipped-duplicate";
-        return; // NO tocar consolidado
-      }
-
-      // Alta del receipt (histórico)
-      await db.receipts.add({
-        key,
-        legajo: input.legajo,
-        periodo: input.periodo,
-        nombre: input.nombre,
-        cuil: input.cuil,
-        cuilNorm: normCuil(input.cuil),
-        filename: input.filename,
-        createdAt: Date.now(),
-        hashes: [input.fileHash],
-        data: input.data,
-      });
-
-      // Upsert en consolidado
-      const prev = await db.consolidated.get(key);
-      const archivos = new Set<string>(
-        Array.isArray(prev?.archivos) ? prev!.archivos : []
-      );
-      archivos.add(input.filename);
-
-      const mergedData = mergeSummingCodes(prev?.data ?? {}, input.data);
-      const row: ConsolidatedRow = {
-        key,
-        legajo: input.legajo,
-        periodo: input.periodo,
-        nombre: input.nombre ?? prev?.nombre,
-        cuil: input.cuil ?? prev?.cuil,
-        cuilNorm: normCuil(input.cuil ?? prev?.cuil),
-        archivos: Array.from(archivos),
-        data: mergedData,
-      };
-
-      await db.consolidated.put(row);
-      result = prev ? "merged" : "added";
-    });
-
-    return result;
-  },
-
-  /** ¿Existe ya este hash en algún receipt? (pre-chequeo opcional para la UI) */
-  async hasFileHash(hash: string): Promise<boolean> {
-    const r = await findReceiptByHash(hash);
-    return !!r;
-  },
-
-  /** Cantidad de filas consolidadas */
-  async countConsolidated(): Promise<number> {
-    return db.consolidated.count();
-  },
-
-  /** Paginado simple desde DB */
-  async getConsolidatedPage(opts: {
-    offset: number;
-    limit: number;
-  }): Promise<ConsolidatedRow[]> {
-    const { offset, limit } = opts;
-    return db.consolidated.orderBy("key").offset(offset).limit(limit).toArray();
-  },
-
-  /** Control (dataset oficial desde Excel) */
-  async upsertControl(
-    rows: Array<{ key: string; valores: Record<string, string>; meta?: any }>
-  ): Promise<void> {
-    await db.transaction("rw", db.control, async () => {
-      for (const r of rows) {
-        await db.control.put({ key: r.key, valores: r.valores, meta: r.meta });
-      }
-    });
-  },
-
-  async getControl(key: string): Promise<
-    { key: string; valores: Record<string, string>; meta?: any } | undefined
-  > {
-    return db.control.get(key);
-  },
-
-  /** Utilitarios */
-  async wipe(): Promise<void> {
-    await db.transaction("rw", db.receipts, db.consolidated, db.control, async () => {
-      await db.receipts.clear();
-      await db.consolidated.clear();
-      await db.control.clear();
-    });
-  },
-/** Borrar por clave (LEGAJO||PERIODO): borra recibos históricos y la fila consolidada. */
-async deleteByKey(key: string): Promise<void> {
-  await db.transaction("rw", db.receipts, db.consolidated, async () => {
-    // receipts: puede no tener 'key' como PK; usamos índice 'key' si existe o filtro defensivo
-    try {
-      // @ts-ignore - el índice 'key' puede existir según el schema
-      await db.receipts.where("key").equals(key).delete();
-    } catch {
-      // Fallback defensivo: filtrar
-      // @ts-ignore
-      await db.receipts.filter((r: { key?: string }) => r?.key === key).delete();
-    }
-    // consolidated: la clave 'key' actúa como PK en el código existente (get/put por key)
-    try {
-      await db.consolidated.delete(key);
-    } catch {
-      // Fallback si no fuese PK
-      // @ts-ignore
-      await db.consolidated.where("key").equals(key).delete();
+async function upsertControl(rows: Array<{ key: string; valores: Record<string, string> }>): Promise<void> {
+  const now = Date.now();
+  await db.transaction("rw", db.control, async () => {
+    for (const r of rows) {
+      const row: ControlRow = { key: r.key, valores: r.valores, updatedAt: now };
+      await db.control.put(row);
     }
   });
-},
+}
 
-/** Alias de compatibilidad */
-async removeByKey(key: string): Promise<void> {
-  await this.deleteByKey(key);
-},
+async function getControl(key: string): Promise<ControlRow | undefined> {
+  return db.control.get(key);
+}
 
-/** Alias de compatibilidad (nombra "receipt" pero aplica a ambas tablas relacionadas) */
-async deleteReceipt(key: string): Promise<void> {
-  await this.deleteByKey(key);
-},
+/** Borra toda la base local (recibos + control). */
+async function wipe(): Promise<void> {
+  await db.transaction("rw", db.receipts, db.control, async () => {
+    await db.control.clear();
+    await db.receipts.clear();
+  });
+}
+
+/* ========= utilidades opcionales para mantenimiento ========= */
+
+/** Solo si querés forzar un backfill manual a futuro (no se usa hoy). */
+async function backfillEmpresaIfMissing(valor: string): Promise<number> {
+  let touched = 0;
+  await db.receipts.toCollection().modify((r: ConsolidatedRow) => {
+    const emp = (r.empresa ?? "").trim();
+    if (!emp) {
+      r.empresa = valor;
+      r.updatedAt = Date.now();
+      touched += 1;
+    }
+  });
+  return touched;
+}
+
+/* ========================= export =========================== */
+
+export const repoDexie = {
+  countConsolidated,
+  getConsolidatedPage,
+  hasFileHash,
+  addReceipt,
+  upsertControl,
+  getControl,
+  wipe,
+  // opcional:
+  backfillEmpresaIfMissing,
 };
+
+export type { RecibosDB };

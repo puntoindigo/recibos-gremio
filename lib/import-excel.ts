@@ -1,172 +1,160 @@
 // lib/import-excel.ts
+import type { WorkBook } from "xlsx";
 import * as XLSX from "xlsx";
-import { normalizarPeriodo } from "./fechas";
 import { CODE_LABELS } from "./code-labels";
+import { normalizarPeriodo } from "./fechas";
+// lector asíncrono con defaults; acepta File/Blob o ArrayBuffer
+export async function readOfficialXlsx(
+  file: ArrayBuffer | Uint8Array | Buffer | Blob,
+  opts?: { periodoResolver?: (periodoRaw: unknown) => string }
+): Promise<OfficialRow[]> {
+  let buf: ArrayBuffer | Uint8Array | Buffer;
+  // Si viene un Blob/File en el cliente, lo convertimos
+  if (typeof Blob !== 'undefined' && file instanceof Blob && 'arrayBuffer' in file) {
+    buf = await (file as Blob).arrayBuffer();
+  } else {
+    buf = file as ArrayBuffer;
+  }
+  const periodoResolver = (opts && opts.periodoResolver) ? opts.periodoResolver : normalizarPeriodo;
+  return parseOfficialXlsx(buf, { periodoResolver });
+}
 
 export type OfficialRow = {
-  key: string;           // `${legajo}||${periodo}`
-  nombre: string;
-  valores: Record<string, number>;
+  key: string; // legajo||mm/yyyy
+  valores: Record<string, string>; // códigos SIEMPRE como string ("20595", etc.)
+  meta?: {
+    legajo: string;
+    periodoRaw?: string;
+    periodo: string;
+    nombre?: string;
+    cuil?: string;
+  };
 };
 
-type Cell = string | number | boolean | Date | null | undefined;
-type Row = ReadonlyArray<Cell>;
+// ---------- helpers ----------
 
-const norm = (s: string): string =>
-  String(s ?? "")
-    .toUpperCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[\s\t\r\n]+/g, " ")
-    .trim();
-
-// Etiqueta EXACTA → código
-const codeByExactLabel: Map<string, string> = (() => {
+/** Mapa label normalizado -> código (string) */
+const codeByLabel: Map<string, string> = (() => {
   const m = new Map<string, string>();
-  for (const [code, label] of CODE_LABELS) m.set(norm(label), code);
+  for (const [code, label] of CODE_LABELS) {
+    m.set(normalizeHeader(label), String(code));
+  }
+  // aliases robustos por si el XLSX trae variantes
+  m.set(normalizeHeader("CUOTA MUTUAL"), "20595");
+  m.set(normalizeHeader("RESGUARDO MUTUAL"), "20610");
+  m.set(normalizeHeader("DESC. MUTUAL"), "20620");
+  m.set(normalizeHeader("DESC. MUTUAL 16 DE ABRIL"), "20620");
   return m;
 })();
 
-function toNumberFlexible(v: Cell): number {
-  if (typeof v === "number") return v;
-  const s0 = String(v ?? "").trim();
-  if (!s0) return 0;
-  const s = s0.replace(/\s+/g, "");
+function normalizeHeader(raw: string): string {
+  return String(raw || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // diacríticos
+    .replace(/[^\w\s.%/()-]/g, "") // limpia rarezas manteniendo %, (), -, /
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Maneja espacios finos, NBSP, comas y puntos en formatos AR/ES */
+function toDotDecimal(raw: unknown): string {
+  let s = String(raw ?? "")
+    .replace(/[\u00A0\u202F\u2007]/g, " ") // NBSP/NNBSP/figura
+    .trim();
+  if (!s) return "0.00";
+  s = s.replace(/\s+/g, "");
+
   const lastDot = s.lastIndexOf(".");
   const lastComma = s.lastIndexOf(",");
-  const useCommaDecimal = lastComma > lastDot;
-  const normNum = useCommaDecimal ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
-  const n = Number(normNum);
-  return Number.isFinite(n) ? n : 0;
+  const commaDecimal = lastComma > lastDot;
+
+  s = commaDecimal ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  const n = Number(s);
+  return Number.isFinite(n) ? n.toFixed(2) : "0.00";
 }
 
-function detectSheetWithHeaders(wb: XLSX.WorkBook): XLSX.WorkSheet {
-  for (const name of wb.SheetNames) {
-    const ws = wb.Sheets[name];
-    const rows = XLSX.utils.sheet_to_json<Row>(ws, { header: 1, raw: false });
-    if (!rows.length) continue;
-    const header = (rows[0] ?? []).map((h) => String(h ?? "").trim());
-    const hasLegajo = header.some((h) => norm(h).includes("LEGAJO"));
-    const hasPeriodoLike = header.some((h) => {
-      const up = norm(h);
-      return up === "PERIODO" || up.includes("PERIODO") || up === "PER" || up.includes("FECHA");
+function mapHeaderToCode(header: string): string | null {
+  const h = normalizeHeader(header);
+  if (codeByLabel.has(h)) return codeByLabel.get(h) as string;
+
+  // heurística: si el header contiene el label conocido
+  for (const [labelNorm, code] of codeByLabel.entries()) {
+    if (h.includes(labelNorm)) return code;
+  }
+  return null;
+}
+
+// ---------- parseo principal ----------
+
+export function parseOfficialXlsx(
+  file: ArrayBuffer | Uint8Array | Buffer,
+  {
+    periodoResolver,
+  }: {
+    /** Debe devolver "mm/yyyy" a partir del valor crudo de la celda/columna de período */
+    periodoResolver: (periodoRaw: unknown) => string;
+  }
+): OfficialRow[] {
+  const wb: WorkBook = XLSX.read(file, { type: "array" });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+
+  if (json.length === 0) return [];
+
+  // mapear encabezados a códigos
+  const headers = Object.keys(json[0] ?? {});
+  const headerToCode = new Map<string, string>();
+  for (const h of headers) {
+    const code = mapHeaderToCode(h);
+    if (code) headerToCode.set(h, String(code)); // Aseguramos string
+  }
+
+  // campos meta esperables (no estrictos)
+  const metaKeys = {
+    periodo: headers.find(h => /per[ií]odo/i.test(h)) ?? "PERIODO",
+    legajo: headers.find(h => /legajo/i.test(h)) ?? "LEGAJO",
+    nombre: headers.find(h => /nombre/i.test(h)) ?? "NOMBRE",
+    cuil: headers.find(h => /(cuil|dni)/i.test(h)) ?? "CUIL",
+  };
+
+  const rows: OfficialRow[] = [];
+
+  json.forEach((linea, idx) => {
+    const periodoRaw = linea[metaKeys.periodo];
+    const periodo = periodoResolver(periodoRaw);
+    const legajo = String(linea[metaKeys.legajo] ?? "").trim();
+    const nombre = String(linea[metaKeys.nombre] ?? "").trim();
+    const cuil = String(linea[metaKeys.cuil] ?? "").trim();
+
+    const valores: Record<string, string> = {};
+
+    for (const [h, code] of headerToCode.entries()) {
+      const value = linea[h];
+      // Guardamos SIEMPRE bajo código string
+      const codeStr = String(code);
+      valores[codeStr] = toDotDecimal(value);
+    }
+
+    const key = `${legajo}||${periodo}`;
+
+    if (idx < 3) {
+      // Log de verificación rápido: los 3 códigos de interés
+      // (podés dejarlo o quitarlo; ayuda al debug sin ruido)
+      // eslint-disable-next-line no-console
+      console.log("fila", idx, {
+        _20595: valores["20595"],
+        _20610: valores["20610"],
+        _20620: valores["20620"],
+      });
+    }
+
+    rows.push({
+      key,
+      valores,
+      meta: { legajo, periodoRaw: String(periodoRaw ?? ""), periodo, nombre, cuil },
     });
-    if (hasLegajo && hasPeriodoLike) return ws;
-  }
-  return wb.Sheets[wb.SheetNames[0]];
-}
-
-export async function readOfficialXlsx(file: File): Promise<OfficialRow[]> {
-  // Logs SIEMPRE (colapsados) para debug rápido, sin usar `any`
-  const group = (title: string): void => { try { console.groupCollapsed(title); } catch { /* noop */ } };
-  const groupEnd = (): void => { try { console.groupEnd(); } catch { /* noop */ } };
-  const log = (msg: unknown, extra?: unknown): void => {
-    try { typeof extra === "undefined" ? console.log(msg) : console.log(msg, extra); } catch { /* noop */ }
-  };
-  const table = (data: unknown): void => {
-    try { (console as Console & { table?: (d: unknown) => void }).table?.(data); } catch { /* noop */ }
-  };
-
-  const buf = await file.arrayBuffer();
-  // ← clave para que PERIODO sea Date si corresponde
-  const wb = XLSX.read(buf, { type: "array", cellDates: true });
-  const ws = detectSheetWithHeaders(wb);
-
-  const rows = XLSX.utils.sheet_to_json<Row>(ws, { header: 1, raw: false });
-  if (!rows.length) return [];
-
-  const headerRaw = (rows[0] ?? []) as Row;
-  const header = headerRaw.map((h) => String(h ?? "").replace(/[\s\t\r\n]+/g, " ").trim());
-
-  const idxLegajo = header.findIndex((h) => norm(h).includes("LEGAJO"));
-  const idxPeriodo = header.findIndex((h) => {
-    const up = norm(h);
-    return up === "PERIODO" || up.includes("PERIODO") || up === "PER" || up.includes("FECHA");
-  });
-  const idxNombre = header.findIndex((h) => {
-    const up = norm(h);
-    return (
-      up === "NOMBRE" ||
-      up === "APELLIDO Y NOMBRE" ||
-      up === "APELLIDO Y NOMBRES" ||
-      up.includes("APELLIDO") ||
-      (up.includes("NOMBRE") && !up.includes("ARCHIVO"))
-    );
   });
 
-  // Mapear columnas de códigos: 5 dígitos O etiqueta exacta
-  const seen = new Set<string>();
-  const codeCols: Array<{ idx: number; code: string; header: string; via: "5digits" | "label" }> = [];
-  const ignored: Array<{ idx: number; header: string; reason: string }> = [];
-
-  header.forEach((h, i) => {
-    const text = String(h).trim();
-    if (!text) return;
-    const k = norm(text);
-
-    // columnas meta
-    if (
-      k.includes("PERIODO") ||
-      k.includes("LEGAJO") ||
-      k.includes("NRO. DE CUIL") ||
-      k.includes("CUIL") ||
-      k.includes("CATEGORIA") ||
-      k === "NOMBRE" ||
-      k.includes("APELLIDO")
-    ) {
-      ignored.push({ idx: i, header: text, reason: "meta" });
-      return;
-    }
-
-    // 1) 5 dígitos
-    const m = text.match(/(\d{5})/);
-    if (m) {
-      const code = m[1];
-      if (!seen.has(code)) { seen.add(code); codeCols.push({ idx: i, code, header: text, via: "5digits" }); }
-      else { ignored.push({ idx: i, header: text, reason: `duplicated code ${code}` }); }
-      return;
-    }
-
-    // 2) etiqueta EXACTA
-    const exact = codeByExactLabel.get(k);
-    if (exact) {
-      if (!seen.has(exact)) { seen.add(exact); codeCols.push({ idx: i, code: exact, header: text, via: "label" }); }
-      else { ignored.push({ idx: i, header: text, reason: `duplicated code ${exact}` }); }
-      return;
-    }
-
-    ignored.push({ idx: i, header: text, reason: "unknown label (ignorado)" });
-  });
-
-  const out: OfficialRow[] = [];
-  for (let r = 1; r < rows.length; r++) {
-    const row = rows[r] ?? [];
-    const legajo = String(row[idxLegajo] ?? "").trim();
-    const periodo = normalizarPeriodo(row[idxPeriodo] as unknown);
-    if (!legajo || !periodo) continue;
-
-    const valores: Record<string, number> = {};
-    for (const { idx, code } of codeCols) {
-      const v = toNumberFlexible(row[idx]);
-      valores[code] = (valores[code] ?? 0) + v;
-    }
-
-    const nombre = idxNombre >= 0
-      ? String(row[idxNombre] ?? "").trim().replace(/\s*,\s*/g, ", ").replace(/\s+/g, " ")
-      : "";
-
-    out.push({ key: `${legajo}||${periodo}`, nombre, valores });
-  }
-
-  // Logs forenses SIEMPRE
-  group("[OFICIAL] Diagnóstico importación");
-  log("Headers crudos:", headerRaw);
-  table(header.map((h, i) => ({ idx: i, header: h })));
-  table(codeCols.map((c) => ({ idx: c.idx, header: c.header, code: c.code, via: c.via })));
-  table(ignored);
-  log(`Filas parseadas: ${out.length} | Códigos mapeados: ${Array.from(seen).join(", ")}`);
-  table(out.slice(0, 8).map(({ key, nombre, valores }) => ({ key, nombre, ...valores })));
-  groupEnd();
-
-  return out;
+  return rows;
 }

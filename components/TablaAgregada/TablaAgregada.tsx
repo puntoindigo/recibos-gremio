@@ -1,240 +1,102 @@
 // components/TablaAgregada/TablaAgregada.tsx
 'use client';
 
-import { useEffect, useMemo } from "react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import ArchivosCell from "@/components/TablaAgregada/ArchivosCell";
-import type { ConsolidatedRow } from "@/lib/repo";
-import { labelFor } from "@/lib/code-labels";
+import { useMemo, useState } from 'react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { OfficialRow } from '@/lib/import-excel';
+import ArchivosCell from './ArchivosCell';
 
-type Props = {
-  rows: ConsolidatedRow[];
-  visibleCols: string[];
-  nameByKey: Record<string, string>;
-  periodoFiltro: string;
-  onPeriodoFiltroChange: (v: string) => void;
-  empresaFiltro: string;
-  onEmpresaFiltroChange: (v: string) => void;
-};
+const CODE_CONTRIB = '20540';
+const CODE_SEPELIO = '20590';
+const CODE_CUOTA_MUTUAL = '20595';
+const CODE_RESGUARDO_MUTUAL = '20610';
+const CODE_DESC_MUTUAL = '20620';
 
-/* --------------------- helpers de normalización --------------------- */
+type Props = { data: OfficialRow[] };
 
-function normalizePeriodo(input: string): string {
-  const s = (input ?? "").trim();
-  if (!s) return "";
-  const m1 = s.match(/^(\d{1,2})[\/\-](\d{4})$/);
-  const m2 = s.match(/^(\d{4})[\/\-](\d{1,2})$/);
-  if (m1) {
-    const mm = String(parseInt(m1[1], 10)).padStart(2, "0");
-    return `${m1[2]}-${mm}`;
+function fmt(v?: string): string {
+  if (!v || v === '0.00') return '';
+  return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v));
+}
+
+export default function TablaAgregada({ data }: Props) {
+  const displayRows = useMemo(() => {
+    const rows = data ?? [];
+    return rows.map((r) => ({
+      key: r.key,
+      legajo: r.meta?.legajo ?? '',
+      nombre: r.meta?.nombre ?? '',
+      periodo: r.meta?.periodo ?? '',
+      archivo: r.meta?.archivo ?? '',
+      contrib: fmt(r.valores[CODE_CONTRIB]),
+      sepelio: fmt(r.valores[CODE_SEPELIO]),
+      cuota: fmt(r.valores[CODE_CUOTA_MUTUAL]),
+      resguardo: fmt(r.valores[CODE_RESGUARDO_MUTUAL]),
+      desc: fmt(r.valores[CODE_DESC_MUTUAL]),
+    }));
+  }, [data]);
+
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [page, setPage] = useState<number>(1);
+
+  const totalPages = Math.max(1, Math.ceil(displayRows.length / pageSize));
+  const pageRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return displayRows.slice(start, start + pageSize);
+  }, [displayRows, page, pageSize]);
+
+  if (page > totalPages) {
+    setPage(totalPages);
   }
-  if (m2) {
-    const mm = String(parseInt(m2[2], 10)).padStart(2, "0");
-    return `${m2[1]}-${mm}`;
-  }
-  const m3 = s.match(/^(\d{4})-(\d{2})$/);
-  if (m3) return s;
-  return s;
-}
-
-function normalizeEmpresa(s: string): string {
-  return (s ?? "").trim().toUpperCase();
-}
-
-function periodoKeyToNum(p: string): number {
-  const m = p.match(/^(\d{4})-(\d{2})$/);
-  if (!m) return 0;
-  return Number(m[1]) * 100 + Number(m[2]);
-}
-
-function getEmpresaRaw(r: ConsolidatedRow): string {
-  const raw = ((r.data as Record<string, string | undefined>)?.EMPRESA ?? "").trim();
-  return raw || "LIMPAR";
-}
-
-/* ------------------------------------------------------------------- */
-
-export default function TablaAgregada({
-  rows,
-  visibleCols,
-  nameByKey,
-  periodoFiltro,
-  onPeriodoFiltroChange,
-  empresaFiltro,
-  onEmpresaFiltroChange,
-}: Props) {
-  // ⚠️ Defensas: si los callbacks no son función, uso no-op y aviso en dev
-  const setPeriodo = (v: string) => {
-    if (typeof onPeriodoFiltroChange === "function") onPeriodoFiltroChange(v);
-    else if (process.env.NODE_ENV !== "production") console.warn("TablaAgregada: onPeriodoFiltroChange no es función");
-  };
-  const setEmpresa = (v: string) => {
-    if (typeof onEmpresaFiltroChange === "function") onEmpresaFiltroChange(v);
-    else if (process.env.NODE_ENV !== "production") console.warn("TablaAgregada: onEmpresaFiltroChange no es función");
-  };
-
-  const { periodos, empresas } = useMemo(() => {
-    const pNorm = new Set<string>();
-    const eNorm = new Set<string>();
-
-    for (const r of rows) {
-      const pVal = (r.periodo || r.data?.PERIODO || "").trim();
-      const pN = normalizePeriodo(pVal);
-      if (pN) pNorm.add(pN);
-
-      eNorm.add(normalizeEmpresa(getEmpresaRaw(r)));
-    }
-
-    const empresasAll = Array.from(eNorm);
-    const empresasOrdered = [
-      ...empresasAll.filter((x) => x === "LIMPAR"),
-      ...empresasAll.filter((x) => x !== "LIMPAR").sort((a, b) => a.localeCompare(b)),
-    ];
-
-    const periodosOrdered = Array.from(pNorm).sort((a, b) => periodoKeyToNum(b) - periodoKeyToNum(a));
-    return { periodos: periodosOrdered, empresas: empresasOrdered };
-  }, [rows]);
-
-  // Default inicial
-  useEffect(() => {
-    if (!periodoFiltro && periodos.length > 0) {
-      setPeriodo(periodos[0]);
-    }
-  }, [periodos, periodoFiltro]); // setPeriodo es estable por definición
-
-  useEffect(() => {
-    if (!empresaFiltro && empresas.length > 0) {
-      const pref = empresas.find((x) => x === "LIMPAR") ?? empresas[0];
-      setEmpresa(pref);
-    }
-  }, [empresas, empresaFiltro]);
-
-  // Reajuste después de borrar: si el filtro ya no existe, mover al primero disponible
-  useEffect(() => {
-    const pSel = normalizePeriodo(periodoFiltro);
-    if (pSel && !periodos.includes(pSel)) {
-      setPeriodo(periodos[0] ?? "");
-    }
-  }, [periodos, periodoFiltro]);
-
-  useEffect(() => {
-    const eSel = normalizeEmpresa(empresaFiltro);
-    if (eSel && !empresas.includes(eSel)) {
-      const pref = empresas.find((x) => x === "LIMPAR") ?? empresas[0] ?? "";
-      setEmpresa(pref);
-    }
-  }, [empresas, empresaFiltro]);
-
-  // Filtrado consistente con page.tsx
-  const filteredRows = useMemo(() => {
-    const pFilter = normalizePeriodo(periodoFiltro);
-    const eFilter = normalizeEmpresa(empresaFiltro);
-
-    return rows.filter((r) => {
-      const pValRaw = (r.periodo || r.data?.PERIODO || "").trim();
-      const empValRaw = getEmpresaRaw(r);
-      const okP = !pFilter || normalizePeriodo(pValRaw) === pFilter;
-      const okE = !eFilter || normalizeEmpresa(empValRaw) === eFilter;
-      return okP && okE;
-    });
-  }, [rows, periodoFiltro, empresaFiltro]);
-
-  const computedCols = useMemo(() => {
-    let cols = [...visibleCols];
-    if (periodoFiltro) cols = cols.filter((c) => c !== "PERIODO");
-    if (!empresaFiltro) {
-      if (!cols.includes("EMPRESA")) {
-        const idxNombre = cols.indexOf("NOMBRE");
-        if (idxNombre >= 0) cols.splice(idxNombre + 1, 0, "EMPRESA");
-        else cols.unshift("EMPRESA");
-      }
-    } else {
-      cols = cols.filter((c) => c !== "EMPRESA");
-    }
-    return cols;
-  }, [visibleCols, periodoFiltro, empresaFiltro]);
-
-  const periodosDisabled = periodos.length === 0;
-  const empresasDisabled = empresas.length === 0;
 
   return (
-    <div className="w-full overflow-auto">
-      {/* Barra de filtros */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6 justify-between">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
-          {/* Filtro por PERIODO */}
+    <div className="w-full overflow-x-auto">
+      <div className="mb-3 flex items-center gap-3">
+        <div className="text-sm text-muted-foreground">Mostrando {pageRows.length} de {displayRows.length}</div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Filas por página</span>
+          <Select value={String(pageSize)} onValueChange={(v) => { setPage(1); setPageSize(Number(v) || 50); }}>
+            <SelectTrigger className="w-24"><SelectValue placeholder="50" /></SelectTrigger>
+            <SelectContent>
+              {[25, 50, 100, 200].map((n) => (<SelectItem key={n} value={String(n)}>{n}</SelectItem>))}
+            </SelectContent>
+          </Select>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground min-w-16">Periodo</span>
-            <select
-              className="border rounded px-2 py-1 h-9"
-              value={normalizePeriodo(periodoFiltro)}
-              onChange={(e) => setPeriodo(normalizePeriodo(e.target.value))}
-              disabled={periodosDisabled}
-            >
-              {periodos.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
+            <Button size="sm" variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>←</Button>
+            <div className="text-sm tabular-nums">{page} / {totalPages}</div>
+            <Button size="sm" variant="outline" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>→</Button>
           </div>
-
-          {/* Filtro por EMPRESA */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground min-w-16">Empresa</span>
-            <select
-              className="border rounded px-2 py-1 h-9"
-              value={normalizeEmpresa(empresaFiltro)}
-              onChange={(e) => setEmpresa(normalizeEmpresa(e.target.value))}
-              disabled={empresasDisabled}
-            >
-              {empresas.map((em) => (
-                <option key={em} value={em}>{em}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Cantidad de registros */}
-        <div className="text-sm text-muted-foreground">
-          Registros: {filteredRows.length}
         </div>
       </div>
 
       <Table>
         <TableHeader>
           <TableRow>
-            {computedCols.map((c) => (
-              <TableHead key={c} className="whitespace-nowrap">
-                {/^\d{5}$/.test(c) ? labelFor(c) : c}
-              </TableHead>
-            ))}
+            <TableHead>LEGAJO</TableHead>
+            <TableHead>NOMBRE</TableHead>
+            <TableHead>PERIODO</TableHead>
+            <TableHead>CONTRIBUCION SOLIDARIA</TableHead>
+            <TableHead>SEGURO DE SEPELIO</TableHead>
+            <TableHead>CUOTA MUTUAL</TableHead>
+            <TableHead>RESGUARDO MUTUAL</TableHead>
+            <TableHead>DESC. MUTUAL</TableHead>
+            <TableHead>ARCHIVO</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filteredRows.map((r) => (
+          {pageRows.map((r) => (
             <TableRow key={r.key}>
-              {computedCols.map((c) => (
-                <TableCell key={c} className="text-xs">
-                  {c === "ARCHIVO" ? (
-                    <ArchivosCell
-                      value={
-                        Array.isArray(r.archivos) && r.archivos.length > 0
-                          ? (r.archivos as ReadonlyArray<string>).map((n: string) => ({ name: String(n) }))
-                          : r.data.ARCHIVO ?? ""
-                      }
-                    />
-                  ) : c === "NOMBRE" ? (
-                    r.nombre || r.data.NOMBRE || nameByKey[r.key] || ""
-                  ) : c === "LEGAJO" ? (
-                    r.legajo
-                  ) : c === "PERIODO" ? (
-                    r.periodo || r.data?.PERIODO || ""
-                  ) : c === "EMPRESA" ? (
-                    normalizeEmpresa(getEmpresaRaw(r))
-                  ) : (
-                    r.data[c] ?? ""
-                  )}
-                </TableCell>
-              ))}
+              <TableCell>{r.legajo}</TableCell>
+              <TableCell>{r.nombre}</TableCell>
+              <TableCell>{r.periodo}</TableCell>
+              <TableCell>{r.contrib}</TableCell>
+              <TableCell>{r.sepelio}</TableCell>
+              <TableCell>{r.cuota}</TableCell>
+              <TableCell>{r.resguardo}</TableCell>
+              <TableCell>{r.desc}</TableCell>
+              <TableCell><ArchivosCell value={r.archivo} /></TableCell>
             </TableRow>
           ))}
         </TableBody>

@@ -12,6 +12,7 @@ export const CODE_LABELS = [
   ["20540", "CONTRIBUCIÓN SOLIDARIA"], // con tilde
   ["20595", "CUOTA  MUTUAL"],          // doble espacio
   ["20610", "RESGUARDO  MUTUAL"],      // doble espacio
+  ["20610", "RESGUARDO MUTUAL FAMILIAR"],      // doble espacio
   ["20590", "SEGURO DE SEPELIO "],     // espacio al final
 
   // Variantes abreviadas del Excel para Seguro de Sepelio
