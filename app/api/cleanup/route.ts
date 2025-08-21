@@ -23,7 +23,8 @@ export async function POST(req: Request) {
     const names = Array.isArray(body.names) ? (body.names.filter((x) => typeof x === "string") as string[]) : [];
 
     if (names.length === 0) {
-      return NextResponse.json({ ok: false, error: "Faltan nombres de archivos" }, { status: 400 });
+      // No-op para evitar 400 cuando no hay archivos a borrar
+      return NextResponse.json({ ok: true, deleted: 0, missing: [], errors: [] });
     }
 
     const uniq = Array.from(new Set(names.map(sanitize))).filter(Boolean);
