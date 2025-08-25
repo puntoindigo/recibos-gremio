@@ -3,9 +3,10 @@ import type { ControlSummary } from "@/lib/control-types";
 
 export type ControlOk = { key: string; legajo: string; periodo: string };
 
+// mismo escapado que export agregado
 function esc(v: string): string {
   const s = String(v ?? "");
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 export function buildControlCsvSummary(
@@ -25,5 +26,6 @@ export function buildControlCsvSummary(
       rows.push([o.legajo, nameByKey[o.key] ?? "", o.periodo, "OK", "0"]);
     }
   }
-  return rows.map((r) => r.map(esc).join(",")).join("\n");
+  const body = rows.map((r) => r.map(esc).join(",")).join("\n");
+  return "sep=,\n" + body;
 }

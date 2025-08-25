@@ -1,5 +1,5 @@
 // components/Control/ControlTables.tsx
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ControlSummary } from "@/lib/control-types";
@@ -112,19 +112,30 @@ export default function ControlTables({
   valuesByKey = {},
 }: Props) {
   const colCount = headers.length;
+  const [openSection, setOpenSection] = useState<{ diffs: boolean; oks: boolean; missing: boolean }>({ diffs: false, oks: false, missing: false });
+  const counts = { diffs: summaries.length, oks: oks.length, missing: missing.length };
 
   return (
     <div className="space-y-8">
       {/* Diferencias */}
       <div>
-        <div className="mb-2 font-medium">Claves con diferencias</div>
-        {summaries.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay claves con diferencias.</p>
-        ) : (
-          <div className="w-full overflow-auto">
-            <Table>
-              <HeaderRow />
-              <TableBody>
+        <button
+          type="button"
+          className="mb-2 inline-flex items-center gap-2 font-medium"
+          onClick={() => setOpenSection((s) => ({ ...s, diffs: !s.diffs }))}
+          aria-expanded={openSection.diffs}
+        >
+          {openSection.diffs ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          {`Claves con diferencias (${counts.diffs})`}
+        </button>
+        {openSection.diffs && (
+          counts.diffs === 0 ? (
+            <p className="text-sm text-muted-foreground">No hay claves con diferencias.</p>
+          ) : (
+            <div className="w-full overflow-auto">
+              <Table>
+                <HeaderRow />
+                <TableBody>
                 {summaries.map((s) => {
                   const nombre = nameByKey[s.key] || "";
                   const vals = valuesByKey[s.key] || {};
@@ -206,23 +217,33 @@ export default function ControlTables({
                     </Fragment>
                   );
                 })}
-              </TableBody>
-            </Table>
-          </div>
+                </TableBody>
+              </Table>
+            </div>
+          )
         )}
       </div>
 
       {/* OKs */}
       <div>
-        <div className="mb-2 font-medium">Claves OK</div>
-        {oks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay claves OK para mostrar.</p>
-        ) : (
-          <div className="w-full overflow-auto">
-            <Table>
-              <HeaderRow />
-              <TableBody>
-                {oks.map((o) => {
+        <button
+          type="button"
+          className="mb-2 inline-flex items-center gap-2 font-medium"
+          onClick={() => setOpenSection((s) => ({ ...s, oks: !s.oks }))}
+          aria-expanded={openSection.oks}
+        >
+          {openSection.oks ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          {`Claves OK (${counts.oks})`}
+        </button>
+        {openSection.oks && (
+          counts.oks === 0 ? (
+            <p className="text-sm text-muted-foreground">No hay claves OK para mostrar.</p>
+          ) : (
+            <div className="w-full overflow-auto">
+              <Table>
+                <HeaderRow />
+                <TableBody>
+                  {oks.map((o) => {
                   const nombre = nameByKey[o.key] || "";
                   const vals = valuesByKey[o.key] || {};
                   return (
@@ -238,24 +259,34 @@ export default function ControlTables({
                       <TableCell className="px-3 py-2 tabular-nums">{fmt(vals["DESC. MUTUAL"])}</TableCell>
                     </TableRow>
                   );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )
         )}
       </div>
 
       {/* Oficiales sin recibo */}
       <div>
-        <div className="mb-2 font-medium">Registros oficiales sin recibo</div>
-        {missing.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay registros del Excel sin su recibo correspondiente.</p>
-        ) : (
-          <div className="w-full overflow-auto">
-            <Table>
-              <HeaderRow />
-              <TableBody>
-                {missing.map((m) => {
+        <button
+          type="button"
+          className="mb-2 inline-flex items-center gap-2 font-medium"
+          onClick={() => setOpenSection((s) => ({ ...s, missing: !s.missing }))}
+          aria-expanded={openSection.missing}
+        >
+          {openSection.missing ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          {`Registros oficiales sin recibo (${counts.missing})`}
+        </button>
+        {openSection.missing && (
+          counts.missing === 0 ? (
+            <p className="text-sm text-muted-foreground">No hay registros del Excel sin su recibo correspondiente.</p>
+          ) : (
+            <div className="w-full overflow-auto">
+              <Table>
+                <HeaderRow />
+                <TableBody>
+                  {missing.map((m) => {
                   const nombre = nameByKey[m.key] || "";
                   const vals = valuesByKey[m.key] || {};
                   return (
@@ -271,10 +302,11 @@ export default function ControlTables({
                       <TableCell className="px-3 py-2 tabular-nums">{fmt(vals["DESC. MUTUAL"])}</TableCell>
                     </TableRow>
                   );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )
         )}
       </div>
     </div>

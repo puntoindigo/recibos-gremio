@@ -17,6 +17,7 @@ dist/
 # Datos generados en runtime
 data/*.csv
 uploads/recibos/*
+public/recibos/*
 
 # Opcional: mantener la carpeta data vacía en el repo
 !data/.gitkeep

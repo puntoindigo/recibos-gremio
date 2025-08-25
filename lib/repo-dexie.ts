@@ -2,6 +2,7 @@
 import { db } from "./db";
 import { toFixed2 } from "./number";
 import type { ConsolidatedRow } from "./repo";
+import type { SavedControlDB } from "./db";
 
 // Helpers
 const isCode = (k: string) => /^\d{5}$/.test(k);
@@ -187,5 +188,66 @@ async removeByKey(key: string): Promise<void> {
 /** Alias de compatibilidad (nombra "receipt" pero aplica a ambas tablas relacionadas) */
 async deleteReceipt(key: string): Promise<void> {
   await this.deleteByKey(key);
+},
+
+/** Guardar control con filtros específicos */
+async saveControl(
+  periodo: string,
+  empresa: string,
+  summaries: Array<{
+    key: string;
+    legajo: string;
+    periodo: string;
+    difs: Array<{
+      codigo: string;
+      label: string;
+      oficial: string;
+      calculado: string;
+      delta: string;
+      dir: string;
+    }>;
+  }>,
+  oks: Array<{ key: string; legajo: string; periodo: string }>,
+  missing: Array<{ key: string; legajo: string; periodo: string }>,
+  stats: {
+    comps: number;
+    compOk: number;
+    compDif: number;
+    okReceipts: number;
+    difReceipts: number;
+  },
+  officialKeys: string[],
+  officialNameByKey: Record<string, string>
+): Promise<void> {
+  const filterKey = `${periodo}||${empresa}`;
+  await db.savedControls.put({
+    filterKey,
+    periodo,
+    empresa,
+    summaries,
+    oks,
+    missing,
+    stats,
+    officialKeys,
+    officialNameByKey,
+    createdAt: Date.now(),
+  });
+},
+
+/** Cargar control por filtros */
+async getSavedControl(periodo: string, empresa: string): Promise<SavedControlDB | undefined> {
+  const filterKey = `${periodo}||${empresa}`;
+  return db.savedControls.where("filterKey").equals(filterKey).first();
+},
+
+/** Limpiar controles guardados */
+async clearSavedControls(): Promise<void> {
+  await db.savedControls.clear();
+},
+
+/** Eliminar control específico por filtros */
+async deleteSavedControl(periodo: string, empresa: string): Promise<void> {
+  const filterKey = `${periodo}||${empresa}`;
+  await db.savedControls.where("filterKey").equals(filterKey).delete();
 },
 };

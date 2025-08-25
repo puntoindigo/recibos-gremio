@@ -44,19 +44,54 @@ export type ControlRow = {
   meta?: Record<string, JSONValue>;   // metadatos opcionales (serializables)
 };
 
+/** Control guardado con filtros específicos. */
+export type SavedControlDB = {
+  id?: number;
+  filterKey: string;                  // `${periodo}||${empresa}`
+  periodo: string;
+  empresa: string;
+  summaries: Array<{
+    key: string;
+    legajo: string;
+    periodo: string;
+    difs: Array<{
+      codigo: string;
+      label: string;
+      oficial: string;
+      calculado: string;
+      delta: string;
+      dir: string;
+    }>;
+  }>;
+  oks: Array<{ key: string; legajo: string; periodo: string }>;
+  missing: Array<{ key: string; legajo: string; periodo: string }>;
+  stats: {
+    comps: number;
+    compOk: number;
+    compDif: number;
+    okReceipts: number;
+    difReceipts: number;
+  };
+  officialKeys: string[];
+  officialNameByKey: Record<string, string>;
+  createdAt: number;
+};
+
 export class RecibosDB extends Dexie {
   receipts!: Table<ReceiptRowDB, number>;
   consolidated!: Table<ConsolidatedEntity, string>;
   control!: Table<ControlRow, string>;
+  savedControls!: Table<SavedControlDB, number>;
   settings!: Table<{ k: string; v: JSONValue }, string>;
 
   constructor() {
     super("recibosDB-v1");
     // Nota: *hashes => índice multiEntry para búsquedas por hash.
-    this.version(1).stores({
+    this.version(2).stores({
       receipts: "++id, key, legajo, periodo, cuilNorm, createdAt, *hashes",
       consolidated: "key, legajo, periodo, cuilNorm",
       control: "key",
+      savedControls: "++id, filterKey, periodo, empresa, createdAt",
       settings: "k",
     });
   }

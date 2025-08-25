@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { Download, FileUp, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -20,6 +19,7 @@ import ControlTables from "@/components/Control/ControlTables";
 import { buildControlCsvSummary, type ControlOk as ControlOkRow } from "@/lib/export-control";
 import type { ControlSummary } from "@/lib/control-types";
 import { buildAggregatedCsv } from "@/lib/export-aggregated";
+import ReceiptsFilters from "@/components/ReceiptsFilters";
 
 type UploadItem = { name: string; status: "pending" | "ok" | "error" };
 
@@ -85,6 +85,26 @@ function parseCleanupResponse(u: unknown): CleanupResponse {
   };
 }
 
+type SavedControl = {
+  summaries: ControlSummary[];
+  oks: ControlOkRow[];
+  missing: Array<{ key: string; legajo: string; periodo: string }>;
+  stats: {
+    comps: number;
+    compOk: number;
+    compDif: number;
+    okReceipts: number;
+    difReceipts: number;
+  };
+  filters: {
+    periodo: string;
+    empresa: string;
+  };
+  officialKeys: string[];
+  officialNameByKey: Record<string, string>;
+  timestamp: number;
+};
+
 /* --------------------------- page ---------------------------- */
 
 export default function Page() {
@@ -92,6 +112,8 @@ export default function Page() {
   const [totalRows, setTotalRows] = useState(0);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [showDebug, setShowDebug] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("agregado");
+  const [hasControlForCurrentFilters, setHasControlForCurrentFilters] = useState<boolean>(false);
 
   // Control (agregado por Legajo/Período)
   const [controlLoading, setControlLoading] = useState(false);
@@ -113,29 +135,124 @@ export default function Page() {
 const [periodoFiltro, setPeriodoFiltro] = useState<string>("");
 const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
 
-  // nombres del Excel oficial (fallback si el PDF no lo trae)
-  const [officialNameByKey, setOfficialNameByKey] = useState<Record<string, string>>({});
+// nombres del Excel oficial (fallback si el PDF no lo trae)
+const [officialNameByKey, setOfficialNameByKey] = useState<Record<string, string>>({});
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const visibleCols = useMemo<string[]>(() => [...BASE_COLS, ...CODE_KEYS], []);
+const fileInputRef = useRef<HTMLInputElement>(null);
+const visibleCols = useMemo<string[]>(() => [...BASE_COLS, ...CODE_KEYS], []);
 
-  // Mapa final de nombres para UI/CSV (consolidado > oficial)
-  const nameByKey = useMemo<Record<string, string>>(() => {
-    const m: Record<string, string> = {};
-    for (const r of consolidated) {
-      const nm = r.nombre || r.data.NOMBRE;
-      if (nm) m[r.key] = nm;
+// Mapa final de nombres para UI/CSV (consolidado > oficial)
+const nameByKey = useMemo<Record<string, string>>(() => {
+  const m: Record<string, string> = {};
+  for (const r of consolidated) {
+    const nm = r.nombre || r.data.NOMBRE;
+    if (nm) m[r.key] = nm;
+  }
+  for (const [k, v] of Object.entries(officialNameByKey)) {
+    if (!m[k] && v) m[k] = v;
+  }
+  return m;
+}, [consolidated, officialNameByKey]);
+
+// listas de filtros se calculan dentro de TablaAgregada
+
+async function saveControlToDexie(
+  summaries: ControlSummary[],
+  oks: ControlOkRow[],
+  missing: Array<{ key: string; legajo: string; periodo: string }>,
+  stats: { comps: number; compOk: number; compDif: number; okReceipts: number; difReceipts: number },
+  officialKeys: string[],
+  officialNameByKey: Record<string, string>
+): Promise<void> {
+  try {
+    console.log("💾 saveControlToDexie - Guardando con filtros:", { periodoFiltro, empresaFiltro });
+    await repoDexie.saveControl(periodoFiltro, empresaFiltro, summaries, oks, missing, stats, officialKeys, officialNameByKey);
+    console.log("✅ saveControlToDexie - Control guardado exitosamente");
+  } catch (e) {
+    console.error("❌ saveControlToDexie - Error guardando control:", e);
+    console.warn("No se pudo guardar el control:", e);
+  }
+}
+
+async function loadControlFromDexie(): Promise<{
+  summaries: ControlSummary[];
+  oks: ControlOkRow[];
+  missing: Array<{ key: string; legajo: string; periodo: string }>;
+  stats: { comps: number; compOk: number; compDif: number; okReceipts: number; difReceipts: number };
+  officialKeys: string[];
+  officialNameByKey: Record<string, string>;
+} | null> {
+  try {
+    console.log("🔍 loadControlFromDexie - Buscando control para filtros:", { periodoFiltro, empresaFiltro });
+    const saved = await repoDexie.getSavedControl(periodoFiltro, empresaFiltro);
+    if (!saved) {
+      console.log("❌ loadControlFromDexie - No se encontró control guardado");
+      return null;
     }
-    for (const [k, v] of Object.entries(officialNameByKey)) {
-      if (!m[k] && v) m[k] = v;
-    }
-    return m;
-  }, [consolidated, officialNameByKey]);
+    
+    console.log("✅ loadControlFromDexie - Control encontrado:", {
+      summaries: saved.summaries.length,
+      oks: saved.oks.length,
+      missing: saved.missing.length
+    });
+    
+    return {
+      summaries: saved.summaries as ControlSummary[],
+      oks: saved.oks as ControlOkRow[],
+      missing: saved.missing,
+      stats: saved.stats,
+      officialKeys: saved.officialKeys,
+      officialNameByKey: saved.officialNameByKey,
+    };
+  } catch (e) {
+    console.error("❌ loadControlFromDexie - Error cargando control:", e);
+    console.warn("No se pudo cargar el control:", e);
+    return null;
+  }
+}
 
-  useEffect(() => {
-    void loadConsolidated();
-    if (navigator?.storage?.persist) navigator.storage.persist().catch(() => {});
-  }, []);
+useEffect(() => {
+  void loadConsolidated();
+  if (navigator?.storage?.persist) navigator.storage.persist().catch(() => {});
+}, []);
+
+// Efecto para cargar control guardado cuando cambian los filtros
+useEffect(() => {
+  async function loadControl() {
+    console.log("🔄 useEffect - Cambio de filtros detectado:", { periodoFiltro, empresaFiltro });
+    if (periodoFiltro || empresaFiltro) {
+      const saved = await loadControlFromDexie();
+      if (saved) {
+        console.log("✅ useEffect - Control cargado desde Dexie");
+        setControlSummaries(saved.summaries);
+        setControlOKs(saved.oks);
+        setControlMissing(saved.missing);
+        setControlStats(saved.stats);
+        setOfficialKeys(saved.officialKeys);
+        setOfficialNameByKey(saved.officialNameByKey);
+        setHasControlForCurrentFilters(true);
+      } else {
+        console.log("⚠️ useEffect - No hay control guardado para estos filtros");
+        // Si no hay control guardado para estos filtros, limpiar resultados
+        setControlSummaries([]);
+        setControlOKs([]);
+        setControlMissing([]);
+        setControlStats({ comps: 0, compOk: 0, compDif: 0, okReceipts: 0, difReceipts: 0 });
+        setHasControlForCurrentFilters(false);
+      }
+    } else {
+      console.log("⚠️ useEffect - No hay filtros seleccionados");
+      // Si no hay filtros, limpiar resultados
+      setControlSummaries([]);
+      setControlOKs([]);
+      setControlMissing([]);
+      setControlStats({ comps: 0, compOk: 0, compDif: 0, okReceipts: 0, difReceipts: 0 });
+      setHasControlForCurrentFilters(false);
+    }
+  }
+  
+  void loadControl();
+}, [periodoFiltro, empresaFiltro]);
 
   async function loadConsolidated(): Promise<void> {
     const count = await repoDexie.countConsolidated();
@@ -257,6 +374,67 @@ const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
     }
   }
 
+  async function handleDeleteVisible(): Promise<void> {
+    const empresaOf = (r: ConsolidatedRow) => String(r.data?.EMPRESA ?? "LIMPAR");
+    const filtered = consolidated
+      .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
+      .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true));
+
+    if (filtered.length === 0) {
+      toast.info("No hay registros para eliminar con los filtros seleccionados");
+      return;
+    }
+
+    const confirm = window.confirm(
+      `¿Eliminar ${filtered.length} registros para ${periodoFiltro || "todos los períodos"} / ${empresaFiltro || "todas las empresas"}?`
+    );
+    if (!confirm) return;
+
+    try {
+      // Eliminar cada registro individualmente
+      for (const r of filtered) {
+        await repoDexie.deleteByKey(r.key);
+      }
+      
+      // También eliminar el control asociado a estos filtros si existe
+      if (periodoFiltro || empresaFiltro) {
+        await repoDexie.deleteSavedControl(periodoFiltro, empresaFiltro);
+        setHasControlForCurrentFilters(false);
+      }
+      
+      // Recargar datos consolidados
+      await loadConsolidated();
+      
+      toast.success(`${filtered.length} registros eliminados`);
+    } catch (e: unknown) {
+      toast.error("Error eliminando registros", { description: errorMessage(e) });
+    }
+  }
+
+  async function handleDeleteControl(): Promise<void> {
+    if (!periodoFiltro && !empresaFiltro) {
+      toast.error("Debe seleccionar al menos un filtro");
+      return;
+    }
+
+    const confirm = window.confirm(
+      `¿Eliminar control para ${periodoFiltro || "todos los períodos"} / ${empresaFiltro || "todas las empresas"}?`
+    );
+    if (!confirm) return;
+
+    try {
+      await repoDexie.deleteSavedControl(periodoFiltro, empresaFiltro);
+      setControlSummaries([]);
+      setControlOKs([]);
+      setControlMissing([]);
+      setControlStats({ comps: 0, compOk: 0, compDif: 0, okReceipts: 0, difReceipts: 0 });
+      setHasControlForCurrentFilters(false);
+      toast.success("Control eliminado");
+    } catch (e: unknown) {
+      toast.error("Error eliminando control", { description: errorMessage(e) });
+    }
+  }
+
   async function handleWipeAll(): Promise<void> {
     try {
       await repoDexie.wipe();
@@ -270,6 +448,7 @@ const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
       setOpenDetail({});
       setControlStats({ comps: 0, compOk: 0, compDif: 0, okReceipts: 0, difReceipts: 0 });
       setOfficialNameByKey({});
+      setHasControlForCurrentFilters(false);
 
       const resp = await fetch("/api/cleanup", { method: "POST" });
       const raw: unknown = await resp.json();
@@ -290,23 +469,42 @@ const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
 
   async function handleOfficialExcel(file: File): Promise<void> {
     try {
+      console.log("🔄 Iniciando handleOfficialExcel con filtros:", { periodoFiltro, empresaFiltro });
       setControlLoading(true);
       const rows: OfficialRow[] = await readOfficialXlsx(file);
+      console.log("📊 Excel leído:", rows.length, "filas");
+      
       await repoDexie.upsertControl(rows.map((r) => ({ key: r.key, valores: r.valores })));
+      console.log("💾 Control upserted en Dexie");
+      
       setOfficialKeys(rows.map((r) => r.key));
-      setOfficialNameByKey(Object.fromEntries(rows.map((r) => [r.key, r.nombre || ""])));
+      setOfficialNameByKey(Object.fromEntries(rows.map((r) => [r.key, r.meta?.nombre || ""])));
+      console.log("🔑 Official keys y nombres actualizados");
+      
       await computeControl(rows.map((r) => r.key));
+      console.log("✅ Control computado exitosamente");
+      
       toast.success(`Oficial cargado (${rows.length} filas)`);
     } catch (e: unknown) {
+      console.error("❌ Error en handleOfficialExcel:", e);
       toast.error("Error importando oficial", { description: errorMessage(e) });
     } finally {
       setControlLoading(false);
+      console.log("🏁 handleOfficialExcel completado");
     }
   }
 
   async function computeControl(keysFromExcel?: string[]): Promise<void> {
-    const rows = consolidated;
+    console.log("🔄 Iniciando computeControl con filtros:", { periodoFiltro, empresaFiltro });
+    const empresaOf = (r: ConsolidatedRow) => String(r.data?.EMPRESA ?? "LIMPAR");
+    const filtered = consolidated
+      .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
+      .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true));
+    const rows = filtered;
+    console.log("📊 Filas filtradas:", rows.length, "de", consolidated.length, "total");
+    
     if (!rows.length) {
+      console.log("⚠️ No hay filas para procesar, limpiando control");
       setControlSummaries([]);
       setControlOKs([]);
       setControlMissing([]);
@@ -314,6 +512,7 @@ const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
       return;
     }
 
+    console.log("🔍 Procesando", rows.length, "filas para control");
     const pairs = await Promise.all(
       rows.map(async (r: ConsolidatedRow) => {
         const ctl = await repoDexie.getControl(r.key);
@@ -358,6 +557,14 @@ const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
     summaries.sort(compareByKey);
     oks.sort(compareByKey);
 
+    console.log("📈 Resultados del control:", {
+      summaries: summaries.length,
+      oks: oks.length,
+      comps,
+      compOk,
+      compDif
+    });
+
     setControlSummaries(summaries);
     setControlOKs(oks);
 
@@ -374,6 +581,15 @@ const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
     }
     setControlMissing(missing);
     setControlStats({ comps, compOk, compDif, okReceipts: oks.length, difReceipts: summaries.length });
+    
+    // Guardar el control con los filtros actuales
+    console.log("💾 Guardando control en Dexie...");
+    await saveControlToDexie(summaries, oks, missing, { comps, compOk, compDif, okReceipts: oks.length, difReceipts: summaries.length }, keysFromExcel ?? officialKeys, officialNameByKey);
+    console.log("✅ Control guardado exitosamente");
+    
+    // Actualizar el estado para habilitar el botón de eliminar control
+    setHasControlForCurrentFilters(true);
+    console.log("🔘 Botón 'Eliminar Control' habilitado");
   }
 
   async function handleRecalc(): Promise<void> {
@@ -391,7 +607,11 @@ const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
   /* -------------------- export CSVs -------------------- */
 
   function downloadCsvAggregated(): void {
-    const csv = buildAggregatedCsv(consolidated, visibleCols);
+    const empresaOf = (r: ConsolidatedRow) => String(r.data?.EMPRESA ?? "LIMPAR");
+    const filtered = consolidated
+      .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
+      .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true));
+    const csv = buildAggregatedCsv(filtered, visibleCols);
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -450,30 +670,29 @@ const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
       )}
 
       <div className="mb-4 flex gap-2">
-        <Button variant="outline" size="sm" onClick={handleRefresh}>
-          Refrescar
-        </Button>
-        <Button variant="outline" size="sm" onClick={handleWipeAll}>
-          Limpiar memoria
-        </Button>
+        {showDebug && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { 
+              if (activeTab === "control") {
+                void handleDeleteControl();
+              } else {
+                void handleDeleteVisible();
+              }
+            }}
+            disabled={activeTab === "control" && (!periodoFiltro && !empresaFiltro || !hasControlForCurrentFilters)}
+          >
+            {activeTab === "control" ? "Eliminar Control" : "Eliminar registros"}
+          </Button>
+        )}
         <label className="ml-auto flex items-center gap-2 text-sm">
           <input type="checkbox" checked={showDebug} onChange={(e: ChangeEvent<HTMLInputElement>) => setShowDebug(e.target.checked)} />
           Mostrar debug
         </label>
       </div>
 
-      {/* Debug liviano */}
-      {showDebug && consolidated[0] && (
-        <div className="mb-6 rounded-lg border p-4 bg-amber-50/40">
-          <div className="rounded-lg border p-4 bg-white">
-            <div className="text-sm text-muted-foreground">Filas consolidadas: {totalRows}</div>
-            <Separator className="my-3" />
-            <pre className="text-xs overflow-auto">{JSON.stringify(consolidated[0], null, 2)}</pre>
-          </div>
-        </div>
-      )}
-
-      <Tabs defaultValue="agregado" className="w-full">
+      <Tabs defaultValue="agregado" className="w-full" onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="agregado">Tabla agregada</TabsTrigger>
           <TabsTrigger value="control">Control</TabsTrigger>
@@ -488,26 +707,40 @@ const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
                 <CardTitle>Tabla agregada</CardTitle>
                 <CardDescription>Vista unificada (solo columnas etiquetadas). Incluye NOMBRE.</CardDescription>
               </div>
-              <div className="flex gap-2">
-                <Button variant="secondary" disabled={consolidated.length === 0} onClick={downloadCsvAggregated}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Descargar CSV agregado
-                </Button>
+              <div className="flex flex-col gap-3 sm:items-end">
+                <div className="flex gap-2">
+                  <Button variant="secondary" disabled={consolidated.length === 0} onClick={downloadCsvAggregated}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Exportar
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               {consolidated.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Aún no hay datos.</p>
               ) : (
-                <TablaAgregada
+                <>
+                  <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                    <ReceiptsFilters
+                      periodos={Array.from(new Set(consolidated.map((r) => r.periodo))).sort()}
+                      empresas={Array.from(new Set(consolidated.map((r) => String(r.data?.EMPRESA ?? "LIMPAR").trim()))).sort()}
+                      valuePeriodo={periodoFiltro || null}
+                      onPeriodo={(v: string | null) => setPeriodoFiltro(v ?? "")}
+                      valueEmpresa={empresaFiltro || null}
+                      onEmpresa={(v: string | null) => setEmpresaFiltro(v ?? "")}
+                    />
+                  </div>
+                  <TablaAgregada
                     rows={consolidated}
                     visibleCols={visibleCols}
                     nameByKey={nameByKey}
                     periodoFiltro={periodoFiltro}
-                    onPeriodoFiltroChange={setPeriodoFiltro}   // ✅ función
+                    onPeriodoFiltroChange={setPeriodoFiltro}
                     empresaFiltro={empresaFiltro}
-                    onEmpresaFiltroChange={setEmpresaFiltro}   // ✅ función
+                    onEmpresaFiltroChange={setEmpresaFiltro}
                   />
+                </>
 
               )}
             </CardContent>
@@ -532,21 +765,29 @@ const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
                 <Input
                   type="file"
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="w-full md:w-1/2"
+                  disabled={!periodoFiltro && !empresaFiltro}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => {
                     if (e.target.files && e.target.files[0]) void handleOfficialExcel(e.target.files[0]);
                   }}
                 />
-                <Button variant="outline" onClick={handleRecalc} disabled={controlLoading}>
-                  {controlLoading ? "..." : "Recalcular"}
-                </Button>
                 <Button variant="secondary" onClick={downloadControlCsv} disabled={controlSummaries.length === 0}>
                   <Download className="mr-2 h-4 w-4" />
-                  Descargar CSV (claves con diferencias{showOks ? " + OK" : ""})
+                  Exportar
                 </Button>
               </div>
             </CardHeader>
-
             <CardContent>
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                <ReceiptsFilters
+                  periodos={Array.from(new Set(consolidated.map((r) => r.periodo))).sort()}
+                  empresas={Array.from(new Set(consolidated.map((r) => String(r.data?.EMPRESA ?? "LIMPAR").trim()))).sort()}
+                  valuePeriodo={periodoFiltro || null}
+                  onPeriodo={(v: string | null) => setPeriodoFiltro(v ?? "")}
+                  valueEmpresa={empresaFiltro || null}
+                  onEmpresa={(v: string | null) => setEmpresaFiltro(v ?? "")}
+                />
+              </div>
               <ControlTables
                 summaries={controlSummaries}
                 oks={controlOKs}
