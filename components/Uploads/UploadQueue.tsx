@@ -70,9 +70,9 @@ function Pill({ stage }: { stage: UploadStage }) {
 }
 
 export default function UploadQueue({ queue, onClear }: Props) {
-  if (queue.length === 0) return null;
-
   const [expanded, setExpanded] = useState(false);
+
+  if (queue.length === 0) return null;
 
   const avg =
     queue.reduce((acc, q) => acc + Math.max(0, Math.min(100, q.progress || 0)), 0) /

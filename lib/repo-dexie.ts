@@ -132,7 +132,7 @@ export const repoDexie = {
 
   /** Control (dataset oficial desde Excel) */
   async upsertControl(
-    rows: Array<{ key: string; valores: Record<string, string>; meta?: any }>
+    rows: Array<{ key: string; valores: Record<string, string>; meta?: Record<string, unknown> }>
   ): Promise<void> {
     await db.transaction("rw", db.control, async () => {
       for (const r of rows) {
@@ -142,7 +142,7 @@ export const repoDexie = {
   },
 
   async getControl(key: string): Promise<
-    { key: string; valores: Record<string, string>; meta?: any } | undefined
+    { key: string; valores: Record<string, string>; meta?: Record<string, unknown> } | undefined
   > {
     const parts = String(key).split('||');
     const k = parts.length >= 2 ? `${parts[0]}||${parts[1]}` : key;
@@ -162,11 +162,11 @@ async deleteByKey(key: string): Promise<void> {
   await db.transaction("rw", db.receipts, db.consolidated, async () => {
     // receipts: puede no tener 'key' como PK; usamos índice 'key' si existe o filtro defensivo
     try {
-      // @ts-ignore - el índice 'key' puede existir según el schema
+      // @ts-expect-error - el índice 'key' puede existir según el schema
       await db.receipts.where("key").equals(key).delete();
     } catch {
       // Fallback defensivo: filtrar
-      // @ts-ignore
+      // @ts-expect-error - fallback defensivo para filtrar
       await db.receipts.filter((r: { key?: string }) => r?.key === key).delete();
     }
     // consolidated: la clave 'key' actúa como PK en el código existente (get/put por key)
@@ -174,7 +174,7 @@ async deleteByKey(key: string): Promise<void> {
       await db.consolidated.delete(key);
     } catch {
       // Fallback si no fuese PK
-      // @ts-ignore
+      // @ts-expect-error - fallback si no es PK
       await db.consolidated.where("key").equals(key).delete();
     }
   });

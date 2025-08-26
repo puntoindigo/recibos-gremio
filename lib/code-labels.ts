@@ -2,7 +2,7 @@
 // Solo etiquetas confirmadas o headers con 5 dígitos. El resto se ignora.
 export const CODE_LABELS = [
   ["20540", "CONTRIBUCION SOLIDARIA"],
-  ["20590", "SEGURO DE SEPELIO"],
+  ["20590", "SEGURO SEPELIO"],
   ["20595", "CUOTA MUTUAL"],
   ["20610", "RESGUARDO MUTUAL"],
   ["20620", "DESC. MUTUAL"],
@@ -19,7 +19,7 @@ export const CODE_LABELS = [
   ["20590", "SEG.SEPELIO"],
   ["20590", "SEG. SEPELIO"],
   ["20590", "SEG SEPELIO"],
-  ["20590", "SEGURO SEPELIO"],
+  ["20590", "SEGURO DE SEPELIO"],
 
 ] as const;
 

@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     const empresa = String(form.get('empresa') || '').trim();
     const periodo = String(form.get('periodo') || '').trim();
 
-    if (!file || typeof (file as any).arrayBuffer !== 'function') {
+    if (!file || typeof (file as File).arrayBuffer !== 'function') {
       return NextResponse.json({ error: 'Falta archivo' }, { status: 400 });
     }
     if (!empresa || !periodo) {
@@ -39,7 +39,8 @@ export async function POST(req: Request) {
     await fs.writeFile(manifestPath, JSON.stringify(idx, null, 2));
 
     return NextResponse.json({ ok: true, file: path.basename(dest) });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Error guardando oficial' }, { status: 500 });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : 'Error guardando oficial';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

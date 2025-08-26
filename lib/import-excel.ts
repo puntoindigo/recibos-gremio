@@ -141,7 +141,6 @@ export function parseOfficialXlsx(
     if (idx < 3) {
       // Log de verificación rápido: los 3 códigos de interés
       // (podés dejarlo o quitarlo; ayuda al debug sin ruido)
-      // eslint-disable-next-line no-console
       console.log("fila", idx, {
         _20595: valores["20595"],
         _20610: valores["20610"],

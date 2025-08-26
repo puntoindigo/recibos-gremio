@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { labelFor } from '@/lib/code-labels';
 import ArchivosCell from './ArchivosCell';
 import type { ConsolidatedRow } from '@/lib/repo';
 
@@ -16,6 +17,7 @@ type Props = {
   onPeriodoFiltroChange: (v: string) => void;
   empresaFiltro: string;
   onEmpresaFiltroChange: (v: string) => void;
+  nombreFiltro: string;
 };
 
 function fmtNumber(v?: string): string {
@@ -25,12 +27,17 @@ function fmtNumber(v?: string): string {
   return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 }
 
-export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFiltro, empresaFiltro, onPeriodoFiltroChange, onEmpresaFiltroChange }: Props) {
+export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFiltro, empresaFiltro, nombreFiltro, onPeriodoFiltroChange, onEmpresaFiltroChange }: Props) {
   const enriched = useMemo(() => {
     const empresaOf = (r: ConsolidatedRow) => String(r.data?.EMPRESA ?? 'LIMPAR');
     return rows
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
       .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true))
+      .filter((r) => {
+        if (!nombreFiltro) return true;
+        const nombre = nameByKey[r.key] || r.nombre || "";
+        return nombre.toLowerCase().includes(nombreFiltro.toLowerCase());
+      })
       .map((r) => ({
         key: r.key,
         legajo: r.legajo,
@@ -39,7 +46,7 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
         archivo: JSON.stringify(r.archivos.map((n: string) => ({ name: n }))),
         data: r.data,
       }));
-  }, [rows, periodoFiltro, empresaFiltro, nameByKey]);
+  }, [rows, periodoFiltro, empresaFiltro, nombreFiltro, nameByKey]);
 
   const [pageSize, setPageSize] = useState<number>(50);
   const [page, setPage] = useState<number>(1);
@@ -55,7 +62,7 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
   }
 
   const headers = useMemo(() => {
-    return visibleCols;
+    return visibleCols.map(col => labelFor(col));
   }, [visibleCols]);
 
   return (
@@ -89,13 +96,14 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
         <TableBody>
           {pageRows.map((r) => (
             <TableRow key={r.key}>
-              {headers.map((h) => {
-                if (h === 'LEGAJO') return <TableCell key={h}>{r.legajo}</TableCell>;
-                if (h === 'NOMBRE') return <TableCell key={h}>{r.nombre}</TableCell>;
-                if (h === 'PERIODO') return <TableCell key={h}>{r.periodo}</TableCell>;
-                if (h === 'ARCHIVO') return <TableCell key={h}><ArchivosCell value={r.archivo} /></TableCell>;
-                const v = r.data?.[h];
-                return <TableCell key={h}>{fmtNumber(v)}</TableCell>;
+              {visibleCols.map((col, index) => {
+                const header = headers[index];
+                if (col === 'LEGAJO') return <TableCell key={col}>{r.legajo}</TableCell>;
+                if (col === 'NOMBRE') return <TableCell key={col}>{r.nombre}</TableCell>;
+                if (col === 'PERIODO') return <TableCell key={col}>{r.periodo}</TableCell>;
+                if (col === 'ARCHIVO') return <TableCell key={col}><ArchivosCell value={r.archivo} /></TableCell>;
+                const v = r.data?.[col];
+                return <TableCell key={col}>{fmtNumber(v)}</TableCell>;
               })}
             </TableRow>
           ))}

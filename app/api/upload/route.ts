@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     const legajo = (form.get('legajo') || '').toString().trim();
     const periodo = (form.get('periodo') || '').toString().trim();
 
-    let csvResult: any = { updated: false, reason: 'Sin key/legajo/periodo, no se actualiza CSV' };
+    let csvResult: { updated: boolean; reason: string } = { updated: false, reason: 'Sin key/legajo/periodo, no se actualiza CSV' };
 
     if (key || (legajo && periodo)) {
       csvResult = await upsertArchivoEnTodos({
@@ -81,7 +81,8 @@ export async function POST(req: Request) {
       link,
       csv: csvResult
     });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Upload error' }, { status: 500 });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : 'Upload error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

@@ -134,6 +134,7 @@ export default function Page() {
 // Filtros globales (usados por Tabla agregada, exportación y limpiar memoria)
 const [periodoFiltro, setPeriodoFiltro] = useState<string>("");
 const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
+const [nombreFiltro, setNombreFiltro] = useState<string>("");
 
 // nombres del Excel oficial (fallback si el PDF no lo trae)
 const [officialNameByKey, setOfficialNameByKey] = useState<Record<string, string>>({});
@@ -165,7 +166,14 @@ async function saveControlToDexie(
   officialNameByKey: Record<string, string>
 ): Promise<void> {
   try {
-    console.log("💾 saveControlToDexie - Guardando con filtros:", { periodoFiltro, empresaFiltro });
+    console.log("💾 saveControlToDexie - Guardando con filtros:", { periodoFiltro, empresaFiltro, nombreFiltro });
+    
+    // No guardar control si hay filtro de nombre (se calcula en tiempo real)
+    if (nombreFiltro) {
+      console.log("⚠️ saveControlToDexie - No se guarda control con filtro de nombre");
+      return;
+    }
+    
     await repoDexie.saveControl(periodoFiltro, empresaFiltro, summaries, oks, missing, stats, officialKeys, officialNameByKey);
     console.log("✅ saveControlToDexie - Control guardado exitosamente");
   } catch (e) {
@@ -183,7 +191,14 @@ async function loadControlFromDexie(): Promise<{
   officialNameByKey: Record<string, string>;
 } | null> {
   try {
-    console.log("🔍 loadControlFromDexie - Buscando control para filtros:", { periodoFiltro, empresaFiltro });
+    console.log("🔍 loadControlFromDexie - Buscando control para filtros:", { periodoFiltro, empresaFiltro, nombreFiltro });
+    
+    // No cargar control guardado si hay filtro de nombre
+    if (nombreFiltro) {
+      console.log("⚠️ loadControlFromDexie - No se carga control guardado con filtro de nombre");
+      return null;
+    }
+    
     const saved = await repoDexie.getSavedControl(periodoFiltro, empresaFiltro);
     if (!saved) {
       console.log("❌ loadControlFromDexie - No se encontró control guardado");
@@ -219,7 +234,19 @@ useEffect(() => {
 // Efecto para cargar control guardado cuando cambian los filtros
 useEffect(() => {
   async function loadControl() {
-    console.log("🔄 useEffect - Cambio de filtros detectado:", { periodoFiltro, empresaFiltro });
+    console.log("🔄 useEffect - Cambio de filtros detectado:", { periodoFiltro, empresaFiltro, nombreFiltro });
+    
+    // Si hay filtro de nombre, no cargar control guardado (se calcula en tiempo real)
+    if (nombreFiltro) {
+      console.log("🔍 useEffect - Filtro de nombre detectado, calculando control en tiempo real");
+      setControlSummaries([]);
+      setControlOKs([]);
+      setControlMissing([]);
+      setControlStats({ comps: 0, compOk: 0, compDif: 0, okReceipts: 0, difReceipts: 0 });
+      setHasControlForCurrentFilters(false);
+      return;
+    }
+    
     if (periodoFiltro || empresaFiltro) {
       const saved = await loadControlFromDexie();
       if (saved) {
@@ -252,7 +279,7 @@ useEffect(() => {
   }
   
   void loadControl();
-}, [periodoFiltro, empresaFiltro]);
+}, [periodoFiltro, empresaFiltro, nombreFiltro]);
 
   async function loadConsolidated(): Promise<void> {
     const count = await repoDexie.countConsolidated();
@@ -378,7 +405,12 @@ useEffect(() => {
     const empresaOf = (r: ConsolidatedRow) => String(r.data?.EMPRESA ?? "LIMPAR");
     const filtered = consolidated
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
-      .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true));
+      .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true))
+      .filter((r) => {
+        if (!nombreFiltro) return true;
+        const nombre = r.nombre || r.data.NOMBRE || "";
+        return nombre.toLowerCase().includes(nombreFiltro.toLowerCase());
+      });
 
     if (filtered.length === 0) {
       toast.info("No hay registros para eliminar con los filtros seleccionados");
@@ -386,7 +418,7 @@ useEffect(() => {
     }
 
     const confirm = window.confirm(
-      `¿Eliminar ${filtered.length} registros para ${periodoFiltro || "todos los períodos"} / ${empresaFiltro || "todas las empresas"}?`
+      `¿Eliminar ${filtered.length} registros para ${periodoFiltro || "todos los períodos"} / ${empresaFiltro || "todas las empresas"}${nombreFiltro ? ` / nombre: "${nombreFiltro}"` : ""}?`
     );
     if (!confirm) return;
 
@@ -418,7 +450,7 @@ useEffect(() => {
     }
 
     const confirm = window.confirm(
-      `¿Eliminar control para ${periodoFiltro || "todos los períodos"} / ${empresaFiltro || "todas las empresas"}?`
+      `¿Eliminar control para ${periodoFiltro || "todos los períodos"} / ${empresaFiltro || "todas las empresas"}${nombreFiltro ? ` / nombre: "${nombreFiltro}"` : ""}?`
     );
     if (!confirm) return;
 
@@ -495,11 +527,16 @@ useEffect(() => {
   }
 
   async function computeControl(keysFromExcel?: string[]): Promise<void> {
-    console.log("🔄 Iniciando computeControl con filtros:", { periodoFiltro, empresaFiltro });
+    console.log("🔄 Iniciando computeControl con filtros:", { periodoFiltro, empresaFiltro, nombreFiltro });
     const empresaOf = (r: ConsolidatedRow) => String(r.data?.EMPRESA ?? "LIMPAR");
     const filtered = consolidated
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
-      .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true));
+      .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true))
+      .filter((r) => {
+        if (!nombreFiltro) return true;
+        const nombre = r.nombre || r.data.NOMBRE || "";
+        return nombre.toLowerCase().includes(nombreFiltro.toLowerCase());
+      });
     const rows = filtered;
     console.log("📊 Filas filtradas:", rows.length, "de", consolidated.length, "total");
     
@@ -610,7 +647,12 @@ useEffect(() => {
     const empresaOf = (r: ConsolidatedRow) => String(r.data?.EMPRESA ?? "LIMPAR");
     const filtered = consolidated
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
-      .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true));
+      .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true))
+      .filter((r) => {
+        if (!nombreFiltro) return true;
+        const nombre = r.nombre || r.data.NOMBRE || "";
+        return nombre.toLowerCase().includes(nombreFiltro.toLowerCase());
+      });
     const csv = buildAggregatedCsv(filtered, visibleCols);
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -681,7 +723,7 @@ useEffect(() => {
                 void handleDeleteVisible();
               }
             }}
-            disabled={activeTab === "control" && (!periodoFiltro && !empresaFiltro || !hasControlForCurrentFilters)}
+            disabled={activeTab === "control" && (!periodoFiltro && !empresaFiltro && !nombreFiltro || !hasControlForCurrentFilters)}
           >
             {activeTab === "control" ? "Eliminar Control" : "Eliminar registros"}
           </Button>
@@ -729,6 +771,8 @@ useEffect(() => {
                       onPeriodo={(v: string | null) => setPeriodoFiltro(v ?? "")}
                       valueEmpresa={empresaFiltro || null}
                       onEmpresa={(v: string | null) => setEmpresaFiltro(v ?? "")}
+                      valueNombre={nombreFiltro}
+                      onNombre={setNombreFiltro}
                     />
                   </div>
                   <TablaAgregada
@@ -739,6 +783,7 @@ useEffect(() => {
                     onPeriodoFiltroChange={setPeriodoFiltro}
                     empresaFiltro={empresaFiltro}
                     onEmpresaFiltroChange={setEmpresaFiltro}
+                    nombreFiltro={nombreFiltro}
                   />
                 </>
 
@@ -766,7 +811,7 @@ useEffect(() => {
                   type="file"
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="w-full md:w-1/2"
-                  disabled={!periodoFiltro && !empresaFiltro}
+                  disabled={!periodoFiltro && !empresaFiltro && !nombreFiltro}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => {
                     if (e.target.files && e.target.files[0]) void handleOfficialExcel(e.target.files[0]);
                   }}
@@ -786,6 +831,8 @@ useEffect(() => {
                   onPeriodo={(v: string | null) => setPeriodoFiltro(v ?? "")}
                   valueEmpresa={empresaFiltro || null}
                   onEmpresa={(v: string | null) => setEmpresaFiltro(v ?? "")}
+                  valueNombre={nombreFiltro}
+                  onNombre={setNombreFiltro}
                 />
               </div>
               <ControlTables
