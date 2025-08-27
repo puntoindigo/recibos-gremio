@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 import { CODE_LABELS, CODE_KEYS } from "@/lib/code-labels";
 import { sha256OfFile } from "@/lib/hash";
-import { repoDexie } from "@/lib/repo-dexie";
+import { repoDexie } from '@/lib/repo-dexie';
 import type { ConsolidatedRow } from "@/lib/repo";
 import { readOfficialXlsx, type OfficialRow } from "@/lib/import-excel";
 import TablaAgregada from "@/components/TablaAgregada/TablaAgregada";
@@ -20,8 +20,13 @@ import { buildControlCsvSummary, type ControlOk as ControlOkRow } from "@/lib/ex
 import type { ControlSummary } from "@/lib/control-types";
 import { buildAggregatedCsv } from "@/lib/export-aggregated";
 import ReceiptsFilters from "@/components/ReceiptsFilters";
+import { UnifiedStatusPanel } from "@/components/UnifiedStatusPanel";
 
-type UploadItem = { name: string; status: "pending" | "ok" | "error" };
+type UploadItem = { 
+  name: string; 
+  status: "pending" | "ok" | "error" | "skipped";
+  reason?: string;
+};
 
 const LS_KEY = "recibos_v1";
 const BASE_COLS = ["LEGAJO", "PERIODO", "NOMBRE", "ARCHIVO"] as const;
@@ -317,8 +322,8 @@ useEffect(() => {
         // dedupe por hash
         if (await repoDexie.hasFileHash(hash)) {
           skip++;
-          setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "ok" } : u)));
-          toast.info(`Omitido (duplicado): ${file.name}`, { id: tid });
+          setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "skipped", reason: "duplicado" } : u)));
+          toast.dismiss(tid);
           continue;
         }
 
@@ -374,20 +379,19 @@ useEffect(() => {
 
         ok++;
         setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "ok" } : u)));
-        toast.success(`Listo: ${file.name}`, { id: tid });
+        toast.dismiss(tid);
       } catch (err: unknown) {
         fail++;
         setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "error" } : u)));
-        toast.error(`Error en ${file.name}`, { description: errorMessage(err), id: tid });
+        toast.dismiss(tid);
       }
       // ceder control al event loop
       await new Promise((r) => setTimeout(r, 0));
     }
 
-    toast.info(`Completado: ${ok} ok · ${skip} omitidos · ${fail} error`, { duration: 4000 });
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    setTimeout(() => setUploads([]), 2000);
-    await loadConsolidated();
+         if (fileInputRef.current) fileInputRef.current.value = "";
+     setTimeout(() => setUploads([]), 2000);
+     await loadConsolidated();
   }, [officialNameByKey]);
 
   /* --------------------- utilitarios UI --------------------- */
@@ -691,25 +695,7 @@ useEffect(() => {
         </p>
       </header>
 
-      {/* Progreso de subidas */}
-      {uploads.length > 0 && (
-        <div className="mb-4 rounded-lg border p-3 bg-muted/30">
-          <div className="mb-2 text-sm font-medium">
-            Procesando {uploads.filter((u) => u.status === "pending").length} pendiente(s) ·{" "}
-            {uploads.filter((u) => u.status === "ok").length} ok · {uploads.filter((u) => u.status === "error").length} error
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {uploads.map((u, i) => (
-              <div key={`${u.name}-${i}`} className="flex items-center gap-2 rounded border bg-white px-3 py-2">
-                {u.status === "pending" && <Loader2 className="h-4 w-4 animate-spin" />}
-                {u.status === "ok" && <CheckCircle2 className="h-4 w-4" />}
-                {u.status === "error" && <XCircle className="h-4 w-4" />}
-                <span className="truncate text-sm">{u.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      
 
       <div className="mb-4 flex gap-2">
         {showDebug && (
@@ -887,6 +873,9 @@ useEffect(() => {
       <Button className="fixed bottom-6 right-6 shadow-lg" onClick={() => fileInputRef.current?.click()}>
         <FileUp className="mr-2 h-4 w-4" /> Subir PDFs
       </Button>
+      
+      {/* Panel unificado de estado */}
+      <UnifiedStatusPanel uploads={uploads} />
     </main>
   );
 }

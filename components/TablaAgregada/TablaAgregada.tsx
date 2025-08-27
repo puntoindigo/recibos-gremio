@@ -65,24 +65,32 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
     return visibleCols.map(col => labelFor(col));
   }, [visibleCols]);
 
+  // Componente de paginación reutilizable
+  const PaginationControls = () => (
+    <div className="flex items-center gap-3">
+      <div className="text-sm text-muted-foreground">Mostrando {pageRows.length} de {enriched.length}</div>
+      <div className="ml-auto flex items-center gap-4">
+        <span className="text-sm text-muted-foreground">Filas por página</span>
+        <Select value={String(pageSize)} onValueChange={(v) => { setPage(1); setPageSize(Number(v) || 50); }}>
+          <SelectTrigger className="w-24"><SelectValue placeholder="50" /></SelectTrigger>
+          <SelectContent>
+            {[25, 50, 100, 200].map((n: number) => (<SelectItem key={n} value={String(n)}>{n}</SelectItem>))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>←</Button>
+          <div className="text-sm tabular-nums">{page} / {totalPages}</div>
+          <Button size="sm" variant="outline" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>→</Button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="w-full overflow-x-auto">
-      <div className="mb-3 flex items-center gap-3">
-        <div className="text-sm text-muted-foreground">Mostrando {pageRows.length} de {enriched.length}</div>
-        <div className="ml-auto flex items-center gap-4">
-          <span className="text-sm text-muted-foreground">Filas por página</span>
-          <Select value={String(pageSize)} onValueChange={(v) => { setPage(1); setPageSize(Number(v) || 50); }}>
-            <SelectTrigger className="w-24"><SelectValue placeholder="50" /></SelectTrigger>
-            <SelectContent>
-              {[25, 50, 100, 200].map((n: number) => (<SelectItem key={n} value={String(n)}>{n}</SelectItem>))}
-            </SelectContent>
-          </Select>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>←</Button>
-            <div className="text-sm tabular-nums">{page} / {totalPages}</div>
-            <Button size="sm" variant="outline" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>→</Button>
-          </div>
-        </div>
+      {/* Paginación superior */}
+      <div className="mb-3">
+        <PaginationControls />
       </div>
 
       <Table>
@@ -109,6 +117,11 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
           ))}
         </TableBody>
       </Table>
+      
+      {/* Paginación inferior */}
+      <div className="mt-3">
+        <PaginationControls />
+      </div>
     </div>
   );
 }
