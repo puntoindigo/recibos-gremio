@@ -1,5 +1,5 @@
 // lib/repo.ts
-import type { ConsolidatedRow, ControlRow } from "./db";
+import type { ConsolidatedEntity, ControlRow } from "./db";
 
 export interface AddReceiptInput {
   legajo: string;
@@ -19,7 +19,7 @@ export interface Repo {
   addReceipt(rec: AddReceiptInput): Promise<void>;
 
   // lectura del consolidado
-  getConsolidatedPage(opts: { offset: number; limit: number }): Promise<ConsolidatedRow[]>;
+  getConsolidatedPage(opts: { offset: number; limit: number }): Promise<ConsolidatedEntity[]>;
   countConsolidated(): Promise<number>;
 
   // control (oficial)
@@ -27,4 +27,4 @@ export interface Repo {
   getControl(key: string): Promise<ControlRow | undefined>;
 }
 
-export type { ConsolidatedRow, ControlRow };
+export type { ConsolidatedEntity, ControlRow };

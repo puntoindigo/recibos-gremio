@@ -12,7 +12,8 @@ import { toast } from "sonner";
 import { CODE_LABELS, CODE_KEYS } from "@/lib/code-labels";
 import { sha256OfFile } from "@/lib/hash";
 import { repoDexie } from '@/lib/repo-dexie';
-import type { ConsolidatedRow } from "@/lib/repo";
+import { db } from '@/lib/db';
+import type { ConsolidatedEntity } from "@/lib/repo";
 import { readOfficialXlsx, type OfficialRow } from "@/lib/import-excel";
 import TablaAgregada from "@/components/TablaAgregada/TablaAgregada";
 import ControlTables from "@/components/Control/ControlTables";
@@ -21,6 +22,8 @@ import type { ControlSummary } from "@/lib/control-types";
 import { buildAggregatedCsv } from "@/lib/export-aggregated";
 import ReceiptsFilters from "@/components/ReceiptsFilters";
 import { UnifiedStatusPanel } from "@/components/UnifiedStatusPanel";
+import { DebugPanel } from "@/components/DebugPanel";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 type UploadItem = { 
   name: string; 
@@ -113,12 +116,21 @@ type SavedControl = {
 /* --------------------------- page ---------------------------- */
 
 export default function Page() {
-  const [consolidated, setConsolidated] = useState<ConsolidatedRow[]>([]);
+  const [consolidated, setConsolidated] = useState<ConsolidatedEntity[]>([]);
   const [totalRows, setTotalRows] = useState(0);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [showDebug, setShowDebug] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("agregado");
+  const [processingFiles, setProcessingFiles] = useState<FileList | null>(null);
+  const [lastProcessedIndex, setLastProcessedIndex] = useState<number>(-1);
   const [hasControlForCurrentFilters, setHasControlForCurrentFilters] = useState<boolean>(false);
+  const [debugInfo, setDebugInfo] = useState({
+    totalRows: 0,
+    consolidatedCount: 0,
+    controlCount: 0,
+    savedControlsCount: 0,
+    settingsCount: 0
+  });
 
   // Control (agregado por Legajo/Período)
   const [controlLoading, setControlLoading] = useState(false);
@@ -291,11 +303,34 @@ useEffect(() => {
     setTotalRows(count);
     const page = await repoDexie.getConsolidatedPage({ offset: 0, limit: Math.max(1, count) });
     setConsolidated(page);
+    
+    // Actualizar información de debug
+    try {
+      const [consolidatedCount, controlCount, savedControlsCount, settingsCount] = await Promise.all([
+        repoDexie.countConsolidated(),
+        db.control.count(),
+        db.savedControls.count(),
+        db.settings.count(),
+      ]);
+      
+      setDebugInfo({
+        totalRows: count,
+        consolidatedCount,
+        controlCount,
+        savedControlsCount,
+        settingsCount
+      });
+    } catch (error) {
+      console.warn('Error cargando información de debug:', error);
+    }
   }
 
   /* -------------------- subir PDFs + dedupe -------------------- */
 
-  const handleFiles = useCallback(async (files: FileList): Promise<void> => {
+  const handleFiles = useCallback(async (files: FileList, startIndex: number = 0): Promise<void> => {
+    // Guardar los archivos para poder continuar después
+    setProcessingFiles(files);
+    setLastProcessedIndex(startIndex);
     const arr = Array.from(files).filter(
       (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
     );
@@ -304,7 +339,12 @@ useEffect(() => {
       return;
     }
 
-    setUploads(arr.map((f) => ({ name: f.name, status: "pending" as const })));
+    // Si es una continuación, mantener los uploads existentes
+    if (startIndex === 0) {
+      setUploads(arr.map((f) => ({ name: f.name, status: "pending" as const })));
+    }
+
+    console.log(`🚀 Iniciando procesamiento desde índice ${startIndex} de ${arr.length} archivos`);
 
     // único import dinámico (no duplicar dentro del bucle)
     const { parsePdfReceiptToRecord } = await import("@/lib/pdf-parser");
@@ -313,8 +353,9 @@ useEffect(() => {
       skip = 0,
       fail = 0;
 
-    for (let i = 0; i < arr.length; i++) {
+    for (let i = startIndex; i < arr.length; i++) {
       const file = arr[i];
+      console.log(`🔄 Procesando archivo ${i + 1}/${arr.length}: ${file.name}`);
       const tid = toast.loading(`Procesando ${file.name} (${i + 1}/${arr.length})`);
       try {
         const hash = await sha256OfFile(file);
@@ -378,20 +419,32 @@ useEffect(() => {
         });
 
         ok++;
+        console.log(`✅ Archivo ${i + 1}/${arr.length} procesado exitosamente: ${file.name}`);
         setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "ok" } : u)));
+        setLastProcessedIndex(i);
         toast.dismiss(tid);
       } catch (err: unknown) {
         fail++;
+        console.error(`❌ Error en archivo ${i + 1}/${arr.length}: ${file.name}`, err);
         setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "error" } : u)));
         toast.dismiss(tid);
       }
-      // ceder control al event loop
-      await new Promise((r) => setTimeout(r, 0));
+      // ceder control al event loop cada 10 archivos para evitar timeout
+      if ((i + 1) % 10 === 0) {
+        console.log(`⏸️ Pausa cada 10 archivos - Procesados: ${i + 1}/${arr.length}`);
+        await new Promise((r) => setTimeout(r, 100));
+      }
     }
 
-         if (fileInputRef.current) fileInputRef.current.value = "";
-     setTimeout(() => setUploads([]), 2000);
-     await loadConsolidated();
+    console.log(`🎉 Procesamiento completado: ${ok} ok, ${skip} omitidos, ${fail} errores`);
+    
+    // Limpiar estado de procesamiento
+    setProcessingFiles(null);
+    setLastProcessedIndex(-1);
+    
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setTimeout(() => setUploads([]), 2000);
+    await loadConsolidated();
   }, [officialNameByKey]);
 
   /* --------------------- utilitarios UI --------------------- */
@@ -406,7 +459,7 @@ useEffect(() => {
   }
 
   async function handleDeleteVisible(): Promise<void> {
-    const empresaOf = (r: ConsolidatedRow) => String(r.data?.EMPRESA ?? "LIMPAR");
+    const empresaOf = (r: ConsolidatedEntity) => String(r.data?.EMPRESA ?? "LIMPAR");
     const filtered = consolidated
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
       .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true))
@@ -532,7 +585,7 @@ useEffect(() => {
 
   async function computeControl(keysFromExcel?: string[]): Promise<void> {
     console.log("🔄 Iniciando computeControl con filtros:", { periodoFiltro, empresaFiltro, nombreFiltro });
-    const empresaOf = (r: ConsolidatedRow) => String(r.data?.EMPRESA ?? "LIMPAR");
+    const empresaOf = (r: ConsolidatedEntity) => String(r.data?.EMPRESA ?? "LIMPAR");
     const filtered = consolidated
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
       .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true))
@@ -555,7 +608,7 @@ useEffect(() => {
 
     console.log("🔍 Procesando", rows.length, "filas para control");
     const pairs = await Promise.all(
-      rows.map(async (r: ConsolidatedRow) => {
+      rows.map(async (r: ConsolidatedEntity) => {
         const ctl = await repoDexie.getControl(r.key);
         return { r, ctl };
       }),
@@ -648,7 +701,7 @@ useEffect(() => {
   /* -------------------- export CSVs -------------------- */
 
   function downloadCsvAggregated(): void {
-    const empresaOf = (r: ConsolidatedRow) => String(r.data?.EMPRESA ?? "LIMPAR");
+    const empresaOf = (r: ConsolidatedEntity) => String(r.data?.EMPRESA ?? "LIMPAR");
     const filtered = consolidated
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
       .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true))
@@ -686,39 +739,21 @@ useEffect(() => {
 
   return (
     <main className="mx-auto max-w-6xl p-6">
-      <header className="mb-6">
+      <header className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">
           Gestor de Recibos <span className="ml-2 text-sm text-muted-foreground">({totalRows})</span>
         </h1>
-        <p className="text-muted-foreground">
-          Sube PDFs, consolida por LEGAJO+PERIODO y exporta a CSV. También podés comparar con un Excel “oficial”.
-        </p>
-      </header>
-
-      
-
-      <div className="mb-4 flex gap-2">
-        {showDebug && (
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => { 
-              if (activeTab === "control") {
-                void handleDeleteControl();
-              } else {
-                void handleDeleteVisible();
-              }
-            }}
-            disabled={activeTab === "control" && (!periodoFiltro && !empresaFiltro && !nombreFiltro || !hasControlForCurrentFilters)}
+            onClick={() => setShowDebug(!showDebug)}
           >
-            {activeTab === "control" ? "Eliminar Control" : "Eliminar registros"}
+            {showDebug ? 'Ocultar Debug' : 'Mostrar Debug'}
           </Button>
-        )}
-        <label className="ml-auto flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={showDebug} onChange={(e: ChangeEvent<HTMLInputElement>) => setShowDebug(e.target.checked)} />
-          Mostrar debug
-        </label>
-      </div>
+          <ThemeToggle />
+        </div>
+      </header>
 
       <Tabs defaultValue="agregado" className="w-full" onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3">
@@ -870,12 +905,37 @@ useEffect(() => {
         }}
       />
       {/* botón visible para abrir el selector */}
-      <Button className="fixed bottom-6 right-6 shadow-lg" onClick={() => fileInputRef.current?.click()}>
-        <FileUp className="mr-2 h-4 w-4" /> Subir PDFs
-      </Button>
+              <Button className="fixed bottom-6 right-6 shadow-lg" onClick={() => fileInputRef.current?.click()}>
+          <FileUp className="mr-2 h-4 w-4" /> Subir PDFs
+        </Button>
+        
+        {/* Botón para continuar procesamiento */}
+        {processingFiles && lastProcessedIndex >= 0 && (
+          <Button 
+            className="fixed bottom-6 right-32 shadow-lg bg-orange-600 hover:bg-orange-700" 
+            onClick={() => handleFiles(processingFiles, lastProcessedIndex + 1)}
+          >
+            <FileUp className="mr-2 h-4 w-4" /> Continuar ({lastProcessedIndex + 1})
+          </Button>
+        )}
       
-      {/* Panel unificado de estado */}
-      <UnifiedStatusPanel uploads={uploads} />
-    </main>
-  );
+              {/* Panel unificado de estado */}
+        <UnifiedStatusPanel uploads={uploads} />
+        
+        {/* Panel de debug */}
+        {showDebug && (
+          <DebugPanel
+            debugInfo={debugInfo}
+            onDeleteVisible={handleDeleteVisible}
+            onDeleteControl={handleDeleteControl}
+            onWipeAll={handleWipeAll}
+            activeTab={activeTab}
+            periodoFiltro={periodoFiltro}
+            empresaFiltro={empresaFiltro}
+            nombreFiltro={nombreFiltro}
+            hasControlForCurrentFilters={hasControlForCurrentFilters}
+          />
+        )}
+      </main>
+    );
 }

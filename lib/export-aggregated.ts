@@ -1,4 +1,4 @@
-import type { ConsolidatedRow } from "./repo";
+import type { ConsolidatedEntity } from "./repo";
 import { labelFor } from "./code-labels";
 import { toFixed2 } from "./number";
 
@@ -7,10 +7,10 @@ const esc = (v: unknown) => {
   return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-export function buildAggregatedCsv(rows: ConsolidatedRow[], cols: string[]) {
+export function buildAggregatedCsv(rows: ConsolidatedEntity[], cols: string[]) {
   const headers = cols.map((c) => (c.match(/^\d{5}$/) ? labelFor(c) : c));
 
-  const cell = (r: ConsolidatedRow, c: string) => {
+  const cell = (r: ConsolidatedEntity, c: string) => {
     if (c === "LEGAJO") return r.legajo ?? "";
     if (c === "PERIODO") return r.periodo ?? "";
     if (c === "ARCHIVO") return (r.archivos?.join(" + ")) || (r.data.ARCHIVO ?? "");

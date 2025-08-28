@@ -1,7 +1,7 @@
 // lib/repo-dexie.ts
 import { db } from "./db";
 import { toFixed2 } from "./number";
-import type { ConsolidatedRow } from "./repo";
+import type { ConsolidatedEntity } from "./repo";
 import type { SavedControlDB } from "./db";
 
 // Helpers
@@ -92,7 +92,7 @@ export const repoDexie = {
       archivos.add(input.filename);
 
       const mergedData = mergeSummingCodes(prev?.data ?? {}, input.data);
-      const row: ConsolidatedRow = {
+      const row: ConsolidatedEntity = {
         key,
         legajo: input.legajo,
         periodo: input.periodo,
@@ -125,7 +125,7 @@ export const repoDexie = {
   async getConsolidatedPage(opts: {
     offset: number;
     limit: number;
-  }): Promise<ConsolidatedRow[]> {
+  }): Promise<ConsolidatedEntity[]> {
     const { offset, limit } = opts;
     return db.consolidated.orderBy("key").offset(offset).limit(limit).toArray();
   },

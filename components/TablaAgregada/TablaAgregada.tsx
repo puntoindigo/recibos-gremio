@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { labelFor } from '@/lib/code-labels';
 import ArchivosCell from './ArchivosCell';
-import type { ConsolidatedRow } from '@/lib/repo';
+import type { ConsolidatedEntity } from '@/lib/repo';
 
 type Props = {
-  rows: ConsolidatedRow[];
+  rows: ConsolidatedEntity[];
   visibleCols: string[];
   nameByKey: Record<string, string>;
   periodoFiltro: string;
@@ -29,7 +29,7 @@ function fmtNumber(v?: string): string {
 
 export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFiltro, empresaFiltro, nombreFiltro, onPeriodoFiltroChange, onEmpresaFiltroChange }: Props) {
   const enriched = useMemo(() => {
-    const empresaOf = (r: ConsolidatedRow) => String(r.data?.EMPRESA ?? 'LIMPAR');
+    const empresaOf = (r: ConsolidatedEntity) => String(r.data?.EMPRESA ?? 'LIMPAR');
     return rows
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
       .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true))

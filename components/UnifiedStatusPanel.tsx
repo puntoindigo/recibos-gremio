@@ -26,10 +26,10 @@ export function UnifiedStatusPanel({ uploads }: Props) {
   const progressPercentage = uploads.length > 0 ? (totalProcessed / uploads.length) * 100 : 0;
 
   return (
-    <div className="fixed bottom-4 right-4 bg-blue-600 text-white rounded-lg shadow-lg z-50 min-w-80">
+    <div className="status-panel">
       {/* Header - siempre visible */}
       <div
-        className="px-4 py-3 cursor-pointer flex items-center"
+        className="status-panel-header"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {/* Indicador de estado principal */}
@@ -40,9 +40,9 @@ export function UnifiedStatusPanel({ uploads }: Props) {
 
         {/* Barra de progreso en modo cerrado */}
         <div className="flex items-center space-x-3 flex-1 mx-4">
-          <div className="flex-1 bg-blue-500 rounded-full h-3 border border-blue-400">
+          <div className="status-panel-progress">
             <div
-              className="bg-green-400 h-3 rounded-full transition-all duration-300 shadow-sm"
+              className="status-panel-progress-fill"
               style={{
                 width: `${progressPercentage}%`
               }}
@@ -73,28 +73,28 @@ export function UnifiedStatusPanel({ uploads }: Props) {
               <span>Sumario</span>
             </div>
             <div className="space-y-1 text-sm">
-              <div className="flex items-center space-x-2">
-                <CheckCircle2 className="h-3 w-3 text-green-300" />
-                <span className="text-green-200">OK:</span>
-                <span className="font-medium">{completedUploads.length}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="h-3 w-3 rounded-full bg-gray-400" />
-                <span className="text-gray-200">Omitidos:</span>
-                <span className="font-medium">{skippedUploads.length}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Loader2 className="h-3 w-3 animate-spin text-yellow-300" />
-                <span className="text-yellow-200">Pendientes:</span>
-                <span className="font-medium">{pendingUploads.length}</span>
-              </div>
-              {errorUploads.length > 0 && (
-                <div className="flex items-center space-x-2">
-                  <XCircle className="h-3 w-3 text-red-300" />
-                  <span className="text-red-200">Errores:</span>
-                  <span className="font-medium">{errorUploads.length}</span>
-                </div>
-              )}
+                             <div className="flex items-center space-x-2">
+                 <CheckCircle2 className="h-3 w-3 status-success" />
+                 <span className="status-success">OK:</span>
+                 <span className="font-medium">{completedUploads.length}</span>
+               </div>
+               <div className="flex items-center space-x-2">
+                 <div className="h-3 w-3 rounded-full status-skipped" />
+                 <span className="status-skipped">Omitidos:</span>
+                 <span className="font-medium">{skippedUploads.length}</span>
+               </div>
+               <div className="flex items-center space-x-2">
+                 <Loader2 className="h-3 w-3 animate-spin status-warning" />
+                 <span className="status-warning">Pendientes:</span>
+                 <span className="font-medium">{pendingUploads.length}</span>
+               </div>
+               {errorUploads.length > 0 && (
+                 <div className="flex items-center space-x-2">
+                   <XCircle className="h-3 w-3 status-error" />
+                   <span className="status-error">Errores:</span>
+                   <span className="font-medium">{errorUploads.length}</span>
+                 </div>
+               )}
             </div>
           </div>
 
@@ -106,10 +106,10 @@ export function UnifiedStatusPanel({ uploads }: Props) {
             <div className="space-y-1 max-h-32 overflow-y-auto">
               {uploads.map((upload, index) => (
                 <div key={`${upload.name}-${index}`} className="flex items-center space-x-2 text-sm">
-                  {upload.status === "pending" && <Loader2 className="h-2.5 w-2.5 animate-spin text-yellow-300" />}
-                  {upload.status === "ok" && <CheckCircle2 className="h-2.5 w-2.5 text-green-300" />}
-                  {upload.status === "skipped" && <div className="h-2.5 w-2.5 rounded-full bg-gray-400" />}
-                  {upload.status === "error" && <XCircle className="h-2.5 w-2.5 text-red-300" />}
+                                   {upload.status === "pending" && <Loader2 className="h-2.5 w-2.5 animate-spin status-warning" />}
+                 {upload.status === "ok" && <CheckCircle2 className="h-2.5 w-2.5 status-success" />}
+                 {upload.status === "skipped" && <div className="h-2.5 w-2.5 rounded-full status-skipped" />}
+                 {upload.status === "error" && <XCircle className="h-2.5 w-2.5 status-error" />}
                   <span className="truncate flex-1 text-xs">{upload.name}</span>
                 </div>
               ))}
