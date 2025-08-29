@@ -27,6 +27,19 @@ function fmtNumber(v?: string): string {
   return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 }
 
+// Función para formatear headers largos en dos líneas
+function formatHeader(header: string): string {
+  const longHeaders: Record<string, string> = {
+    'CONTRIBUCION SOLIDARIA': 'CONTRIBUCION\nSOLIDARIA',
+    'SEGURO SEPELIO': 'SEGURO\nSEPELIO',
+    'CUOTA MUTUAL': 'CUOTA\nMUTUAL',
+    'RESGUARDO MUTUAL': 'RESGUARDO\nMUTUAL',
+    'DESC. MUTUAL': 'DESC.\nMUTUAL'
+  };
+  
+  return longHeaders[header] || header;
+}
+
 export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFiltro, empresaFiltro, nombreFiltro, onPeriodoFiltroChange, onEmpresaFiltroChange }: Props) {
   const enriched = useMemo(() => {
     const empresaOf = (r: ConsolidatedEntity) => String(r.data?.EMPRESA ?? 'LIMPAR');
@@ -97,7 +110,9 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
         <TableHeader>
           <TableRow>
             {headers.map((h) => (
-              <TableHead key={h}>{h}</TableHead>
+              <TableHead key={h} className="whitespace-pre-line text-center min-w-0 max-w-32">
+                {formatHeader(h)}
+              </TableHead>
             ))}
           </TableRow>
         </TableHeader>

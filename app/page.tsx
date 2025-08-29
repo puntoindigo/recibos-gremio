@@ -191,7 +191,10 @@ const [officialNameByKey, setOfficialNameByKey] = useState<Record<string, string
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const controlFileInputRef = useRef<HTMLInputElement>(null);
-const visibleCols = useMemo<string[]>(() => [...BASE_COLS, ...CODE_KEYS], []);
+const visibleCols = useMemo<string[]>(() => {
+  const baseColsWithoutArchivo = BASE_COLS.filter(col => col !== 'ARCHIVO');
+  return [...baseColsWithoutArchivo, ...CODE_KEYS, 'ARCHIVO'];
+}, []);
 
 // Mapa final de nombres para UI/CSV (consolidado > oficial)
 const nameByKey = useMemo<Record<string, string>>(() => {
