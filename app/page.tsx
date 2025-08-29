@@ -430,7 +430,7 @@ useEffect(() => {
         }
 
         // parsear PDF
-        const res = await parsePdfReceiptToRecord(file);
+        const res = await parsePdfReceiptToRecord(file, showDebug);
         const parsed = (res?.data ?? {}) as Record<string, string>;
         const legajo = String(parsed.LEGAJO ?? "").trim();
         const periodo = String(parsed.PERIODO ?? "").trim();
@@ -648,29 +648,33 @@ useEffect(() => {
         ? () => periodoFiltro || "07/2025" // Usar el período del desplegable
         : () => periodoFiltro || "06/2025"; // Para LIMPAR, usar el período del desplegable
       
-      console.log("🔍 Debug Excel Control - Configuración:", {
-        empresaToUse,
-        periodoFiltro,
-        periodoResolver: "personalizado (siempre)",
-        periodoUsado: periodoResolver()
-      });
+      if (showDebug) {
+        console.log("🔍 Debug Excel Control - Configuración:", {
+          empresaToUse,
+          periodoFiltro,
+          periodoResolver: "personalizado (siempre)",
+          periodoUsado: periodoResolver()
+        });
+      }
       
-      const rows: OfficialRow[] = await readOfficialXlsxUnified(file, empresaToUse, { periodoResolver });
+      const rows: OfficialRow[] = await readOfficialXlsxUnified(file, empresaToUse, { periodoResolver, debug: showDebug });
       
       // Debug: verificar valores del Excel de control
-      console.log("🔍 Debug Excel Control - Valores cargados:");
-      for (let i = 0; i < Math.min(3, rows.length); i++) {
-        const row = rows[i];
-        console.log(`  Fila ${i}:`, {
-          key: row.key,
-          "20610 (RESGUARDO MUTUAL)": row.valores["20610"],
-          "20540 (CONTRIBUCION SOLIDARIA)": row.valores["20540"],
-          "20590 (SEGURO SEPELIO)": row.valores["20590"],
-          "20595 (CUOTA MUTUAL)": row.valores["20595"],
-          "20620 (DESC. MUTUAL)": row.valores["20620"]
-        });
-        console.log(`  Fila ${i} - Clave generada:`, row.key);
-        console.log(`  Fila ${i} - Meta:`, row.meta);
+      if (showDebug) {
+        console.log("🔍 Debug Excel Control - Valores cargados:");
+        for (let i = 0; i < Math.min(3, rows.length); i++) {
+          const row = rows[i];
+          console.log(`  Fila ${i}:`, {
+            key: row.key,
+            "20610 (RESGUARDO MUTUAL)": row.valores["20610"],
+            "20540 (CONTRIBUCION SOLIDARIA)": row.valores["20540"],
+            "20590 (SEGURO SEPELIO)": row.valores["20590"],
+            "20595 (CUOTA MUTUAL)": row.valores["20595"],
+            "20620 (DESC. MUTUAL)": row.valores["20620"]
+          });
+          console.log(`  Fila ${i} - Clave generada:`, row.key);
+          console.log(`  Fila ${i} - Meta:`, row.meta);
+        }
       }
       
       await repoDexie.upsertControl(rows.map((r) => ({ key: r.key, valores: r.valores })));
@@ -745,14 +749,16 @@ useEffect(() => {
       const difs: ControlSummary["difs"] = [];
 
       // Debug: verificar qué códigos se están procesando
-      console.log(`🔍 Debug Control - Procesando registro:`, {
-        legajo: r.legajo,
-        key: r.key,
-        conceptosPrincipales: getPrincipalLabels().map(([code, label]) => ({ code, label }))
-      });
+      if (showDebug) {
+        console.log(`🔍 Debug Control - Procesando registro:`, {
+          legajo: r.legajo,
+          key: r.key,
+          conceptosPrincipales: getPrincipalLabels().map(([code, label]) => ({ code, label }))
+        });
+      }
 
       // Debug: verificar valores consolidados
-      if (r.data["20610"] !== undefined) {
+      if (showDebug && r.data["20610"] !== undefined) {
         console.log(`🔍 Debug Consolidado - RESGUARDO MUTUAL para ${r.legajo}:`, {
           valor: r.data["20610"],
           tipo: typeof r.data["20610"],
@@ -762,7 +768,7 @@ useEffect(() => {
 
       // Debug: mostrar todos los códigos disponibles en datos consolidados
       const codigosDisponibles = Object.keys(r.data).filter(key => /^20\d{3}$/.test(key));
-      if (codigosDisponibles.length > 0) {
+      if (showDebug && codigosDisponibles.length > 0) {
         console.log(`🔍 Debug Consolidado - Códigos disponibles para ${r.legajo}:`, codigosDisponibles);
         console.log(`🔍 Debug Consolidado - Valores para ${r.legajo}:`, 
           codigosDisponibles.reduce((acc, code) => ({ ...acc, [code]: r.data[code] }), {})
@@ -777,7 +783,7 @@ useEffect(() => {
         const dentro = Math.abs(delta) <= TOLERANCE;
         
         // Debug específico para RESGUARDO MUTUAL (código 20610)
-        if (code === "20610") {
+        if (showDebug && code === "20610") {
           console.log(`🔍 Debug Control - RESGUARDO MUTUAL para ${r.legajo}:`);
           console.log(`  - Valor calculado (PDF):`, calc);
           console.log(`  - Valor oficial (Excel):`, off);

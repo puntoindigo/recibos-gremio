@@ -44,6 +44,18 @@ const codeByLabel: Map<string, string> = (() => {
   m.set(normalizeHeader("RESGUARDO MUTUAL"), "20610");
   m.set(normalizeHeader("DESC. MUTUAL"), "20620");
   m.set(normalizeHeader("DESC. MUTUAL 16 DE ABRIL"), "20620");
+  
+  // Aliases específicos para LIMPAR
+  m.set(normalizeHeader("CONT.SOLIDARIA 3 %"), "20540");
+  m.set(normalizeHeader("CONT.SOLIDARIA 3%"), "20540");
+  m.set(normalizeHeader("CONT.SOLIDARIA"), "20540");
+  m.set(normalizeHeader("SEG. SEPELIO 1,50%"), "20590");
+  m.set(normalizeHeader("SEG. SEPELIO 1,50 %"), "20590");
+  m.set(normalizeHeader("SEG. SEPELIO"), "20590");
+  m.set(normalizeHeader("CONT.CUOTA MUTUAL"), "20595");
+  m.set(normalizeHeader("RESGUARDO M"), "20610");
+  m.set(normalizeHeader("RESGUARDO MUTUAL"), "20610");
+  
   return m;
 })();
 
@@ -91,16 +103,21 @@ export function parseOfficialXlsx(
   file: ArrayBuffer | Uint8Array | Buffer,
   {
     periodoResolver,
+    debug = false,
   }: {
     /** Debe devolver "mm/yyyy" a partir del valor crudo de la celda/columna de período */
     periodoResolver: (periodoRaw: unknown) => string;
+    /** Si se deben mostrar logs de debug */
+    debug?: boolean;
   }
 ): OfficialRow[] {
-  console.log("🔍 Debug Parser Genérico - INICIO:", {
-    periodoResolver: "proporcionado",
-    tipo: typeof periodoResolver,
-    testCall: periodoResolver("TEST")
-  });
+  if (debug) {
+    console.log("🔍 Debug Parser Genérico - INICIO:", {
+      periodoResolver: "proporcionado",
+      tipo: typeof periodoResolver,
+      testCall: periodoResolver("TEST")
+    });
+  }
   
   const wb: WorkBook = XLSX.read(file, { type: "array" });
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -124,11 +141,13 @@ export function parseOfficialXlsx(
     cuil: headers.find(h => /(cuil|dni)/i.test(h)) ?? "CUIL",
   };
 
-  console.log("🔍 Debug Parser Genérico - Encabezados detectados:", {
-    todosLosHeaders: headers,
-    metaKeys,
-    headerToCode: Object.fromEntries(headerToCode)
-  });
+  if (debug) {
+    console.log("🔍 Debug Parser Genérico - Encabezados detectados:", {
+      todosLosHeaders: headers,
+      metaKeys,
+      headerToCode: Object.fromEntries(headerToCode)
+    });
+  }
 
   const rows: OfficialRow[] = [];
 
@@ -141,7 +160,7 @@ export function parseOfficialXlsx(
     const cuil = String(linea[metaKeys.cuil] ?? "").trim();
 
     // Debug: verificar qué está pasando con el período
-    if (idx < 3) {
+    if (debug && idx < 3) {
       console.log(`🔍 Debug Parser Genérico - Fila ${idx}:`, {
         periodoRaw: linea[metaKeys.periodo],
         periodo,
@@ -168,7 +187,7 @@ export function parseOfficialXlsx(
 
     const key = `${legajo}||${periodo}`;
 
-    if (idx < 3) {
+    if (debug && idx < 3) {
       // Log de verificación rápido: los 3 códigos de interés
       // (podés dejarlo o quitarlo; ayuda al debug sin ruido)
       console.log("fila", idx, {

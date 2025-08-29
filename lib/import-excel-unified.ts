@@ -11,7 +11,10 @@ export type { OfficialRow };
 export async function readOfficialXlsxUnified(
   file: ArrayBuffer | Uint8Array | Buffer | Blob,
   empresa: string,
-  opts?: { periodoResolver?: (periodoRaw: unknown) => string }
+  opts?: { 
+    periodoResolver?: (periodoRaw: unknown) => string;
+    debug?: boolean;
+  }
 ): Promise<OfficialRow[]> {
   let buf: ArrayBuffer | Uint8Array | Buffer;
   // Si viene un Blob/File en el cliente, lo convertimos
@@ -22,8 +25,9 @@ export async function readOfficialXlsxUnified(
   }
   
   const periodoResolver = (opts && opts.periodoResolver) ? opts.periodoResolver : undefined;
+  const debug = (opts && opts.debug) ? opts.debug : false;
   
-  return parseOfficialXlsxUnified(buf, empresa, { periodoResolver });
+  return parseOfficialXlsxUnified(buf, empresa, { periodoResolver, debug });
 }
 
 export function parseOfficialXlsxUnified(
@@ -31,15 +35,20 @@ export function parseOfficialXlsxUnified(
   empresa: string,
   {
     periodoResolver,
+    debug = false,
   }: {
     /** Debe devolver "mm/yyyy" a partir del valor crudo de la celda/columna de período */
     periodoResolver?: (periodoRaw: unknown) => string;
+    /** Si se deben mostrar logs de debug */
+    debug?: boolean;
   }
 ): OfficialRow[] {
   // Normalizar nombre de empresa
   const empresaNormalizada = empresa.toUpperCase().trim();
   
-  console.log(`🔄 Parseando archivo de control para empresa: ${empresaNormalizada}`);
+  if (debug) {
+    console.log(`🔄 Parseando archivo de control para empresa: ${empresaNormalizada}`);
+  }
   
   // Seleccionar parser según empresa
   switch (empresaNormalizada) {
@@ -62,19 +71,22 @@ export function parseOfficialXlsxUnified(
     default:
       // Usar parser genérico para LIMPAR y empresas no reconocidas
       // SIEMPRE usar el periodoResolver personalizado si se proporciona
-      console.log(`🔍 Debug Parser Unificado - LIMPAR:`, {
-        periodoResolver: periodoResolver ? "personalizado" : "no proporcionado",
-        tipo: periodoResolver ? typeof periodoResolver : "undefined"
-      });
+      if (debug) {
+        console.log(`🔍 Debug Parser Unificado - LIMPAR:`, {
+          periodoResolver: periodoResolver ? "personalizado" : "no proporcionado",
+          tipo: periodoResolver ? typeof periodoResolver : "undefined"
+        });
+      }
       
       if (periodoResolver) {
         // Crear un wrapper que ignore el argumento y use el periodoResolver personalizado
         const wrapper = (p: unknown) => periodoResolver("");
-        return parseOfficialXlsx(file, { periodoResolver: wrapper });
+        return parseOfficialXlsx(file, { periodoResolver: wrapper, debug });
       } else {
         // Solo usar fallback si NO hay periodoResolver personalizado
         return parseOfficialXlsx(file, { 
-          periodoResolver: (p) => String(p || "").trim() 
+          periodoResolver: (p) => String(p || "").trim(),
+          debug
         });
       }
   }

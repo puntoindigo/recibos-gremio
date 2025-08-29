@@ -100,7 +100,7 @@ function toDotDecimal(raw: string): string {
 }
 
 // Parser específico para SUMAR
-export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
+export async function parsePdfReceiptToRecord(file: File, debug: boolean = false): Promise<Parsed> {
   assertClient();
 
   GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -166,7 +166,7 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   const rawText = allWords.map((w) => w.str).join(" ");
   
   // Debug: mostrar las primeras líneas para ver qué se está capturando
-  console.log("🔍 Debug SUMAR - Primeras líneas:", rawText.substring(0, 500));
+  if (debug) console.log("🔍 Debug SUMAR - Primeras líneas:", rawText.substring(0, 500));
   
   const data: Record<string, string> = { 
     ARCHIVO: file.name, 
@@ -200,7 +200,7 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   }
   
   // Debug: mostrar qué período se detectó
-  console.log("🔍 Debug SUMAR - Período detectado:", data.PERIODO);
+  if (debug) console.log("🔍 Debug SUMAR - Período detectado:", data.PERIODO);
 
   // Extraer legajo (buscar patrones como "Legajo 00022")
   const legajoMatch = rawText.match(/Legajo\s*(\d+)/i);
@@ -238,7 +238,7 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   }
   
   // Debug: mostrar qué nombre se detectó
-  console.log("🔍 Debug SUMAR - Nombre detectado:", data.NOMBRE);
+  if (debug) console.log("🔍 Debug SUMAR - Nombre detectado:", data.NOMBRE);
 
   // Extraer CUIL
   const cuilMatch = rawText.match(/C\.U\.I\.L\.\s*(\d{2}-\d{8}-\d{1})/i);
@@ -255,7 +255,7 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   const descMutual = extraerConceptoSUMAR(rawText, "DESCUENTO MUTUAL");
 
   // Debug: mostrar los valores extraídos antes de toDotDecimal
-  console.log("🔍 Debug SUMAR - Valores extraídos:", {
+  if (debug) console.log("🔍 Debug SUMAR - Valores extraídos:", {
     cuotaGremial,
     segSepelio,
     cuotaAport,
@@ -271,7 +271,7 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   data["20620"] = toDotDecimal(descMutual);    // DESC. MUTUAL (DESCUENTO MUTUAL)
 
   // Debug: mostrar los valores después de toDotDecimal
-  console.log("🔍 Debug SUMAR - Valores finales:", {
+  if (debug) console.log("🔍 Debug SUMAR - Valores finales:", {
     "20540": data["20540"],
     "20590": data["20590"],
     "20595": data["20595"],

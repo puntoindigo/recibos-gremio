@@ -21,7 +21,7 @@ function assertClient(): void {
 type Word = { str: string; x: number; y: number };
 
 // Parser genérico que solo extrae texto básico para detectar empresas
-export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
+export async function parsePdfReceiptToRecord(file: File, debug: boolean = false): Promise<Parsed> {
   assertClient();
 
   GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";

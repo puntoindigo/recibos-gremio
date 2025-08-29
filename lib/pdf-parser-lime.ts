@@ -94,7 +94,7 @@ function toDotDecimal(raw: string): string {
 }
 
 // Parser específico para LIME
-export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
+export async function parsePdfReceiptToRecord(file: File, debug: boolean = false): Promise<Parsed> {
   assertClient();
 
   GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -160,20 +160,20 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   const rawText = allWords.map((w) => w.str).join(" ");
   
   // Debug: mostrar las primeras líneas para ver qué se está capturando
-  console.log("🔍 Debug LIME - Primeras líneas:", rawText.substring(0, 1000));
+  if (debug) console.log("🔍 Debug LIME - Primeras líneas:", rawText.substring(0, 1000));
   
   // Debug: buscar patrones específicos
-  console.log("🔍 Debug LIME - Buscando 'Periodo de Pago':", rawText.includes("Periodo de Pago"));
-  console.log("🔍 Debug LIME - Buscando 'Legajo':", rawText.includes("Legajo"));
-  console.log("🔍 Debug LIME - Buscando 'Apellidos y Nombres':", rawText.includes("Apellidos y Nombres"));
+  if (debug) console.log("🔍 Debug LIME - Buscando 'Periodo de Pago':", rawText.includes("Periodo de Pago"));
+  if (debug) console.log("🔍 Debug LIME - Buscando 'Legajo':", rawText.includes("Legajo"));
+  if (debug) console.log("🔍 Debug LIME - Buscando 'Apellidos y Nombres':", rawText.includes("Apellidos y Nombres"));
   
   // Debug: mostrar todas las coincidencias de período
   const periodoMatches = rawText.match(/(\d{1,2})\/(\d{4})/g);
-  console.log("🔍 Debug LIME - Todas las coincidencias de período:", periodoMatches);
+  if (debug) console.log("🔍 Debug LIME - Todas las coincidencias de período:", periodoMatches);
   
   // Debug: mostrar todas las coincidencias de legajo
   const legajoMatches = rawText.match(/Legajo[:\s]*(\d+)/gi);
-  console.log("🔍 Debug LIME - Todas las coincidencias de legajo:", legajoMatches);
+  if (debug) console.log("🔍 Debug LIME - Todas las coincidencias de legajo:", legajoMatches);
   
   const data: Record<string, string> = { 
     ARCHIVO: file.name, 
@@ -218,7 +218,7 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   }
   
   // Debug: mostrar qué período se detectó
-  console.log("🔍 Debug LIME - Período detectado:", data.PERIODO);
+  if (debug) console.log("🔍 Debug LIME - Período detectado:", data.PERIODO);
 
   // Extraer legajo - buscar "Legajo:" específicamente para LIME
   const legajoMatch = rawText.match(/Legajo:\s*(\d+)/i);
@@ -245,7 +245,7 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   }
   
   // Debug: mostrar qué legajo se detectó
-  console.log("🔍 Debug LIME - Legajo detectado:", data.LEGAJO);
+  if (debug) console.log("🔍 Debug LIME - Legajo detectado:", data.LEGAJO);
 
   // Extraer nombre - buscar "Apellidos y Nombres" específicamente para LIME
   const apellidosNombresMatch = rawText.match(/Apellidos y Nombres:\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s,]+)/i);
@@ -284,7 +284,7 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   }
   
   // Debug: mostrar qué nombre se detectó
-  console.log("🔍 Debug LIME - Nombre detectado:", data.NOMBRE);
+  if (debug) console.log("🔍 Debug LIME - Nombre detectado:", data.NOMBRE);
 
   // Extraer CUIL
   const cuilMatch = rawText.match(/C\.U\.I\.L\.\s*(\d{2}-\d{8}-\d{1})/i);
@@ -301,7 +301,7 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   const descMutual = extraerConceptoLIME(rawText, "Mutual 16 de Abril");
 
   // Debug: mostrar los valores extraídos antes de toDotDecimal
-  console.log("🔍 Debug LIME - Valores extraídos:", {
+  if (debug) console.log("🔍 Debug LIME - Valores extraídos:", {
     contribSolidaria,
     gastosSepelio,
     cuotaMutual,
@@ -317,7 +317,7 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   data["20620"] = toDotDecimal(descMutual);       // DESC. MUTUAL
 
   // Debug: mostrar los valores después de toDotDecimal
-  console.log("🔍 Debug LIME - Valores finales:", {
+  if (debug) console.log("🔍 Debug LIME - Valores finales:", {
     "20540": data["20540"],
     "20590": data["20590"],
     "20595": data["20595"],

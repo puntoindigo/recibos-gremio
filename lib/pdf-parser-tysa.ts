@@ -88,7 +88,7 @@ function toDotDecimal(raw: string): string {
 }
 
 // Parser específico para TYSA
-export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
+export async function parsePdfReceiptToRecord(file: File, debug: boolean = false): Promise<Parsed> {
   try {
     assertClient();
 

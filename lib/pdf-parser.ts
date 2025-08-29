@@ -48,7 +48,7 @@ function detectarEmpresa(texto: string): string {
 
 
 // Función principal que detecta la empresa y usa el parser correspondiente
-export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
+export async function parsePdfReceiptToRecord(file: File, debug: boolean = false): Promise<Parsed> {
   try {
     // Primero usamos el parser genérico para detectar la empresa
     const resultadoGenerico = await parseGeneric(file);
@@ -60,26 +60,26 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
 
   if (empresa === "LIMPAR") {
     // Usar el parser de LIMPAR
-    return await parseLimpar(file);
+    return await parseLimpar(file, debug);
   } else if (empresa === "TYSA") {
     // Usar el parser de TYSA
-    return await parseTysa(file);
+    return await parseTysa(file, debug);
   } else if (empresa === "LIME") {
     // Verificar si el archivo contiene TYSA en el nombre
     if (file.name.toUpperCase().includes("TYSA")) {
-      return await parseTysa(file);
+      return await parseTysa(file, debug);
     }
     
     // Verificar si el texto contiene "TALLER TYSA"
     if (textoCompleto.includes("TALLER TYSA") || primerasLineas.includes("TALLER TYSA")) {
-      return await parseTysa(file);
+      return await parseTysa(file, debug);
     }
     
     // Usar el parser de LIME
-    return await parseLime(file);
+    return await parseLime(file, debug);
   } else if (empresa === "SUMAR") {
     // Usar el parser de SUMAR
-    return await parseSumar(file);
+    return await parseSumar(file, debug);
   } else {
     // Retornar el resultado genérico pero NO guardar nada
     return {
