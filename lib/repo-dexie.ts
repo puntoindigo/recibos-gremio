@@ -2,7 +2,7 @@
 import { db } from "./db";
 import { toFixed2 } from "./number";
 import type { ConsolidatedEntity } from "./repo";
-import type { SavedControlDB } from "./db";
+import type { SavedControlDB, JSONValue } from "./db";
 
 // Helpers
 const isCode = (k: string) => /^\d{5}$/.test(k);
@@ -44,7 +44,6 @@ async function findReceiptByHash(hash: string) {
   // Si existe índice multiEntry en `hashes`, esto es O(log n).
   // Si no, el filter hace un scan pero sigue siendo correcto.
   try {
-    // @ts-expect-error puede fallar si no hay índice; caemos al filter
     return await db.receipts.where("hashes").equals(hash).first();
   } catch {
     return await db.receipts
@@ -127,12 +126,20 @@ export const repoDexie = {
     limit: number;
   }): Promise<ConsolidatedEntity[]> {
     const { offset, limit } = opts;
-    return db.consolidated.orderBy("key").offset(offset).limit(limit).toArray();
+    try {
+      // Como 'key' es la clave primaria, podemos usar orderBy directamente
+      return await db.consolidated.orderBy("key").offset(offset).limit(limit).toArray();
+    } catch (error) {
+      // Fallback: obtener todos y ordenar en memoria
+      console.warn("Fallback en getConsolidatedPage:", error);
+      const all = await db.consolidated.toArray();
+      return all.sort((a, b) => a.key.localeCompare(b.key)).slice(offset, offset + limit);
+    }
   },
 
   /** Control (dataset oficial desde Excel) */
   async upsertControl(
-    rows: Array<{ key: string; valores: Record<string, string>; meta?: Record<string, unknown> }>
+    rows: Array<{ key: string; valores: Record<string, string>; meta?: Record<string, JSONValue> }>
   ): Promise<void> {
     await db.transaction("rw", db.control, async () => {
       for (const r of rows) {
@@ -142,7 +149,7 @@ export const repoDexie = {
   },
 
   async getControl(key: string): Promise<
-    { key: string; valores: Record<string, string>; meta?: Record<string, unknown> } | undefined
+    { key: string; valores: Record<string, string>; meta?: Record<string, JSONValue> } | undefined
   > {
     const parts = String(key).split('||');
     const k = parts.length >= 2 ? `${parts[0]}||${parts[1]}` : key;
@@ -162,19 +169,17 @@ async deleteByKey(key: string): Promise<void> {
   await db.transaction("rw", db.receipts, db.consolidated, async () => {
     // receipts: puede no tener 'key' como PK; usamos índice 'key' si existe o filtro defensivo
     try {
-      // @ts-expect-error - el índice 'key' puede existir según el schema
       await db.receipts.where("key").equals(key).delete();
     } catch {
       // Fallback defensivo: filtrar
-      // @ts-expect-error - fallback defensivo para filtrar
       await db.receipts.filter((r: { key?: string }) => r?.key === key).delete();
     }
     // consolidated: la clave 'key' actúa como PK en el código existente (get/put por key)
     try {
       await db.consolidated.delete(key);
-    } catch {
-      // Fallback si no fuese PK
-      // @ts-expect-error - fallback si no es PK
+    } catch (error) {
+      // Fallback si no fuese PK o si hay algún problema
+      console.warn("Fallback en deleteByKey consolidated:", error);
       await db.consolidated.where("key").equals(key).delete();
     }
   });

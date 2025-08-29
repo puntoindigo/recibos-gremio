@@ -674,6 +674,8 @@ useEffect(() => {
     
 
     
+
+    
     const filtered = consolidated
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
       .filter((r) => {
@@ -726,15 +728,7 @@ useEffect(() => {
         const delta = off - calc;
         const dentro = Math.abs(delta) <= TOLERANCE;
         
-        // Debug específico para tolerancia
-        if (showDebug && Math.abs(delta) <= 0.15) { // Solo mostrar diferencias pequeñas
-          console.log(`🔍 Tolerancia - Legajo: ${r.legajo}, Concepto: ${label}, Delta: ${delta}, Tolerancia: ${TOLERANCE}, Dentro: ${dentro}`);
-        }
-        
-        // Log cuando se aplica la nueva tolerancia
-        if (showDebug && Math.abs(delta) <= 0.10 && !dentro) {
-          console.log(`⚠️ Nueva tolerancia aplicada - Legajo: ${r.legajo}, Concepto: ${label}, Delta: ${delta} (antes era error, ahora es OK)`);
-        }
+
         
         comps += 1;
         if (dentro) {
@@ -1067,6 +1061,7 @@ useEffect(() => {
                   onEmpresaChange={(empresa) => {
                     setEmpresaFiltro(empresa);
                     setPeriodoFiltro("");
+                    setSelectedControl(null); // Cerrar el panel de detalles al cambiar de empresa
                     if (controlFileInputRef.current) {
                       controlFileInputRef.current.value = "";
                     }

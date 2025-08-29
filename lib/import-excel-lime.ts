@@ -21,7 +21,7 @@ const LIME_COLUMN_MAPPING = {
   "H": "20540", // CONTRIBUCION SOLIDARIA
   "I": "20610", // RESGUARDO MUTUAL
   "J": "20595", // CUOTA MUTUAL
-  "L": "20620", // DESC. MUTUAL
+  "K": "20620", // DESC. MUTUAL
 } as const;
 
 /** Convierte letra de columna a índice (A=0, B=1, etc.) */

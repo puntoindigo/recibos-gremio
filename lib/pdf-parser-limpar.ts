@@ -36,6 +36,44 @@ const UPPER_NAME_BLOCK = /\b[A-ZÁÉÍÓÚÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,}){1,
 
 type Word = { str: string; x: number; y: number };
 
+// Función para extraer conceptos específicos de LIMPAR
+function extraerConceptoLimpar(texto: string, concepto: string): string {
+  const conceptRegex = new RegExp(`${concepto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+  const conceptMatch = texto.match(conceptRegex);
+  
+  if (!conceptMatch) return "0.00";
+  
+  const lines = texto.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (conceptRegex.test(line)) {
+      const afterConcept = line.substring(line.search(conceptRegex) + concepto.length);
+      
+      // Buscar valores con formato argentino: 27,640.12 o 27,640
+      const argentineValues = afterConcept.match(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+[.,]\d+|\d+)/g);
+      
+      if (argentineValues && argentineValues.length > 0) {
+        return argentineValues[0];
+      }
+      
+      // Fallback: buscar en líneas adyacentes
+      if (i + 1 < lines.length) {
+        const nextLine = lines[i + 1];
+        const nextValueMatch = nextLine.match(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+[.,]\d+|\d+)/);
+        if (nextValueMatch) return nextValueMatch[1];
+      }
+      
+      if (i > 0) {
+        const prevLine = lines[i - 1];
+        const prevValueMatch = prevLine.match(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+[.,]\d+|\d+)/);
+        if (prevValueMatch) return prevValueMatch[1];
+      }
+    }
+  }
+  
+  return "0.00";
+}
+
 function toDotDecimal(raw: string): string {
   let t = raw.replace(/\s+/g, "");
   
@@ -353,6 +391,70 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
       }
     }
   }
+
+  // ---------- NUEVO: Extraer conceptos específicos de LIMPAR ----------
+  // Extraer conceptos específicos y mapearlos a códigos estándar
+  // SOLO si no existen ya en data (para no sobrescribir códigos 20xxx extraídos por el parser genérico)
+  const contribSolidaria = extraerConceptoLimpar(rawText, "CONTRIBUCION SOLIDARIA") || 
+                           extraerConceptoLimpar(rawText, "CONTRIBUCIÓN SOLIDARIA") ||
+                           extraerConceptoLimpar(rawText, "CONTRIB. SOLIDARIA") ||
+                           extraerConceptoLimpar(rawText, "CONTRIB SOLIDARIA");
+  
+  const seguroSepelio = extraerConceptoLimpar(rawText, "SEGURO SEPELIO") || 
+                        extraerConceptoLimpar(rawText, "SEG. SEPELIO") ||
+                        extraerConceptoLimpar(rawText, "SEGURO DE SEPELIO");
+  
+  const cuotaMutual = extraerConceptoLimpar(rawText, "CUOTA MUTUAL") || 
+                      extraerConceptoLimpar(rawText, "CUOTA  MUTUAL") ||
+                      extraerConceptoLimpar(rawText, "CUOTA MUTUAL AP.SOLIDAR") ||
+                      extraerConceptoLimpar(rawText, "CUOTA APORT. SOLID. MUT.");
+  
+  const resguardoMutual = extraerConceptoLimpar(rawText, "RESGUARDO MUTUAL") || 
+                          extraerConceptoLimpar(rawText, "RESGUARDO  MUTUAL") ||
+                          extraerConceptoLimpar(rawText, "RESG. MUTUAL") ||
+                          extraerConceptoLimpar(rawText, "RESG. MUTUAL FAM.") ||
+                          extraerConceptoLimpar(rawText, "RESGUARDO MUTUO");
+  
+  const descMutual = extraerConceptoLimpar(rawText, "DESC. MUTUAL") || 
+                     extraerConceptoLimpar(rawText, "DESCUENTO MUTUAL") ||
+                     extraerConceptoLimpar(rawText, "DESC. MUTUAL 16 DE ABRIL") ||
+                     extraerConceptoLimpar(rawText, "MUTUAL 16 DE ABRIL");
+
+  // Debug: mostrar los valores extraídos antes de toDotDecimal
+  console.log("🔍 Debug LIMPAR - Valores extraídos:", {
+    contribSolidaria,
+    seguroSepelio,
+    cuotaMutual,
+    resguardoMutual,
+    descMutual
+  });
+
+  // Mapear a códigos estándar SOLO si no existen ya en data
+  // Esto evita sobrescribir códigos 20xxx que ya se extrajeron correctamente
+  if (!data["20540"] || data["20540"] === "-") {
+    data["20540"] = toDotDecimal(contribSolidaria); // CONTRIBUCION SOLIDARIA
+  }
+  if (!data["20590"] || data["20590"] === "-") {
+    data["20590"] = toDotDecimal(seguroSepelio);    // SEGURO SEPELIO
+  }
+  if (!data["20595"] || data["20595"] === "-") {
+    data["20595"] = toDotDecimal(cuotaMutual);      // CUOTA MUTUAL
+  }
+  if (!data["20610"] || data["20610"] === "-") {
+    data["20610"] = toDotDecimal(resguardoMutual);  // RESGUARDO MUTUAL
+  }
+  if (!data["20620"] || data["20620"] === "-") {
+    data["20620"] = toDotDecimal(descMutual);       // DESC. MUTUAL
+  }
+
+  // Debug: mostrar los valores después de toDotDecimal
+  console.log("🔍 Debug LIMPAR - Valores finales:", {
+    "20540": data["20540"],
+    "20590": data["20590"],
+    "20595": data["20595"],
+    "20610": data["20610"],
+    "20620": data["20620"]
+  });
 
   const debugLines = allLines.slice(0, 150).map((line) => ({
     y: Math.round(line.reduce((s, w) => s + w.y, 0) / line.length),
