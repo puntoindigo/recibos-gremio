@@ -35,8 +35,24 @@ export function labelFor(code: string | number): string {
   return found ? found[1] : c;
 }
 
+// Mapeo único de códigos a conceptos principales (sin duplicados)
 export const CODE_KEYS: string[] = Array.from(new Set(CODE_LABELS.map(([k]) => k)));
 export const CODE_SET: Set<string> = new Set(CODE_KEYS);
+
+// Mapeo de códigos a conceptos principales (solo la primera aparición de cada código)
+export const CODE_PRINCIPAL_LABELS = [
+  ["20540", "CONTRIBUCION SOLIDARIA"],
+  ["20590", "SEGURO SEPELIO"],
+  ["20595", "CUOTA MUTUAL"],
+  ["20610", "RESGUARDO MUTUAL"],
+  ["20620", "DESC. MUTUAL"],
+] as const;
+
 export function isLabeled(code: string | number): boolean {
   return CODE_SET.has(String(code).trim());
+}
+
+// Función para obtener solo los conceptos principales (sin duplicados)
+export function getPrincipalLabels() {
+  return CODE_PRINCIPAL_LABELS;
 }

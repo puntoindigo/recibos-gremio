@@ -5,19 +5,23 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, FileUp, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
-import { CODE_LABELS, CODE_KEYS } from "@/lib/code-labels";
+import { CODE_LABELS, CODE_KEYS, getPrincipalLabels } from "@/lib/code-labels";
 import { sha256OfFile } from "@/lib/hash";
 import { repoDexie } from '@/lib/repo-dexie';
 import { db } from '@/lib/db';
 import type { ConsolidatedEntity } from "@/lib/repo";
-import { readOfficialXlsx, type OfficialRow } from "@/lib/import-excel";
+import type { SavedControlDB } from "@/lib/db";
+import { readOfficialXlsxUnified, type OfficialRow } from "@/lib/import-excel-unified";
 import TablaAgregada from "@/components/TablaAgregada/TablaAgregada";
-import ControlTables from "@/components/Control/ControlTables";
-import { buildControlCsvSummary, type ControlOk as ControlOkRow } from "@/lib/export-control";
+
+import SavedControlsList from "@/components/Control/SavedControlsList";
+import ControlDetailsPanel from "@/components/Control/ControlDetailsPanel";
+import { type ControlOk as ControlOkRow } from "@/lib/export-control";
 import type { ControlSummary } from "@/lib/control-types";
 import { buildAggregatedCsv } from "@/lib/export-aggregated";
 import ReceiptsFilters from "@/components/ReceiptsFilters";
@@ -140,7 +144,7 @@ export default function Page() {
   const [openDetail, setOpenDetail] = useState<Record<string, boolean>>({});
   const [controlMissing, setControlMissing] = useState<Array<{ key: string; legajo: string; periodo: string }>>([]);
   const [officialKeys, setOfficialKeys] = useState<string[]>([]);
-  const TOLERANCE = 0.01;
+  const TOLERANCE = 0.10;
   const [controlStats, setControlStats] = useState({
     comps: 0,
     compOk: 0,
@@ -148,6 +152,35 @@ export default function Page() {
     okReceipts: 0,
     difReceipts: 0,
   });
+  const [controlsRefreshKey, setControlsRefreshKey] = useState(0); // Para forzar actualización de controles guardados
+  const [selectedControl, setSelectedControl] = useState<SavedControlDB | null>(null); // Control seleccionado para ver detalles
+  
+  // Función para cargar detalles de un control guardado
+  const handleViewDetails = (control: SavedControlDB) => {
+    try {
+      // Cargar el control seleccionado
+      setSelectedControl(control);
+      
+      // Actualizar los filtros para mostrar el control
+      setPeriodoFiltro(control.periodo);
+      setEmpresaFiltro(control.empresa);
+      setNombreFiltro(""); // Limpiar filtro de nombre
+      
+      // Cargar los datos del control en las tablas
+      setControlSummaries(control.summaries as ControlSummary[]);
+      setControlOKs(control.oks);
+      setControlMissing(control.missing);
+      setControlStats(control.stats);
+      setOfficialKeys(control.officialKeys);
+      setOfficialNameByKey(control.officialNameByKey);
+      // Usar nameByKey del control guardado para los nombres de los recibos
+      const savedNameByKey = control.nameByKey || {};
+      setHasControlForCurrentFilters(true);
+    } catch (error) {
+      console.error("Error cargando detalles del control:", error);
+      toast.error("Error al cargar los detalles del control");
+    }
+  };
 // Filtros globales (usados por Tabla agregada, exportación y limpiar memoria)
 const [periodoFiltro, setPeriodoFiltro] = useState<string>("");
 const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
@@ -156,7 +189,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
 // nombres del Excel oficial (fallback si el PDF no lo trae)
 const [officialNameByKey, setOfficialNameByKey] = useState<Record<string, string>>({});
 
-const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const controlFileInputRef = useRef<HTMLInputElement>(null);
 const visibleCols = useMemo<string[]>(() => [...BASE_COLS, ...CODE_KEYS], []);
 
 // Mapa final de nombres para UI/CSV (consolidado > oficial)
@@ -180,19 +214,26 @@ async function saveControlToDexie(
   missing: Array<{ key: string; legajo: string; periodo: string }>,
   stats: { comps: number; compOk: number; compDif: number; okReceipts: number; difReceipts: number },
   officialKeys: string[],
-  officialNameByKey: Record<string, string>
+  officialNameByKey: Record<string, string>,
+  nameByKey: Record<string, string>
 ): Promise<void> {
   try {
-    console.log("💾 saveControlToDexie - Guardando con filtros:", { periodoFiltro, empresaFiltro, nombreFiltro });
+    if (showDebug) {
+      console.log("💾 saveControlToDexie - Guardando con filtros:", { periodoFiltro, empresaFiltro, nombreFiltro });
+    }
     
     // No guardar control si hay filtro de nombre (se calcula en tiempo real)
     if (nombreFiltro) {
-      console.log("⚠️ saveControlToDexie - No se guarda control con filtro de nombre");
+      if (showDebug) {
+        console.log("⚠️ saveControlToDexie - No se guarda control con filtro de nombre");
+      }
       return;
     }
     
-    await repoDexie.saveControl(periodoFiltro, empresaFiltro, summaries, oks, missing, stats, officialKeys, officialNameByKey);
-    console.log("✅ saveControlToDexie - Control guardado exitosamente");
+    await repoDexie.saveControl(periodoFiltro, empresaFiltro, summaries, oks, missing, stats, officialKeys, officialNameByKey, nameByKey);
+    if (showDebug) {
+      console.log("✅ saveControlToDexie - Control guardado exitosamente");
+    }
   } catch (e) {
     console.error("❌ saveControlToDexie - Error guardando control:", e);
     console.warn("No se pudo guardar el control:", e);
@@ -206,27 +247,36 @@ async function loadControlFromDexie(): Promise<{
   stats: { comps: number; compOk: number; compDif: number; okReceipts: number; difReceipts: number };
   officialKeys: string[];
   officialNameByKey: Record<string, string>;
+  nameByKey: Record<string, string>;
 } | null> {
   try {
-    console.log("🔍 loadControlFromDexie - Buscando control para filtros:", { periodoFiltro, empresaFiltro, nombreFiltro });
+    if (showDebug) {
+      console.log("🔍 loadControlFromDexie - Buscando control para filtros:", { periodoFiltro, empresaFiltro, nombreFiltro });
+    }
     
     // No cargar control guardado si hay filtro de nombre
     if (nombreFiltro) {
-      console.log("⚠️ loadControlFromDexie - No se carga control guardado con filtro de nombre");
+      if (showDebug) {
+        console.log("⚠️ loadControlFromDexie - No se carga control guardado con filtro de nombre");
+      }
       return null;
     }
     
     const saved = await repoDexie.getSavedControl(periodoFiltro, empresaFiltro);
     if (!saved) {
-      console.log("❌ loadControlFromDexie - No se encontró control guardado");
+      if (showDebug) {
+        console.log("❌ loadControlFromDexie - No se encontró control guardado");
+      }
       return null;
     }
     
-    console.log("✅ loadControlFromDexie - Control encontrado:", {
-      summaries: saved.summaries.length,
-      oks: saved.oks.length,
-      missing: saved.missing.length
-    });
+    if (showDebug) {
+      console.log("✅ loadControlFromDexie - Control encontrado:", {
+        summaries: saved.summaries.length,
+        oks: saved.oks.length,
+        missing: saved.missing.length
+      });
+    }
     
     return {
       summaries: saved.summaries as ControlSummary[],
@@ -235,6 +285,7 @@ async function loadControlFromDexie(): Promise<{
       stats: saved.stats,
       officialKeys: saved.officialKeys,
       officialNameByKey: saved.officialNameByKey,
+      nameByKey: saved.nameByKey || {},
     };
   } catch (e) {
     console.error("❌ loadControlFromDexie - Error cargando control:", e);
@@ -251,11 +302,15 @@ useEffect(() => {
 // Efecto para cargar control guardado cuando cambian los filtros
 useEffect(() => {
   async function loadControl() {
-    console.log("🔄 useEffect - Cambio de filtros detectado:", { periodoFiltro, empresaFiltro, nombreFiltro });
+    if (showDebug) {
+      console.log("🔄 useEffect - Cambio de filtros detectado:", { periodoFiltro, empresaFiltro, nombreFiltro });
+    }
     
     // Si hay filtro de nombre, no cargar control guardado (se calcula en tiempo real)
     if (nombreFiltro) {
-      console.log("🔍 useEffect - Filtro de nombre detectado, calculando control en tiempo real");
+      if (showDebug) {
+        console.log("🔍 useEffect - Filtro de nombre detectado, calculando control en tiempo real");
+      }
       setControlSummaries([]);
       setControlOKs([]);
       setControlMissing([]);
@@ -267,7 +322,9 @@ useEffect(() => {
     if (periodoFiltro || empresaFiltro) {
       const saved = await loadControlFromDexie();
       if (saved) {
-        console.log("✅ useEffect - Control cargado desde Dexie");
+        if (showDebug) {
+          console.log("✅ useEffect - Control cargado desde Dexie");
+        }
         setControlSummaries(saved.summaries);
         setControlOKs(saved.oks);
         setControlMissing(saved.missing);
@@ -276,7 +333,9 @@ useEffect(() => {
         setOfficialNameByKey(saved.officialNameByKey);
         setHasControlForCurrentFilters(true);
       } else {
-        console.log("⚠️ useEffect - No hay control guardado para estos filtros");
+        if (showDebug) {
+          console.log("⚠️ useEffect - No hay control guardado para estos filtros");
+        }
         // Si no hay control guardado para estos filtros, limpiar resultados
         setControlSummaries([]);
         setControlOKs([]);
@@ -285,7 +344,9 @@ useEffect(() => {
         setHasControlForCurrentFilters(false);
       }
     } else {
-      console.log("⚠️ useEffect - No hay filtros seleccionados");
+      if (showDebug) {
+        console.log("⚠️ useEffect - No hay filtros seleccionados");
+      }
       // Si no hay filtros, limpiar resultados
       setControlSummaries([]);
       setControlOKs([]);
@@ -558,55 +619,89 @@ useEffect(() => {
 
   async function handleOfficialExcel(file: File): Promise<void> {
     try {
-      console.log("🔄 Iniciando handleOfficialExcel con filtros:", { periodoFiltro, empresaFiltro });
+      
+      // Validar que período y empresa estén seleccionados
+      if (!periodoFiltro) {
+        toast.error("Debe seleccionar un período");
+        // Limpiar el input de archivo para permitir reintentar
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        return;
+      }
+      if (!empresaFiltro) {
+        toast.error("Debe seleccionar una empresa");
+        // Limpiar el input de archivo para permitir reintentar
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        return;
+      }
+      
       setControlLoading(true);
-      const rows: OfficialRow[] = await readOfficialXlsx(file);
-      console.log("📊 Excel leído:", rows.length, "filas");
+      
+      // Usar la empresa del filtro o detectar automáticamente
+      const empresaToUse = empresaFiltro || "LIMPAR";
+      
+      // Para LIME, el período viene del desplegable, no del Excel
+      const periodoResolver = empresaToUse === "LIME" 
+        ? () => periodoFiltro || "07/2025" // Usar el período del desplegable
+        : undefined; // Para otras empresas, usar el período del Excel
+      
+      const rows: OfficialRow[] = await readOfficialXlsxUnified(file, empresaToUse, { periodoResolver });
       
       await repoDexie.upsertControl(rows.map((r) => ({ key: r.key, valores: r.valores })));
-      console.log("💾 Control upserted en Dexie");
       
       setOfficialKeys(rows.map((r) => r.key));
       setOfficialNameByKey(Object.fromEntries(rows.map((r) => [r.key, r.meta?.nombre || ""])));
-      console.log("🔑 Official keys y nombres actualizados");
       
       await computeControl(rows.map((r) => r.key));
-      console.log("✅ Control computado exitosamente");
       
-      toast.success(`Oficial cargado (${rows.length} filas)`);
+      // Forzar actualización de la lista de controles guardados
+      setControlsRefreshKey(prev => prev + 1);
+      
+      toast.success(`Control procesado y guardado (${rows.length} filas)`);
     } catch (e: unknown) {
       console.error("❌ Error en handleOfficialExcel:", e);
       toast.error("Error importando oficial", { description: errorMessage(e) });
     } finally {
       setControlLoading(false);
-      console.log("🏁 handleOfficialExcel completado");
     }
   }
 
   async function computeControl(keysFromExcel?: string[]): Promise<void> {
-    console.log("🔄 Iniciando computeControl con filtros:", { periodoFiltro, empresaFiltro, nombreFiltro });
     const empresaOf = (r: ConsolidatedEntity) => String(r.data?.EMPRESA ?? "LIMPAR");
+    
+
+    
     const filtered = consolidated
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
-      .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true))
+      .filter((r) => {
+        if (!empresaFiltro) return true;
+        const empresaRecibo = empresaOf(r).toUpperCase().trim();
+        const empresaFiltroUpper = empresaFiltro.toUpperCase().trim();
+        // Comparación más flexible: "LI E" debería coincidir con "LIME"
+        const coincide = empresaRecibo.includes(empresaFiltroUpper) || empresaFiltroUpper.includes(empresaRecibo);
+        
+        if (showDebug && empresaFiltro === "LIMPAR") {
+          console.log(`🔍 Filtro empresa - Legajo: ${r.legajo}, Empresa BD: "${empresaRecibo}", Filtro: "${empresaFiltroUpper}", Coincide: ${coincide}`);
+        }
+        
+        return coincide;
+      })
       .filter((r) => {
         if (!nombreFiltro) return true;
         const nombre = r.nombre || r.data.NOMBRE || "";
         return nombre.toLowerCase().includes(nombreFiltro.toLowerCase());
       });
     const rows = filtered;
-    console.log("📊 Filas filtradas:", rows.length, "de", consolidated.length, "total");
-    
     if (!rows.length) {
-      console.log("⚠️ No hay filas para procesar, limpiando control");
       setControlSummaries([]);
       setControlOKs([]);
       setControlMissing([]);
       setControlStats({ comps: 0, compOk: 0, compDif: 0, okReceipts: 0, difReceipts: 0 });
       return;
     }
-
-    console.log("🔍 Procesando", rows.length, "filas para control");
     const pairs = await Promise.all(
       rows.map(async (r: ConsolidatedEntity) => {
         const ctl = await repoDexie.getControl(r.key);
@@ -624,11 +719,23 @@ useEffect(() => {
       if (!ctl) continue;
       const difs: ControlSummary["difs"] = [];
 
-      for (const [code, label] of CODE_LABELS) {
+      // Usar solo los conceptos principales para evitar duplicados
+      for (const [code, label] of getPrincipalLabels()) {
         const calc = Number(r.data[code] ?? 0);
         const off = Number(ctl.valores[code] ?? 0);
         const delta = off - calc;
         const dentro = Math.abs(delta) <= TOLERANCE;
+        
+        // Debug específico para tolerancia
+        if (showDebug && Math.abs(delta) <= 0.15) { // Solo mostrar diferencias pequeñas
+          console.log(`🔍 Tolerancia - Legajo: ${r.legajo}, Concepto: ${label}, Delta: ${delta}, Tolerancia: ${TOLERANCE}, Dentro: ${dentro}`);
+        }
+        
+        // Log cuando se aplica la nueva tolerancia
+        if (showDebug && Math.abs(delta) <= 0.10 && !dentro) {
+          console.log(`⚠️ Nueva tolerancia aplicada - Legajo: ${r.legajo}, Concepto: ${label}, Delta: ${delta} (antes era error, ahora es OK)`);
+        }
+        
         comps += 1;
         if (dentro) {
           compOk += 1;
@@ -651,52 +758,150 @@ useEffect(() => {
     summaries.sort(compareByKey);
     oks.sort(compareByKey);
 
-    console.log("📈 Resultados del control:", {
-      summaries: summaries.length,
-      oks: oks.length,
-      comps,
-      compOk,
-      compDif
-    });
+
 
     setControlSummaries(summaries);
     setControlOKs(oks);
 
     const official = new Set<string>(keysFromExcel ?? officialKeys);
     const consKeys = new Set(rows.map((r) => r.key));
+    
+    // Normalizar las claves para que tengan el mismo formato
+    // Las claves de consKeys tienen formato: "legajo||periodo||empresa"
+    // Las claves de official tienen formato: "legajo||periodo"
+    // Necesitamos agregar la empresa a las claves de official para la comparación
+    const normalizedOfficial = new Set<string>();
+    for (const key of official) {
+      const parts = key.split("||");
+      if (parts.length >= 2) {
+        normalizedOfficial.add(`${parts[0]}||${parts[1]}||${empresaFiltro}`);
+      }
+    }
+    
     const missing: Array<{ key: string; legajo: string; periodo: string }> = [];
     if (official.size > 0) {
+      // Crear un set de legajos que ya están clasificados (en summaries o oks)
+      const classifiedLegajos = new Set([
+        ...summaries.map(s => s.legajo),
+        ...oks.map(o => o.legajo)
+      ]);
+      
       for (const k of official) {
-        if (!consKeys.has(k)) {
+        const normalizedKey = `${k.split("||")[0]}||${k.split("||")[1]}||${empresaFiltro}`;
+        const legajo = k.split("||")[0];
+        
+        // Solo agregar a missing si:
+        // 1. No está en la base de datos Y
+        // 2. No está ya clasificado en summaries o oks
+        if (!consKeys.has(normalizedKey) && !classifiedLegajos.has(legajo)) {
           const [legajo = "", periodo = ""] = k.split("||");
           missing.push({ key: k, legajo, periodo });
         }
       }
     }
+    
+    // Debug: verificar si hay algún legajo específico que aparezca en ambas categorías (solo en modo debug)
+    if (showDebug) {
+      // Debug para legajos específicos de LIMPAR
+      const legajosProblematicos = ["520", "531", "549", "550"];
+      for (const legajo of legajosProblematicos) {
+        const legajoKey = `${legajo}||${periodoFiltro}`;
+        const legajoNormalized = `${legajo}||${periodoFiltro}||${empresaFiltro}`;
+        
+        const enSummaries = summaries.some(s => s.key === legajoNormalized);
+        const enOks = oks.some(o => o.key === legajoNormalized);
+        const enMissing = missing.some(m => m.key === legajoKey);
+        const enConsKeys = consKeys.has(legajoNormalized);
+        const enOfficial = official.has(legajoKey);
+        
+        console.log(`🔍 Debug legajo ${legajo}:`, {
+          enSummaries,
+          enOks,
+          enMissing,
+          enConsKeys,
+          enOfficial,
+          key: legajoKey,
+          normalizedKey: legajoNormalized
+        });
+      }
+      
+      // Debug adicional: mostrar algunas claves para verificar formato
+      console.log("🔑 Ejemplos de claves en consKeys:", Array.from(consKeys).slice(0, 3));
+      console.log("🔑 Ejemplos de claves en official:", Array.from(official).slice(0, 3));
+      console.log("🔑 Total consKeys:", consKeys.size);
+      console.log("🔑 Total official:", official.size);
+    }
+    
+
+    
+
+    // Verificar duplicación (solo en modo debug)
+    if (showDebug) {
+      // Normalizar todas las claves para la comparación
+      const summaryKeys = new Set(summaries.map(s => {
+        const parts = s.key.split("||");
+        return parts.length >= 2 ? `${parts[0]}||${parts[1]}` : s.key;
+      }));
+      const okKeys = new Set(oks.map(o => {
+        const parts = o.key.split("||");
+        return parts.length >= 2 ? `${parts[0]}||${parts[1]}` : o.key;
+      }));
+      const missingKeys = new Set(missing.map(m => m.key));
+      
+      // Buscar duplicados
+      const allKeys = new Set([...summaryKeys, ...okKeys, ...missingKeys]);
+      const duplicates = [];
+      
+      for (const key of allKeys) {
+        const inSummaries = summaryKeys.has(key);
+        const inOks = okKeys.has(key);
+        const inMissing = missingKeys.has(key);
+        
+        if ((inSummaries && inOks) || (inSummaries && inMissing) || (inOks && inMissing)) {
+          duplicates.push({ key, inSummaries, inOks, inMissing });
+        }
+      }
+      
+      if (duplicates.length > 0) {
+        console.warn("⚠️ DUPLICADOS DETECTADOS:", duplicates);
+      }
+      
+      // Debug específico para entender la clasificación
+      console.log("📊 RESUMEN DE CLASIFICACIÓN:");
+      console.log(`- Total en consKeys (base de datos): ${consKeys.size}`);
+      console.log(`- Total en official (Excel): ${official.size}`);
+      console.log(`- Claves con diferencias: ${summaries.length}`);
+      console.log(`- Claves OK: ${oks.length}`);
+      console.log(`- Registros sin recibo: ${missing.length}`);
+      console.log(`- Total clasificado: ${summaries.length + oks.length + missing.length}`);
+      
+      // Verificar que todos los legajos de consKeys estén clasificados
+      const clasificados = new Set([...summaryKeys, ...okKeys]);
+      const noClasificados = [];
+      for (const key of consKeys) {
+        const parts = key.split("||");
+        const legajoKey = parts.length >= 2 ? `${parts[0]}||${parts[1]}` : key;
+        if (!clasificados.has(legajoKey)) {
+          noClasificados.push(key);
+        }
+      }
+      
+      if (noClasificados.length > 0) {
+        console.warn("⚠️ LEGAJOS EN BD PERO NO CLASIFICADOS:", noClasificados);
+      }
+    }
+    
     setControlMissing(missing);
     setControlStats({ comps, compOk, compDif, okReceipts: oks.length, difReceipts: summaries.length });
     
     // Guardar el control con los filtros actuales
-    console.log("💾 Guardando control en Dexie...");
-    await saveControlToDexie(summaries, oks, missing, { comps, compOk, compDif, okReceipts: oks.length, difReceipts: summaries.length }, keysFromExcel ?? officialKeys, officialNameByKey);
-    console.log("✅ Control guardado exitosamente");
+    await saveControlToDexie(summaries, oks, missing, { comps, compOk, compDif, okReceipts: oks.length, difReceipts: summaries.length }, keysFromExcel ?? officialKeys, officialNameByKey, nameByKey);
     
     // Actualizar el estado para habilitar el botón de eliminar control
     setHasControlForCurrentFilters(true);
-    console.log("🔘 Botón 'Eliminar Control' habilitado");
   }
 
-  async function handleRecalc(): Promise<void> {
-    try {
-      setControlLoading(true);
-      await computeControl();
-      toast.success("Control recalculado");
-    } catch (e: unknown) {
-      toast.error("No se pudo recalcular", { description: errorMessage(e) });
-    } finally {
-      setControlLoading(false);
-    }
-  }
+
 
   /* -------------------- export CSVs -------------------- */
 
@@ -722,18 +927,7 @@ useEffect(() => {
     URL.revokeObjectURL(url);
   }
 
-  function downloadControlCsv(): void {
-    const csv = buildControlCsvSummary(controlSummaries, controlOKs, true, nameByKey);
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "control_por_clave.csv";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
+
 
   /* ----------------------------- UI ---------------------------- */
 
@@ -768,7 +962,7 @@ useEffect(() => {
             <CardHeader className="flex items-center justify-between gap-2 sm:flex-row sm:items-center">
               <div>
                 <CardTitle>Tabla agregada</CardTitle>
-                <CardDescription>Vista unificada (solo columnas etiquetadas). Incluye NOMBRE.</CardDescription>
+                <CardDescription></CardDescription>
               </div>
               <div className="flex flex-col gap-3 sm:items-end">
                 <div className="flex gap-2">
@@ -816,54 +1010,89 @@ useEffect(() => {
         {/* CONTROL */}
         <TabsContent value="control" className="mt-4">
           <Card>
-            <CardHeader className="flex items-center justify-between gap-2 sm:flex-row sm:items-center">
-              <div className="md:col-span-2 min-w-0">
-                <CardTitle>Control</CardTitle>
-                <CardDescription>Compara valores oficiales vs calculados.</CardDescription>
-                <div className="mt-2 text-xs text-muted-foreground">
-                  Comparaciones: {controlStats.comps} · OK: {controlStats.compOk} · DIF: {controlStats.compDif}
+            <CardHeader>
+              <CardTitle>Control</CardTitle>
+              <CardDescription>Compara valores oficiales vs calculados.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground min-w-16">Empresa</span>
+                  <Select value={empresaFiltro || '__ALL__'} onValueChange={(v) => setEmpresaFiltro(v === '__ALL__' ? "" : v)}>
+                    <SelectTrigger className="w-56">
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">Todas</SelectItem>
+                      {Array.from(new Set(consolidated.map((r) => String(r.data?.EMPRESA ?? "LIMPAR").trim()))).sort().map((e) => (
+                        <SelectItem key={e} value={e}>{e}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Recibos — OK: {controlStats.okReceipts} · Con diferencias: {controlStats.difReceipts}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground min-w-16">Periodo</span>
+                  <Select value={periodoFiltro || '__ALL__'} onValueChange={(v) => setPeriodoFiltro(v === '__ALL__' ? "" : v)}>
+                    <SelectTrigger className="w-44">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">Todos</SelectItem>
+                      {Array.from(new Set(consolidated.map((r) => r.periodo))).sort().map((p) => (
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-3 items-center">
                 <Input
+                  ref={controlFileInputRef}
                   type="file"
-                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  className="w-full md:w-1/2"
-                  disabled={!periodoFiltro && !empresaFiltro && !nombreFiltro}
+                  accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  className="w-full sm:w-auto"
+                  disabled={!periodoFiltro || !empresaFiltro}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => {
                     if (e.target.files && e.target.files[0]) void handleOfficialExcel(e.target.files[0]);
                   }}
                 />
-                <Button variant="secondary" onClick={downloadControlCsv} disabled={controlSummaries.length === 0}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar
-                </Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-                <ReceiptsFilters
-                  periodos={Array.from(new Set(consolidated.map((r) => r.periodo))).sort()}
+              
+
+              
+              <div className="mt-8">
+                <SavedControlsList 
                   empresas={Array.from(new Set(consolidated.map((r) => String(r.data?.EMPRESA ?? "LIMPAR").trim()))).sort()}
-                  valuePeriodo={periodoFiltro || null}
-                  onPeriodo={(v: string | null) => setPeriodoFiltro(v ?? "")}
-                  valueEmpresa={empresaFiltro || null}
-                  onEmpresa={(v: string | null) => setEmpresaFiltro(v ?? "")}
-                  valueNombre={nombreFiltro}
-                  onNombre={setNombreFiltro}
+                  refreshKey={controlsRefreshKey}
+                  onViewDetails={handleViewDetails}
+                  onCloseDetails={() => setSelectedControl(null)}
+                  onEmpresaChange={(empresa) => {
+                    setEmpresaFiltro(empresa);
+                    setPeriodoFiltro("");
+                    if (controlFileInputRef.current) {
+                      controlFileInputRef.current.value = "";
+                    }
+                  }}
+                  onResetFields={() => {
+                    setPeriodoFiltro("");
+                    if (controlFileInputRef.current) {
+                      controlFileInputRef.current.value = "";
+                    }
+                  }}
+                  selectedEmpresa={empresaFiltro}
+                  selectedControlId={selectedControl?.id?.toString() || null}
                 />
               </div>
-              <ControlTables
-                summaries={controlSummaries}
-                oks={controlOKs}
-                missing={controlMissing}
-                openDetail={openDetail}
-                onToggleDetail={(k) => setOpenDetail((prev) => ({ ...prev, [k]: !prev[k] }))}
-                nameByKey={nameByKey}
-              />
+              
+              {/* Panel de detalles del control */}
+              {selectedControl && (
+                <div className="mt-8">
+                  <ControlDetailsPanel
+                    control={selectedControl}
+                    onClose={() => setSelectedControl(null)}
+                    nameByKey={nameByKey}
+                    officialNameByKey={officialNameByKey}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -217,7 +217,8 @@ async saveControl(
     difReceipts: number;
   },
   officialKeys: string[],
-  officialNameByKey: Record<string, string>
+  officialNameByKey: Record<string, string>,
+  nameByKey: Record<string, string>
 ): Promise<void> {
   const filterKey = `${periodo}||${empresa}`;
   await db.savedControls.put({
@@ -230,6 +231,7 @@ async saveControl(
     stats,
     officialKeys,
     officialNameByKey,
+    nameByKey,
     createdAt: Date.now(),
   });
 },
@@ -249,5 +251,20 @@ async clearSavedControls(): Promise<void> {
 async deleteSavedControl(periodo: string, empresa: string): Promise<void> {
   const filterKey = `${periodo}||${empresa}`;
   await db.savedControls.where("filterKey").equals(filterKey).delete();
+},
+
+/** Obtener todos los controles guardados por empresa */
+async getSavedControlsByEmpresa(empresa: string): Promise<SavedControlDB[]> {
+  return db.savedControls.where("empresa").equals(empresa).reverse().sortBy("periodo");
+},
+
+/** Obtener todos los controles guardados */
+async getAllSavedControls(): Promise<SavedControlDB[]> {
+  return db.savedControls.orderBy("createdAt").reverse().toArray();
+},
+
+/** Eliminar control por ID */
+async deleteSavedControlById(id: number): Promise<void> {
+  await db.savedControls.delete(id);
 },
 };

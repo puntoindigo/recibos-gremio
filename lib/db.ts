@@ -74,6 +74,7 @@ export type SavedControlDB = {
   };
   officialKeys: string[];
   officialNameByKey: Record<string, string>;
+  nameByKey: Record<string, string>;  // Nombres de los recibos
   createdAt: number;
 };
 
