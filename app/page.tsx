@@ -646,12 +646,13 @@ useEffect(() => {
       // Para LIME, el período viene del desplegable, no del Excel
       const periodoResolver = empresaToUse === "LIME" 
         ? () => periodoFiltro || "07/2025" // Usar el período del desplegable
-        : undefined; // Para otras empresas, usar el período del Excel
+        : () => periodoFiltro || "06/2025"; // Para LIMPAR, usar el período del desplegable
       
       console.log("🔍 Debug Excel Control - Configuración:", {
         empresaToUse,
         periodoFiltro,
-        periodoResolver: periodoResolver ? "personalizado" : "automático"
+        periodoResolver: "personalizado (siempre)",
+        periodoUsado: periodoResolver()
       });
       
       const rows: OfficialRow[] = await readOfficialXlsxUnified(file, empresaToUse, { periodoResolver });

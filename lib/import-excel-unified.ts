@@ -61,9 +61,22 @@ export function parseOfficialXlsxUnified(
     case "LIMPAR":
     default:
       // Usar parser genérico para LIMPAR y empresas no reconocidas
-      return parseOfficialXlsx(file, { 
-        periodoResolver: periodoResolver || ((p) => String(p || "").trim()) 
+      // SIEMPRE usar el periodoResolver personalizado si se proporciona
+      console.log(`🔍 Debug Parser Unificado - LIMPAR:`, {
+        periodoResolver: periodoResolver ? "personalizado" : "no proporcionado",
+        tipo: periodoResolver ? typeof periodoResolver : "undefined"
       });
+      
+      if (periodoResolver) {
+        // Crear un wrapper que ignore el argumento y use el periodoResolver personalizado
+        const wrapper = (p: unknown) => periodoResolver("");
+        return parseOfficialXlsx(file, { periodoResolver: wrapper });
+      } else {
+        // Solo usar fallback si NO hay periodoResolver personalizado
+        return parseOfficialXlsx(file, { 
+          periodoResolver: (p) => String(p || "").trim() 
+        });
+      }
   }
 }
 
