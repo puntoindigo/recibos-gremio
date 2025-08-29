@@ -69,7 +69,7 @@ export default function SavedControlsList({ empresas, refreshKey, onViewDetails,
   // Exportar errores y faltantes de un control específico
   const handleExport = async (control: SavedControlDB) => {
     try {
-      await exportControlErrors(control.summaries, control.missing, control.nameByKey || {}, control.officialNameByKey, control.empresa, control.periodo);
+      await exportControlErrors(control.summaries, control.oks, control.missing, control.nameByKey || {}, control.officialNameByKey, control.empresa, control.periodo);
       toast.success(`Control exportado: ${control.periodo}`);
     } catch (error) {
       console.error("Error exportando control:", error);

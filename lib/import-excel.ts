@@ -118,14 +118,38 @@ export function parseOfficialXlsx(
     cuil: headers.find(h => /(cuil|dni)/i.test(h)) ?? "CUIL",
   };
 
+  console.log("🔍 Debug Parser Genérico - Encabezados detectados:", {
+    todosLosHeaders: headers,
+    metaKeys,
+    headerToCode: Object.fromEntries(headerToCode)
+  });
+
   const rows: OfficialRow[] = [];
 
   json.forEach((linea, idx) => {
-    const periodoRaw = linea[metaKeys.periodo];
-    const periodo = periodoResolver(periodoRaw);
+    // Si tenemos un periodoResolver personalizado, usarlo SIEMPRE
+    // Si no, intentar extraer del Excel
+    const periodo = periodoResolver ? periodoResolver("") : String(linea[metaKeys.periodo] ?? "").trim();
     const legajo = String(linea[metaKeys.legajo] ?? "").trim();
     const nombre = String(linea[metaKeys.nombre] ?? "").trim();
     const cuil = String(linea[metaKeys.cuil] ?? "").trim();
+
+    // Debug: verificar qué está pasando con el período
+    if (idx < 3) {
+      console.log(`🔍 Debug Parser Genérico - Fila ${idx}:`, {
+        periodoRaw: linea[metaKeys.periodo],
+        periodo,
+        legajo,
+        nombre,
+        metaKeys: {
+          periodo: metaKeys.periodo,
+          legajo: metaKeys.legajo,
+          nombre: metaKeys.nombre,
+          cuil: metaKeys.cuil
+        },
+        headersDisponibles: Object.keys(linea)
+      });
+    }
 
     const valores: Record<string, string> = {};
 
@@ -151,7 +175,7 @@ export function parseOfficialXlsx(
     rows.push({
       key,
       valores,
-      meta: { legajo, periodoRaw: String(periodoRaw ?? ""), periodo, nombre, cuil },
+      meta: { legajo, periodoRaw: String(linea[metaKeys.periodo] ?? ""), periodo, nombre, cuil },
     });
   });
 

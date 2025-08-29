@@ -41,6 +41,14 @@ function extraerConceptoLimpar(texto: string, concepto: string): string {
   const conceptRegex = new RegExp(`${concepto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
   const conceptMatch = texto.match(conceptRegex);
   
+  // Debug específico para RESGUARDO MUTUAL FAMILIAR
+  if (concepto.includes("RESGUARDO") || concepto.includes("RESG")) {
+    console.log(`🔍 Debug extraerConceptoLimpar - Buscando: "${concepto}"`);
+    console.log(`  - Regex generado:`, conceptRegex);
+    console.log(`  - ¿Se encontró match?:`, !!conceptMatch);
+    console.log(`  - Texto completo contiene el concepto:`, texto.includes(concepto));
+  }
+  
   if (!conceptMatch) return "0.00";
   
   const lines = texto.split('\n');
@@ -49,26 +57,81 @@ function extraerConceptoLimpar(texto: string, concepto: string): string {
     if (conceptRegex.test(line)) {
       const afterConcept = line.substring(line.search(conceptRegex) + concepto.length);
       
+      // Debug específico para RESGUARDO MUTUAL FAMILIAR
+      if (concepto.includes("RESGUARDO") || concepto.includes("RESG")) {
+        console.log(`🔍 Debug extraerConceptoLimpar - Línea ${i} encontrada:`);
+        console.log(`  - Línea completa:`, line);
+        console.log(`  - Después del concepto:`, afterConcept);
+      }
+      
       // Buscar valores con formato argentino: 27,640.12 o 27,640
+      // IMPORTANTE: Excluir códigos de 5 dígitos que empiecen con 20xxx
       const argentineValues = afterConcept.match(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+[.,]\d+|\d+)/g);
       
       if (argentineValues && argentineValues.length > 0) {
-        return argentineValues[0];
+        // Filtrar solo valores monetarios (excluir códigos 20xxx)
+        const valoresMonetarios = argentineValues.filter(valor => {
+          // Excluir códigos de 5 dígitos que empiecen con 20
+          if (/^20\d{3}$/.test(valor)) return false;
+          // Excluir códigos de 5 dígitos que empiecen con otros números
+          if (/^\d{5}$/.test(valor)) return false;
+          // Incluir solo valores que parezcan monetarios (con comas o puntos decimales)
+          return /[.,]/.test(valor) || valor.length > 3;
+        });
+        
+        // Debug específico para RESGUARDO MUTUAL FAMILIAR
+        if (concepto.includes("RESGUARDO") || concepto.includes("RESG")) {
+          console.log(`🔍 Debug extraerConceptoLimpar - Todos los valores encontrados:`, argentineValues);
+          console.log(`🔍 Debug extraerConceptoLimpar - Valores monetarios filtrados:`, valoresMonetarios);
+        }
+        
+        if (valoresMonetarios.length > 0) {
+          // Debug específico para RESGUARDO MUTUAL FAMILIAR
+          if (concepto.includes("RESGUARDO") || concepto.includes("RESG")) {
+            console.log(`🔍 Debug extraerConceptoLimpar - Retornando valor monetario:`, valoresMonetarios[0]);
+          }
+          return valoresMonetarios[0];
+        }
       }
       
       // Fallback: buscar en líneas adyacentes
       if (i + 1 < lines.length) {
         const nextLine = lines[i + 1];
         const nextValueMatch = nextLine.match(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+[.,]\d+|\d+)/);
-        if (nextValueMatch) return nextValueMatch[1];
+        if (nextValueMatch) {
+          const valor = nextValueMatch[1];
+          // Verificar que no sea un código
+          if (!/^\d{5}$/.test(valor)) {
+            // Debug específico para RESGUARDO MUTUAL FAMILIAR
+            if (concepto.includes("RESGUARDO") || concepto.includes("RESG")) {
+              console.log(`🔍 Debug extraerConceptoLimpar - Valor encontrado en línea siguiente:`, valor);
+            }
+            return valor;
+          }
+        }
       }
       
       if (i > 0) {
         const prevLine = lines[i - 1];
         const prevValueMatch = prevLine.match(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+[.,]\d+|\d+)/);
-        if (prevValueMatch) return prevValueMatch[1];
+        if (prevValueMatch) {
+          const valor = prevValueMatch[1];
+          // Verificar que no sea un código
+          if (!/^\d{5}$/.test(valor)) {
+            // Debug específico para RESGUARDO MUTUAL FAMILIAR
+            if (concepto.includes("RESGUARDO") || concepto.includes("RESG")) {
+              console.log(`🔍 Debug extraerConceptoLimpar - Valor encontrado en línea anterior:`, valor);
+            }
+            return valor;
+          }
+        }
       }
     }
+  }
+  
+  // Debug específico para RESGUARDO MUTUAL FAMILIAR
+  if (concepto.includes("RESGUARDO") || concepto.includes("RESG")) {
+    console.log(`🔍 Debug extraerConceptoLimpar - No se encontró valor para: "${concepto}", retornando 0.00`);
   }
   
   return "0.00";
@@ -395,6 +458,15 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   // ---------- NUEVO: Extraer conceptos específicos de LIMPAR ----------
   // Extraer conceptos específicos y mapearlos a códigos estándar
   // SOLO si no existen ya en data (para no sobrescribir códigos 20xxx extraídos por el parser genérico)
+  
+  // Debug: mostrar qué valores ya se extrajeron por el parser genérico
+  console.log("🔍 Debug LIMPAR - Valores extraídos por parser genérico:");
+  console.log("  - 20540 (CONTRIBUCION SOLIDARIA):", data["20540"]);
+  console.log("  - 20590 (SEGURO SEPELIO):", data["20590"]);
+  console.log("  - 20595 (CUOTA MUTUAL):", data["20595"]);
+  console.log("  - 20610 (RESGUARDO MUTUAL):", data["20610"]);
+  console.log("  - 20620 (DESC. MUTUAL):", data["20620"]);
+  
   const contribSolidaria = extraerConceptoLimpar(rawText, "CONTRIBUCION SOLIDARIA") || 
                            extraerConceptoLimpar(rawText, "CONTRIBUCIÓN SOLIDARIA") ||
                            extraerConceptoLimpar(rawText, "CONTRIB. SOLIDARIA") ||
@@ -413,7 +485,15 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
                           extraerConceptoLimpar(rawText, "RESGUARDO  MUTUAL") ||
                           extraerConceptoLimpar(rawText, "RESG. MUTUAL") ||
                           extraerConceptoLimpar(rawText, "RESG. MUTUAL FAM.") ||
-                          extraerConceptoLimpar(rawText, "RESGUARDO MUTUO");
+                          extraerConceptoLimpar(rawText, "RESGUARDO MUTUO") ||
+                          extraerConceptoLimpar(rawText, "RESGUARDO MUTUAL FAMILIAR");
+
+  // Debug específico para RESGUARDO MUTUAL FAMILIAR
+  console.log("🔍 Debug LIMPAR - Buscando RESGUARDO MUTUAL FAMILIAR:");
+  console.log("  - Texto completo contiene 'RESGUARDO MUTUAL FAMILIAR':", rawText.includes("RESGUARDO MUTUAL FAMILIAR"));
+  console.log("  - Texto completo contiene 'RESG. MUTUAL FAM.':", rawText.includes("RESG. MUTUAL FAM."));
+  console.log("  - Texto completo contiene 'RESGUARDO MUTUAL':", rawText.includes("RESGUARDO MUTUAL"));
+  console.log("  - Valor extraído para RESGUARDO MUTUAL:", resguardoMutual);
   
   const descMutual = extraerConceptoLimpar(rawText, "DESC. MUTUAL") || 
                      extraerConceptoLimpar(rawText, "DESCUENTO MUTUAL") ||
@@ -440,9 +520,17 @@ export async function parsePdfReceiptToRecord(file: File): Promise<Parsed> {
   if (!data["20595"] || data["20595"] === "-") {
     data["20595"] = toDotDecimal(cuotaMutual);      // CUOTA MUTUAL
   }
+  
+  // Debug específico para código 20610
+  console.log("🔍 Debug LIMPAR - Código 20610 (RESGUARDO MUTUAL):");
+  console.log("  - Valor existente en data:", data["20610"]);
+  console.log("  - ¿Se debe asignar nuevo valor?", !data["20610"] || data["20610"] === "-");
+  console.log("  - Valor a asignar:", toDotDecimal(resguardoMutual));
+  
   if (!data["20610"] || data["20610"] === "-") {
     data["20610"] = toDotDecimal(resguardoMutual);  // RESGUARDO MUTUAL
   }
+  
   if (!data["20620"] || data["20620"] === "-") {
     data["20620"] = toDotDecimal(descMutual);       // DESC. MUTUAL
   }

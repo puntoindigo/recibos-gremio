@@ -34,6 +34,7 @@ export function buildControlCsvSummary(
 // Exportar errores y faltantes de un control específico con columnas detalladas
 export async function exportControlErrors(
   summaries: ControlSummary[],
+  oks: Array<{ key: string; legajo: string; periodo: string }>,
   missing: Array<{ key: string; legajo: string; periodo: string }>,
   nameByKey: Record<string, string> = {},
   officialNameByKey: Record<string, string> = {},
@@ -61,6 +62,24 @@ export async function exportControlErrors(
   headers.push("TOTAL DIFERENCIAS");
   
   const rows: string[][] = [headers];
+
+  // Función auxiliar para obtener valores de un registro
+  const getValoresFromRegistro = async (key: string, esOficial: boolean = false) => {
+    // Para diferencias, los valores ya están en summary.difs
+    // Para OKs, necesitamos obtener los valores de la base de datos
+    if (esOficial) {
+      // Buscar en summaries para obtener valores oficiales
+      const summary = summaries.find(s => s.key === key);
+      if (summary) {
+        const difsByCode = new Map<string, { oficial: string; calculado: string }>();
+        for (const dif of summary.difs) {
+          difsByCode.set(dif.codigo, { oficial: dif.oficial, calculado: dif.calculado });
+        }
+        return difsByCode;
+      }
+    }
+    return new Map();
+  };
 
   // Agregar errores (diferencias) con columnas detalladas
   for (const summary of summaries) {
@@ -99,6 +118,29 @@ export async function exportControlErrors(
     
     // Agregar total de diferencias
     row.push(totalDiferencias.toFixed(2));
+    
+    rows.push(row);
+  }
+
+  // Agregar OKs con columnas detalladas (valores que están dentro de tolerancia)
+  for (const ok of oks) {
+    const nombre = nameByKey[ok.key] ?? "";
+    const row = [
+      ok.legajo,
+      nombre,
+      ok.periodo,
+      "OK"
+    ];
+    
+    // Para OKs, necesitamos obtener los valores de la base de datos
+    // Por ahora, dejamos las columnas vacías ya que no tenemos acceso directo a los valores
+    for (const [codigo, concepto] of conceptos) {
+      row.push(""); // RECIBO vacío (no tenemos acceso directo)
+      row.push(""); // CONTROL vacío (no tenemos acceso directo)
+    }
+    
+    // Total vacío para OKs
+    row.push("");
     
     rows.push(row);
   }
