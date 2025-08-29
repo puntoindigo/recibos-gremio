@@ -96,6 +96,12 @@ export function parseOfficialXlsx(
     periodoResolver: (periodoRaw: unknown) => string;
   }
 ): OfficialRow[] {
+  console.log("🔍 Debug Parser Genérico - INICIO:", {
+    periodoResolver: "proporcionado",
+    tipo: typeof periodoResolver,
+    testCall: periodoResolver("TEST")
+  });
+  
   const wb: WorkBook = XLSX.read(file, { type: "array" });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
