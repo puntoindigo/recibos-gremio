@@ -6,22 +6,53 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { SavedControlDB, ControlSummary, ControlOkRow } from "@/lib/db";
-import type { DiffItem } from "@/lib/control-types";
+import type { SavedControlDB } from "@/lib/db";
+import type { ControlSummary } from "@/lib/control-types";
+import type { ControlOk as ControlOkRow } from "@/lib/export-control";
+import type { ConsolidatedEntity } from "@/lib/db";
 
 type Props = {
   control: SavedControlDB | null;
   onClose: () => void;
   nameByKey: Record<string, string>;
   officialNameByKey?: Record<string, string>;
+  consolidatedEntities?: ConsolidatedEntity[]; // Para acceder a los archivos
 };
 
-export default function ControlDetailsPanel({ control, onClose, nameByKey, officialNameByKey }: Props) {
+export default function ControlDetailsPanel({ control, onClose, nameByKey, officialNameByKey, consolidatedEntities }: Props) {
   const [activeTab, setActiveTab] = useState("diferencias");
   const [pageSize, setPageSize] = useState<number>(50);
   const [page, setPage] = useState<number>(1);
 
   if (!control) return null;
+
+  // Función para obtener los archivos de un registro
+  const getArchivosForKey = (key: string): string[] => {
+    if (!consolidatedEntities) return [];
+    const entity = consolidatedEntities.find(e => e.key === key);
+    return entity?.archivos || [];
+  };
+
+  // Función para generar links a archivos
+  const renderArchivosLinks = (archivos: string[]) => {
+    if (archivos.length === 0) return null;
+    
+    return (
+      <div className="flex flex-wrap gap-1 mt-1">
+        {archivos.map((archivo, index) => (
+          <a
+            key={index}
+            href={`/recibos/${archivo}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 hover:text-blue-800 underline"
+          >
+            {archivo}
+          </a>
+        ))}
+      </div>
+    );
+  };
 
   // Componente de paginación reutilizable
   const PaginationControls = ({ 
@@ -139,13 +170,16 @@ export default function ControlDetailsPanel({ control, onClose, nameByKey, offic
                 />
 
                 {/* Listado de diferencias */}
-                {difPageSummaries.map((summary, index) => (
-                  <Card key={summary.key}>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">
-                        {summary.legajo} - {nameByKey[summary.key] || "N/A"} - {summary.periodo}
-                      </CardTitle>
-                    </CardHeader>
+                {difPageSummaries.map((summary, index) => {
+                  const archivos = getArchivosForKey(summary.key);
+                  return (
+                    <Card key={summary.key}>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">
+                          {summary.legajo} - {nameByKey[summary.key] || "N/A"} - {summary.periodo}
+                          {renderArchivosLinks(archivos)}
+                        </CardTitle>
+                      </CardHeader>
                     <CardContent>
                       <Table>
                         <TableHeader>
@@ -153,7 +187,7 @@ export default function ControlDetailsPanel({ control, onClose, nameByKey, offic
                             <TableHead>Código</TableHead>
                             <TableHead>Concepto</TableHead>
                             <TableHead className="text-right">Oficial</TableHead>
-                            <TableHead className="text-right">Calculado</TableHead>
+                            <TableHead className="text-right">Recibos</TableHead>
                             <TableHead className="text-right">Diferencia</TableHead>
                             <TableHead className="text-center">Dirección</TableHead>
                           </TableRow>
@@ -181,7 +215,8 @@ export default function ControlDetailsPanel({ control, onClose, nameByKey, offic
                       </Table>
                     </CardContent>
                   </Card>
-                ))}
+                );
+              })}
 
                 {/* Paginación inferior */}
                 <PaginationControls

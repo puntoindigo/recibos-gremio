@@ -46,48 +46,43 @@ export async function exportControlErrors(
   
   // Crear headers dinámicos
   const headers = [
+    "PERIODO",
     "LEGAJO", 
     "NOMBRE", 
-    "PERIODO", 
     "ESTADO"
   ];
   
-  // Agregar columnas para cada concepto (RECIBO y CONTROL)
+  // Agregar columnas para cada concepto (CONTROL primero)
   for (const [codigo, concepto] of conceptos) {
-    headers.push(`${concepto} RECIBO`);
     headers.push(`${concepto} CONTROL`);
   }
   
-  // Agregar columna de total de diferencias
-  headers.push("TOTAL DIFERENCIAS");
+  // Agregar columnas para cada concepto (RECIBO después)
+  for (const [codigo, concepto] of conceptos) {
+    headers.push(`${concepto} RECIBO`);
+  }
+  
+  // Agregar columna de diferencias al final
+  headers.push("DIFERENCIAS");
   
   const rows: string[][] = [headers];
 
-  // Función auxiliar para obtener valores de un registro
-  const getValoresFromRegistro = async (key: string, esOficial: boolean = false) => {
-    // Para diferencias, los valores ya están en summary.difs
-    // Para OKs, necesitamos obtener los valores de la base de datos
-    if (esOficial) {
-      // Buscar en summaries para obtener valores oficiales
-      const summary = summaries.find(s => s.key === key);
-      if (summary) {
-        const difsByCode = new Map<string, { oficial: string; calculado: string }>();
-        for (const dif of summary.difs) {
-          difsByCode.set(dif.codigo, { oficial: dif.oficial, calculado: dif.calculado });
-        }
-        return difsByCode;
-      }
-    }
-    return new Map();
+  // Función auxiliar para formatear números con coma como separador decimal
+  const formatNumber = (value: string | number): string => {
+    if (!value || value === '0.00' || value === '0') return '';
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (!Number.isFinite(num)) return '';
+    // Convertir 1234.56 a 1234,56 (formato argentino)
+    return num.toFixed(2).replace('.', ',');
   };
 
   // Agregar errores (diferencias) con columnas detalladas
   for (const summary of summaries) {
     const nombre = nameByKey[summary.key] ?? "";
     const row = [
+      summary.periodo,
       summary.legajo,
       nombre,
-      summary.periodo,
       "ERROR"
     ];
     
@@ -101,67 +96,61 @@ export async function exportControlErrors(
       });
     }
     
-    let totalDiferencias = 0;
+    let totalControl = 0;
+    let totalRecibo = 0;
     
     // Agregar valores para cada concepto
     for (const [codigo, concepto] of conceptos) {
       const dif = difsByCode.get(codigo);
       if (dif) {
-        row.push(dif.calculado); // RECIBO
-        row.push(dif.oficial);   // CONTROL
-        totalDiferencias += parseFloat(dif.delta);
+        row.push(formatNumber(dif.oficial));   // CONTROL
+        totalControl += parseFloat(dif.oficial);
       } else {
-        row.push(""); // RECIBO vacío
         row.push(""); // CONTROL vacío
       }
     }
     
-    // Agregar total de diferencias
-    row.push(totalDiferencias.toFixed(2));
+    // Agregar valores RECIBO para cada concepto
+    for (const [codigo, concepto] of conceptos) {
+      const dif = difsByCode.get(codigo);
+      if (dif) {
+        row.push(formatNumber(dif.calculado)); // RECIBO
+        totalRecibo += parseFloat(dif.calculado);
+      } else {
+        row.push(""); // RECIBO vacío
+      }
+    }
+    
+    // Agregar total de diferencias: CONTROL - RECIBO
+    const totalDiferencias = totalControl - totalRecibo;
+    row.push(formatNumber(totalDiferencias));
     
     rows.push(row);
   }
 
-  // Agregar OKs con columnas detalladas (valores que están dentro de tolerancia)
-  for (const ok of oks) {
-    const nombre = nameByKey[ok.key] ?? "";
-    const row = [
-      ok.legajo,
-      nombre,
-      ok.periodo,
-      "OK"
-    ];
-    
-    // Para OKs, necesitamos obtener los valores de la base de datos
-    // Por ahora, dejamos las columnas vacías ya que no tenemos acceso directo a los valores
-    for (const [codigo, concepto] of conceptos) {
-      row.push(""); // RECIBO vacío (no tenemos acceso directo)
-      row.push(""); // CONTROL vacío (no tenemos acceso directo)
-    }
-    
-    // Total vacío para OKs
-    row.push("");
-    
-    rows.push(row);
-  }
+  // NO incluir OKs en el exportable - solo errores y faltantes
 
   // Agregar faltantes (sin columnas detalladas)
   for (const item of missing) {
     const nombre = officialNameByKey[item.key] ?? "";
     const row = [
+      item.periodo,
       item.legajo,
       nombre,
-      item.periodo,
       "FALTANTE"
     ];
     
-    // Agregar columnas vacías para conceptos
+    // Agregar columnas vacías para conceptos CONTROL
     for (const [codigo, concepto] of conceptos) {
-      row.push(""); // RECIBO vacío
       row.push(""); // CONTROL vacío
     }
     
-    // Total vacío para faltantes
+    // Agregar columnas vacías para conceptos RECIBO
+    for (const [codigo, concepto] of conceptos) {
+      row.push(""); // RECIBO vacío
+    }
+    
+    // Diferencia vacía para faltantes
     row.push("");
     
     rows.push(row);
@@ -183,18 +172,22 @@ export async function exportControlErrors(
     "TOTAL GENERAL"
   ];
   
-  // Columnas vacías para conceptos
+  // Columnas vacías para conceptos CONTROL
   for (const [codigo, concepto] of conceptos) {
-    totalRow.push(""); // RECIBO vacío
     totalRow.push(""); // CONTROL vacío
   }
   
+  // Columnas vacías para conceptos RECIBO
+  for (const [codigo, concepto] of conceptos) {
+    totalRow.push(""); // RECIBO vacío
+  }
+  
   // Total general
-  totalRow.push(totalGeneral.toFixed(2));
+  totalRow.push(formatNumber(totalGeneral));
   
   rows.push(totalRow);
 
-  const body = rows.map((r) => r.map(esc).join(",")).join("\n");
+    const body = rows.map((r) => r.map(esc).join(",")).join("\n");
   const csv = "sep=,\n" + body;
 
   // Generar nombre del archivo con formato: EMPRESA_YYYYMM_control_errores_YYYY-MM-DD.csv

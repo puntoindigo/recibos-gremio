@@ -1152,6 +1152,7 @@ useEffect(() => {
                     onClose={() => setSelectedControl(null)}
                     nameByKey={nameByKey}
                     officialNameByKey={officialNameByKey}
+                    consolidatedEntities={consolidated}
                   />
                 </div>
               )}
