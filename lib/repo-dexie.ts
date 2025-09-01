@@ -223,18 +223,21 @@ async saveControl(
   },
   officialKeys: string[],
   officialNameByKey: Record<string, string>,
-  nameByKey: Record<string, string>
+  nameByKey: Record<string, string>,
+  showDebug: boolean = false
 ): Promise<void> {
   const filterKey = `${periodo}||${empresa}`;
-  console.log(`💾 saveControl - INICIO - Guardando control:`, { 
-    filterKey, 
-    periodo, 
-    empresa, 
-    totalSummaries: summaries.length,
-    totalOks: oks.length,
-    totalMissing: missing.length,
-    timestamp: new Date().toLocaleString()
-  });
+  if (showDebug) {
+    console.log(`💾 saveControl - INICIO - Guardando control:`, { 
+      filterKey, 
+      periodo, 
+      empresa, 
+      totalSummaries: summaries.length,
+      totalOks: oks.length,
+      totalMissing: missing.length,
+      timestamp: new Date().toLocaleString()
+    });
+  }
   
   try {
     await db.savedControls.put({
@@ -251,7 +254,9 @@ async saveControl(
       createdAt: Date.now(),
     });
     
-    console.log(`✅ saveControl - EXITOSO - Control guardado exitosamente con filterKey: "${filterKey}"`);
+    if (showDebug) {
+      console.log(`✅ saveControl - EXITOSO - Control guardado exitosamente con filterKey: "${filterKey}"`);
+    }
   } catch (error) {
     console.error(`❌ saveControl - ERROR - No se pudo guardar el control:`, error);
     console.error(`❌ saveControl - ERROR - Datos que se intentaron guardar:`, {

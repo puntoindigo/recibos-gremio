@@ -220,15 +220,17 @@ async function saveControlToDexie(
   officialNameByKey: Record<string, string>,
   nameByKey: Record<string, string>
 ): Promise<void> {
-  console.log("💾 saveControlToDexie - INICIO - Llamada a función con:", {
-    periodoFiltro,
-    empresaFiltro,
-    nombreFiltro,
-    totalSummaries: summaries.length,
-    totalOks: oks.length,
-    totalMissing: missing.length,
-    timestamp: new Date().toLocaleString()
-  });
+  if (showDebug) {
+    console.log("💾 saveControlToDexie - INICIO - Llamada a función con:", {
+      periodoFiltro,
+      empresaFiltro,
+      nombreFiltro,
+      totalSummaries: summaries.length,
+      totalOks: oks.length,
+      totalMissing: missing.length,
+      timestamp: new Date().toLocaleString()
+    });
+  }
   
   try {
     if (showDebug) {
@@ -251,17 +253,21 @@ async function saveControlToDexie(
       });
     }
     
-    console.log("💾 saveControlToDexie - ANTES de llamar a repoDexie.saveControl con:", {
-      periodo: periodoFiltro,
-      empresa: empresaFiltro,
-      summariesCount: summaries.length,
-      oksCount: oks.length,
-      missingCount: missing.length
-    });
+    if (showDebug) {
+      console.log("💾 saveControlToDexie - ANTES de llamar a repoDexie.saveControl con:", {
+        periodo: periodoFiltro,
+        empresa: empresaFiltro,
+        summariesCount: summaries.length,
+        oksCount: oks.length,
+        missingCount: missing.length
+      });
+    }
     
-    await repoDexie.saveControl(periodoFiltro, empresaFiltro, summaries, oks, missing, stats, officialKeys, officialNameByKey, nameByKey);
+    await repoDexie.saveControl(periodoFiltro, empresaFiltro, summaries, oks, missing, stats, officialKeys, officialNameByKey, nameByKey, showDebug);
     
-    console.log("✅ saveControlToDexie - Control guardado exitosamente");
+    if (showDebug) {
+      console.log("✅ saveControlToDexie - Control guardado exitosamente");
+    }
   } catch (e) {
     console.error("❌ saveControlToDexie - Error guardando control:", e);
     console.warn("No se pudo guardar el control:", e);
@@ -955,14 +961,16 @@ useEffect(() => {
   }
 
   async function computeControl(keysFromExcel?: string[]): Promise<void> {
-    console.log("🔍 computeControl - INICIO - Llamada a función con:", {
-      periodoFiltro,
-      empresaFiltro,
-      nombreFiltro,
-      keysFromExcelCount: keysFromExcel?.length || 0,
-      consolidatedCount: consolidated.length,
-      timestamp: new Date().toLocaleString()
-    });
+    if (showDebug) {
+      console.log("🔍 computeControl - INICIO - Llamada a función con:", {
+        periodoFiltro,
+        empresaFiltro,
+        nombreFiltro,
+        keysFromExcelCount: keysFromExcel?.length || 0,
+        consolidatedCount: consolidated.length,
+        timestamp: new Date().toLocaleString()
+      });
+    }
     
     const empresaOf = (r: ConsolidatedEntity) => String(r.data?.EMPRESA ?? "LIMPAR");
     
@@ -1300,7 +1308,9 @@ useEffect(() => {
     // Guardar el control con los filtros actuales
     await saveControlToDexie(summaries, oks, missing, { comps, compOk, compDif, okReceipts: oks.length, difReceipts: summaries.length }, keysFromExcel ?? officialKeys, officialNameByKey, nameByKey);
     
-    console.log("✅ computeControl - Control guardado exitosamente");
+    if (showDebug) {
+      console.log("✅ computeControl - Control guardado exitosamente");
+    }
     
     // Actualizar el estado para habilitar el botón de eliminar control
     setHasControlForCurrentFilters(true);
