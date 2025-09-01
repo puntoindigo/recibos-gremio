@@ -284,25 +284,32 @@ async deleteSavedControl(periodo: string, empresa: string): Promise<void> {
 },
 
 /** Obtener todos los controles guardados por empresa */
-async getSavedControlsByEmpresa(empresa: string): Promise<SavedControlDB[]> {
+async getSavedControlsByEmpresa(empresa: string, showDebug: boolean = false): Promise<SavedControlDB[]> {
   // Primero, obtener TODOS los controles para debug
   const allControls = await db.savedControls.toArray();
-  console.log(`🔍 getSavedControlsByEmpresa - TODOS los controles en DB:`, allControls.map(c => ({ 
-    id: c.id, 
-    filterKey: c.filterKey, 
-    periodo: c.periodo, 
-    empresa: c.empresa, 
-    createdAt: c.createdAt 
-  })));
   
-  // Mostrar más detalles de cada control
-  console.log(`🔍 getSavedControlsByEmpresa - DETALLES COMPLETOS de cada control:`);
-  for (const control of allControls) {
-    console.log(`  - ID: ${control.id}, FilterKey: "${control.filterKey}", Periodo: "${control.periodo}", Empresa: "${control.empresa}", Created: ${new Date(control.createdAt).toLocaleString()}`);
+  if (showDebug) {
+    console.log(`🔍 getSavedControlsByEmpresa - TODOS los controles en DB:`, allControls.map(c => ({ 
+      id: c.id, 
+      filterKey: c.filterKey, 
+      periodo: c.periodo, 
+      empresa: c.empresa, 
+      createdAt: c.createdAt 
+    })));
+    
+    // Mostrar más detalles de cada control
+    console.log(`🔍 getSavedControlsByEmpresa - DETALLES COMPLETOS de cada control:`);
+    for (const control of allControls) {
+      console.log(`  - ID: ${control.id}, FilterKey: "${control.filterKey}", Periodo: "${control.periodo}", Empresa: "${control.empresa}", Created: ${new Date(control.createdAt).toLocaleString()}`);
+    }
   }
   
   const controls = await db.savedControls.where("empresa").equals(empresa).reverse().sortBy("periodo");
-  console.log(`🔍 getSavedControlsByEmpresa - Empresa: "${empresa}", Controles encontrados:`, controls.map(c => ({ periodo: c.periodo, empresa: c.empresa, filterKey: c.filterKey })));
+  
+  if (showDebug) {
+    console.log(`🔍 getSavedControlsByEmpresa - Empresa: "${empresa}", Controles encontrados:`, controls.map(c => ({ periodo: c.periodo, empresa: c.empresa, filterKey: c.filterKey })));
+  }
+  
   return controls;
 },
 

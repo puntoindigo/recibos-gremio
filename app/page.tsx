@@ -1505,6 +1505,7 @@ useEffect(() => {
                   }}
                   selectedEmpresa={empresaFiltro}
                   selectedControlId={selectedControl?.id?.toString() || null}
+                  showDebug={showDebug}
                 />
               </div>
               

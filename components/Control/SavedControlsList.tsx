@@ -19,9 +19,10 @@ type Props = {
   onResetFields?: () => void;
   selectedEmpresa?: string;
   selectedControlId?: string | null;
+  showDebug?: boolean;
 };
 
-export default function SavedControlsList({ empresas, refreshKey, onViewDetails, onCloseDetails, onEmpresaChange, onResetFields, selectedEmpresa: externalSelectedEmpresa, selectedControlId }: Props) {
+export default function SavedControlsList({ empresas, refreshKey, onViewDetails, onCloseDetails, onEmpresaChange, onResetFields, selectedEmpresa: externalSelectedEmpresa, selectedControlId, showDebug = false }: Props) {
   const [selectedEmpresa, setSelectedEmpresa] = useState<string>("");
   
   // Sincronizar con la empresa seleccionada externamente
@@ -53,8 +54,10 @@ export default function SavedControlsList({ empresas, refreshKey, onViewDetails,
     const loadSavedControls = async () => {
       setLoading(true);
       try {
-        const controls = await repoDexie.getSavedControlsByEmpresa(selectedEmpresa);
-        console.log(`🔍 SavedControlsList - Controles encontrados para ${selectedEmpresa}:`, controls.map(c => ({ periodo: c.periodo, empresa: c.empresa, filterKey: c.filterKey })));
+        const controls = await repoDexie.getSavedControlsByEmpresa(selectedEmpresa, showDebug);
+        if (showDebug) {
+          console.log(`🔍 SavedControlsList - Controles encontrados para ${selectedEmpresa}:`, controls.map(c => ({ periodo: c.periodo, empresa: c.empresa, filterKey: c.filterKey })));
+        }
         setSavedControls(controls);
       } catch (error) {
         console.error("Error cargando controles guardados:", error);
