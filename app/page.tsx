@@ -891,6 +891,23 @@ useEffect(() => {
       console.log("🔑 Ejemplos de claves en official:", Array.from(official).slice(0, 3));
       console.log("🔑 Total consKeys:", consKeys.size);
       console.log("🔑 Total official:", official.size);
+      
+      // SUMAR: Debug específico para verificar claves
+      if (empresaFiltro === "SUMAR") {
+        console.log("🔍 SUMAR - DEBUG CONTROL COMPARISON:");
+        console.log("🔍 Claves del Excel (official):", Array.from(official).slice(0, 5));
+        console.log("🔍 Claves de recibos (consKeys):", Array.from(consKeys).slice(0, 5));
+        console.log("🔍 Claves normalizadas (normalizedOfficial):", Array.from(normalizedOfficial).slice(0, 5));
+        
+        // Verificar si hay coincidencias
+        const coincidencias = Array.from(official).filter(key => {
+          const parts = key.split("||");
+          const normalizedKey = `${parts[0]}||${parts[1]}||${empresaFiltro}`;
+          return consKeys.has(normalizedKey);
+        });
+        console.log("🔍 SUMAR - Coincidencias encontradas:", coincidencias.length);
+        console.log("🔍 SUMAR - Ejemplos de coincidencias:", coincidencias.slice(0, 3));
+      }
     }
     
 
@@ -1093,7 +1110,14 @@ useEffect(() => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground min-w-16">Periodo</span>
-                  <Select value={periodoFiltro || '__ALL__'} onValueChange={(v) => setPeriodoFiltro(v === '__ALL__' ? "" : v)}>
+                  <Select value={periodoFiltro || '__ALL__'} onValueChange={(v) => {
+                    const newPeriodo = v === '__ALL__' ? "" : v;
+                    setPeriodoFiltro(newPeriodo);
+                    // Blanquear el campo de upload para permitir subir el mismo archivo
+                    if (controlFileInputRef.current) {
+                      controlFileInputRef.current.value = "";
+                    }
+                  }}>
                     <SelectTrigger className="w-44">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>

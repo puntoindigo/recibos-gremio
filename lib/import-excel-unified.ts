@@ -1,7 +1,7 @@
 // lib/import-excel-unified.ts
 import { readOfficialXlsx, parseOfficialXlsx } from "./import-excel";
 import { parseOfficialXlsxLime } from "./import-excel-lime";
-import { parseOfficialXlsxSumar } from "./import-excel-sumar";
+import { parseOfficialXlsxSumarDEBUG as parseOfficialXlsxSumar } from "./import-excel-sumar";
 import { parseOfficialXlsxTysa } from "./import-excel-tysa";
 import type { OfficialRow } from "./import-excel";
 
@@ -93,14 +93,15 @@ export function parseOfficialXlsxUnified(
 }
 
 // Función helper para detectar empresa automáticamente desde el contenido del archivo
-export function detectEmpresaFromFile(
+export async function detectEmpresaFromFile(
   file: ArrayBuffer | Uint8Array | Buffer
-): string {
+): Promise<string> {
   try {
-    const { read, utils } = require("xlsx");
-    const wb = read(file, { type: "array" });
+    // Importar xlsx dinámicamente para evitar problemas de SSR
+    const XLSX = await import("xlsx");
+    const wb = XLSX.read(file, { type: "array" });
     const sheet = wb.Sheets[wb.SheetNames[0]];
-    const json = utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
     
     if (json.length === 0) return "LIMPAR";
     
@@ -112,6 +113,12 @@ export function detectEmpresaFromFile(
     }
     
     if (allText.includes("sumar")) {
+      return "SUMAR";
+    }
+    
+    // Detectar SUMAR por características específicas del Excel
+    if (allText.includes("cuota sind") || allText.includes("cuota sep") || 
+        allText.includes("aport. solid. mutual") || allText.includes("resguardo mutual fam")) {
       return "SUMAR";
     }
     
