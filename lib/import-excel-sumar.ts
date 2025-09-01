@@ -40,7 +40,6 @@ const SUMAR_CODE_MAPPING = {
   // Columna L: "RESGUARDO MUTUAL FAM." → DESC. MUTUAL
   "RESGUARDO MUTUAL FAM.": "20620",
   "RESGUARDO MUTUAL FAM": "20620",
-  "RESGUARDO MUTUAL": "20620",
   "DESC. MUTUAL": "20620",
   
   // Agregar mapeo para RESGUARDO MUTUAL (código 20610) si existe en el Excel
@@ -176,7 +175,7 @@ export function parseOfficialXlsxSumarDEBUG(
   // Ahora leer los datos usando los headers reales
   const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { 
     defval: "",
-    header: actualHeaders,
+    header: actualHeaders as string[],
     range: headerRowIndex + 1 // Comenzar datos desde la fila siguiente a los headers
   });
 
@@ -304,8 +303,8 @@ export function parseOfficialXlsxSumarDEBUG(
   console.log("🔍 Muestra de claves Excel:", rows.slice(0, 5).map(r => r.key));
   console.log("🔍 Muestra de valores Excel:", rows.slice(0, 3).map(r => ({
     key: r.key,
-    cuil: r.meta.cuil,
-    nombre: r.meta.nombre,
+    cuil: r.meta?.cuil,
+    nombre: r.meta?.nombre,
     conceptos: Object.keys(r.valores).filter(k => r.valores[k] !== "0.00")
   })));
   

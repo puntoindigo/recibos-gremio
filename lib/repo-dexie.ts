@@ -226,19 +226,44 @@ async saveControl(
   nameByKey: Record<string, string>
 ): Promise<void> {
   const filterKey = `${periodo}||${empresa}`;
-  await db.savedControls.put({
-    filterKey,
-    periodo,
-    empresa,
-    summaries,
-    oks,
-    missing,
-    stats,
-    officialKeys,
-    officialNameByKey,
-    nameByKey,
-    createdAt: Date.now(),
+  console.log(`💾 saveControl - INICIO - Guardando control:`, { 
+    filterKey, 
+    periodo, 
+    empresa, 
+    totalSummaries: summaries.length,
+    totalOks: oks.length,
+    totalMissing: missing.length,
+    timestamp: new Date().toLocaleString()
   });
+  
+  try {
+    await db.savedControls.put({
+      filterKey,
+      periodo,
+      empresa,
+      summaries,
+      oks,
+      missing,
+      stats,
+      officialKeys,
+      officialNameByKey,
+      nameByKey,
+      createdAt: Date.now(),
+    });
+    
+    console.log(`✅ saveControl - EXITOSO - Control guardado exitosamente con filterKey: "${filterKey}"`);
+  } catch (error) {
+    console.error(`❌ saveControl - ERROR - No se pudo guardar el control:`, error);
+    console.error(`❌ saveControl - ERROR - Datos que se intentaron guardar:`, {
+      filterKey,
+      periodo,
+      empresa,
+      summariesCount: summaries.length,
+      oksCount: oks.length,
+      missingCount: missing.length
+    });
+    throw error;
+  }
 },
 
 /** Cargar control por filtros */
@@ -260,13 +285,36 @@ async deleteSavedControl(periodo: string, empresa: string): Promise<void> {
 
 /** Obtener todos los controles guardados por empresa */
 async getSavedControlsByEmpresa(empresa: string): Promise<SavedControlDB[]> {
-  return db.savedControls.where("empresa").equals(empresa).reverse().sortBy("periodo");
+  // Primero, obtener TODOS los controles para debug
+  const allControls = await db.savedControls.toArray();
+  console.log(`🔍 getSavedControlsByEmpresa - TODOS los controles en DB:`, allControls.map(c => ({ 
+    id: c.id, 
+    filterKey: c.filterKey, 
+    periodo: c.periodo, 
+    empresa: c.empresa, 
+    createdAt: c.createdAt 
+  })));
+  
+  // Mostrar más detalles de cada control
+  console.log(`🔍 getSavedControlsByEmpresa - DETALLES COMPLETOS de cada control:`);
+  for (const control of allControls) {
+    console.log(`  - ID: ${control.id}, FilterKey: "${control.filterKey}", Periodo: "${control.periodo}", Empresa: "${control.empresa}", Created: ${new Date(control.createdAt).toLocaleString()}`);
+  }
+  
+  const controls = await db.savedControls.where("empresa").equals(empresa).reverse().sortBy("periodo");
+  console.log(`🔍 getSavedControlsByEmpresa - Empresa: "${empresa}", Controles encontrados:`, controls.map(c => ({ periodo: c.periodo, empresa: c.empresa, filterKey: c.filterKey })));
+  return controls;
 },
 
-/** Obtener todos los controles guardados */
-async getAllSavedControls(): Promise<SavedControlDB[]> {
-  return db.savedControls.orderBy("createdAt").reverse().toArray();
-},
+  /** Obtener todos los controles guardados */
+  async getAllSavedControls(): Promise<SavedControlDB[]> {
+    return db.savedControls.orderBy("createdAt").reverse().toArray();
+  },
+
+  /** Obtener todos los datos del control (datos del Excel) */
+  async getAllControlData(): Promise<Array<{ key: string; valores: Record<string, string>; meta?: Record<string, JSONValue> }>> {
+    return db.control.toArray();
+  },
 
 /** Eliminar control por ID */
 async deleteSavedControlById(id: number): Promise<void> {

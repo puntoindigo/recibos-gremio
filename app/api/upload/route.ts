@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     const legajo = (form.get('legajo') || '').toString().trim();
     const periodo = (form.get('periodo') || '').toString().trim();
 
-    let csvResult: { updated: boolean; reason: string } = { updated: false, reason: 'Sin key/legajo/periodo, no se actualiza CSV' };
+    let csvResult: { updated: boolean; reason?: string; key?: string } = { updated: false, reason: 'Sin key/legajo/periodo, no se actualiza CSV' };
 
     if (key || (legajo && periodo)) {
       csvResult = await upsertArchivoEnTodos({

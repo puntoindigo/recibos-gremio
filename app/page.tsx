@@ -15,7 +15,7 @@ import { sha256OfFile } from "@/lib/hash";
 import { repoDexie } from '@/lib/repo-dexie';
 import { db } from '@/lib/db';
 import type { ConsolidatedEntity } from "@/lib/repo";
-import type { SavedControlDB } from "@/lib/db";
+import type { SavedControlDB, ControlRow } from "@/lib/db";
 import { readOfficialXlsxUnified, type OfficialRow } from "@/lib/import-excel-unified";
 import TablaAgregada from "@/components/TablaAgregada/TablaAgregada";
 
@@ -181,9 +181,9 @@ export default function Page() {
       toast.error("Error al cargar los detalles del control");
     }
   };
-// Filtros globales (usados por Tabla agregada, exportación y limpiar memoria)
+    // Filtros globales (usados por Recibos, exportación y limpiar memoria)
 const [periodoFiltro, setPeriodoFiltro] = useState<string>("");
-const [empresaFiltro, setEmpresaFiltro] = useState<string>("");
+  const [empresaFiltro, setEmpresaFiltro] = useState<string>("Todas");
 const [nombreFiltro, setNombreFiltro] = useState<string>("");
 
 // nombres del Excel oficial (fallback si el PDF no lo trae)
@@ -220,6 +220,16 @@ async function saveControlToDexie(
   officialNameByKey: Record<string, string>,
   nameByKey: Record<string, string>
 ): Promise<void> {
+  console.log("💾 saveControlToDexie - INICIO - Llamada a función con:", {
+    periodoFiltro,
+    empresaFiltro,
+    nombreFiltro,
+    totalSummaries: summaries.length,
+    totalOks: oks.length,
+    totalMissing: missing.length,
+    timestamp: new Date().toLocaleString()
+  });
+  
   try {
     if (showDebug) {
       console.log("💾 saveControlToDexie - Guardando con filtros:", { periodoFiltro, empresaFiltro, nombreFiltro });
@@ -227,16 +237,31 @@ async function saveControlToDexie(
     
     // No guardar control si hay filtro de nombre (se calcula en tiempo real)
     if (nombreFiltro) {
-      if (showDebug) {
-        console.log("⚠️ saveControlToDexie - No se guarda control con filtro de nombre");
-      }
+      console.log("⚠️ saveControlToDexie - No se guarda control con filtro de nombre");
       return;
     }
     
-    await repoDexie.saveControl(periodoFiltro, empresaFiltro, summaries, oks, missing, stats, officialKeys, officialNameByKey, nameByKey);
     if (showDebug) {
-      console.log("✅ saveControlToDexie - Control guardado exitosamente");
+      console.log("💾 saveControlToDexie - Guardando control con filtros:", { 
+        periodoFiltro, 
+        empresaFiltro, 
+        totalSummaries: summaries.length,
+        totalOks: oks.length,
+        totalMissing: missing.length
+      });
     }
+    
+    console.log("💾 saveControlToDexie - ANTES de llamar a repoDexie.saveControl con:", {
+      periodo: periodoFiltro,
+      empresa: empresaFiltro,
+      summariesCount: summaries.length,
+      oksCount: oks.length,
+      missingCount: missing.length
+    });
+    
+    await repoDexie.saveControl(periodoFiltro, empresaFiltro, summaries, oks, missing, stats, officialKeys, officialNameByKey, nameByKey);
+    
+    console.log("✅ saveControlToDexie - Control guardado exitosamente");
   } catch (e) {
     console.error("❌ saveControlToDexie - Error guardando control:", e);
     console.warn("No se pudo guardar el control:", e);
@@ -265,10 +290,39 @@ async function loadControlFromDexie(): Promise<{
       return null;
     }
     
-    const saved = await repoDexie.getSavedControl(periodoFiltro, empresaFiltro);
+    // Primero intentar buscar en savedControls (controles procesados)
+    let saved = await repoDexie.getSavedControl(periodoFiltro, empresaFiltro);
+    
+    // Si no hay control procesado, verificar si hay datos del Excel en la tabla control
     if (!saved) {
       if (showDebug) {
-        console.log("❌ loadControlFromDexie - No se encontró control guardado");
+        console.log("🔍 loadControlFromDexie - No hay control procesado, verificando datos del Excel...");
+      }
+      
+      // Buscar en la tabla control para ver si hay datos del Excel
+      const controlData = await repoDexie.getAllControlData();
+      const hasExcelData = controlData.some((row: { key: string; valores: Record<string, string>; meta?: Record<string, any> }) => {
+        const parts = row.key.split('||');
+        if (parts.length >= 2) {
+          const legajo = parts[0];
+          const periodo = parts[1];
+          // Verificar si coincide con los filtros
+          return periodo === periodoFiltro && 
+                 (empresaFiltro === 'LIMPAR' || empresaFiltro === 'LIME' || empresaFiltro === 'TYSA' || empresaFiltro === 'SUMAR');
+        }
+        return false;
+      });
+      
+      if (hasExcelData) {
+        if (showDebug) {
+          console.log("✅ loadControlFromDexie - Hay datos del Excel, pero no hay control procesado. Ejecutando computeControl...");
+        }
+        // Hay datos del Excel pero no hay control procesado, ejecutar computeControl
+        return null; // Retornar null para que se ejecute computeControl
+      }
+      
+      if (showDebug) {
+        console.log("❌ loadControlFromDexie - No se encontró control guardado ni datos del Excel");
       }
       return null;
     }
@@ -417,86 +471,231 @@ useEffect(() => {
       skip = 0,
       fail = 0;
 
-    for (let i = startIndex; i < arr.length; i++) {
-      const file = arr[i];
-      console.log(`🔄 Procesando archivo ${i + 1}/${arr.length}: ${file.name}`);
-      const tid = toast.loading(`Procesando ${file.name} (${i + 1}/${arr.length})`);
-      try {
-        const hash = await sha256OfFile(file);
-
-        // dedupe por hash
-        if (await repoDexie.hasFileHash(hash)) {
-          skip++;
-          setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "skipped", reason: "duplicado" } : u)));
-          toast.dismiss(tid);
-          continue;
-        }
-
-        // parsear PDF
-        const res = await parsePdfReceiptToRecord(file, showDebug);
-        const parsed = (res?.data ?? {}) as Record<string, string>;
-        const legajo = String(parsed.LEGAJO ?? "").trim();
-        const periodo = String(parsed.PERIODO ?? "").trim();
-        if (!legajo || !periodo) throw new Error("No se pudo detectar LEGAJO o PERIODO");
-
-        // nombre: PDF o Excel oficial (fallback)
-        const key = `${legajo}||${periodo}`;
-        let nombre = (parsed.NOMBRE ?? "").trim();
-        if (!nombre && officialNameByKey[key]) nombre = officialNameByKey[key];
-
-        // subir archivo a /public/recibos
-        let uploadedName = file.name;
+    // Procesar archivos en lotes con concurrencia controlada
+    const BATCH_SIZE = 10; // Procesar 10 archivos en paralelo
+    const TOTAL_FILES = arr.length;
+    
+    for (let batchStart = startIndex; batchStart < TOTAL_FILES; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, TOTAL_FILES);
+      const batch = arr.slice(batchStart, batchEnd);
+      
+      console.log(`🔄 Procesando lote ${Math.floor(batchStart / BATCH_SIZE) + 1}: archivos ${batchStart + 1}-${batchEnd} de ${TOTAL_FILES}`);
+      
+      // Procesar lote en paralelo
+      const batchPromises = batch.map(async (file, batchIndex) => {
+        const globalIndex = batchStart + batchIndex;
+        const tid = toast.loading(`Procesando ${file.name} (${globalIndex + 1}/${TOTAL_FILES})`);
+        
         try {
-          const fd = new FormData();
-          fd.append("file", file, file.name);
-          fd.append("key", key);
-          const r = await fetch("/api/upload", { method: "POST", body: fd });
-          const raw: unknown = await r.json();
-          const j = parseUploadResponse(raw);
-          if (!r.ok) throw new Error(j.error || "Upload error");
-          uploadedName = j.name || uploadedName;
-        } catch (e: unknown) {
-          console.warn("upload falló:", errorMessage(e));
-          toast.warning("No se pudo guardar el PDF en el servidor", {
-            description: errorMessage(e),
-            id: tid,
+          const hash = await sha256OfFile(file);
+
+          // dedupe por hash
+          if (await repoDexie.hasFileHash(hash)) {
+            skip++;
+            setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "skipped", reason: "duplicado" } : u)));
+            toast.dismiss(tid);
+            return { status: "skipped", reason: "duplicado" };
+          }
+
+          // parsear PDF
+          const res = await parsePdfReceiptToRecord(file, showDebug);
+          const parsed = (res?.data ?? {}) as Record<string, string>;
+          
+          // Verificar si el PDF debe guardarse
+          if (parsed.GUARDAR === "false") {
+            if (showDebug) {
+              console.log(`⚠️ Archivo ${file.name} marcado como NO GUARDAR:`, parsed);
+            }
+            skip++;
+            setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "skipped", reason: "no guardar" } : u)));
+            toast.dismiss(tid);
+            return { status: "skipped", reason: "no guardar" };
+          }
+          
+          const legajo = String(parsed.LEGAJO ?? "").trim();
+          const periodo = String(parsed.PERIODO ?? "").trim();
+          if (!legajo || !periodo) throw new Error("No se pudo detectar LEGAJO o PERIODO");
+
+          // nombre: PDF o Excel oficial (fallback)
+          const key = `${legajo}||${periodo}`;
+          let nombre = (parsed.NOMBRE ?? "").trim();
+          if (!nombre && officialNameByKey[key]) nombre = officialNameByKey[key];
+
+          // subir archivo a /public/recibos
+          let uploadedName = file.name;
+          try {
+            const fd = new FormData();
+            fd.append("file", file, file.name);
+            fd.append("key", key);
+            const r = await fetch("/api/upload", { method: "POST", body: fd });
+            const raw: unknown = await r.json();
+            const j = parseUploadResponse(raw);
+            if (!r.ok) throw new Error(j.error || "Upload error");
+            uploadedName = j.name || uploadedName;
+          } catch (e: unknown) {
+            console.warn("upload falló:", errorMessage(e));
+            toast.warning("No se pudo guardar el PDF en el servidor", {
+              description: errorMessage(e),
+              id: tid,
+            });
+          }
+
+          const data: Record<string, string> = {
+            ARCHIVO: uploadedName,
+            LEGAJO: legajo,
+            PERIODO: periodo,
+            NOMBRE: nombre,
+            CUIL: parsed.CUIL ?? "",
+            ...parsed,
+          };
+
+          await repoDexie.addReceipt({
+            legajo,
+            periodo,
+            nombre,
+            cuil: data.CUIL,
+            data,
+            filename: uploadedName,
+            fileHash: hash,
           });
+
+          ok++;
+          console.log(`✅ Archivo ${globalIndex + 1}/${TOTAL_FILES} procesado exitosamente: ${file.name}`);
+          setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "ok" } : u)));
+          setLastProcessedIndex(globalIndex);
+          toast.dismiss(tid);
+          return { status: "ok" };
+        } catch (err: unknown) {
+          fail++;
+          console.error(`❌ Error en archivo ${globalIndex + 1}/${TOTAL_FILES}: ${file.name}`, err);
+          setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "error" } : u)));
+          toast.dismiss(tid);
+          return { status: "error", error: err };
         }
-
-        const data: Record<string, string> = {
-          ARCHIVO: uploadedName,
-          LEGAJO: legajo,
-          PERIODO: periodo,
-          NOMBRE: nombre,
-          CUIL: parsed.CUIL ?? "",
-          ...parsed,
-        };
-
-        await repoDexie.addReceipt({
-          legajo,
-          periodo,
-          nombre,
-          cuil: data.CUIL,
-          data,
-          filename: uploadedName,
-          fileHash: hash,
-        });
-
-        ok++;
-        console.log(`✅ Archivo ${i + 1}/${arr.length} procesado exitosamente: ${file.name}`);
-        setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "ok" } : u)));
-        setLastProcessedIndex(i);
-        toast.dismiss(tid);
-      } catch (err: unknown) {
-        fail++;
-        console.error(`❌ Error en archivo ${i + 1}/${arr.length}: ${file.name}`, err);
-        setUploads((prev) => prev.map((u, idx) => (idx === i ? { ...u, status: "error" } : u)));
-        toast.dismiss(tid);
+      });
+      
+      // Esperar a que se complete el lote antes de continuar
+      let batchResults;
+      try {
+        batchResults = await Promise.all(batchPromises);
+      } catch (error) {
+        console.error(`❌ Error en lote ${Math.floor(batchStart / BATCH_SIZE) + 1}:`, error);
+        
+        // Reintentar el lote con procesamiento secuencial como fallback
+        console.log(`🔄 Reintentando lote ${Math.floor(batchStart / BATCH_SIZE) + 1} en modo secuencial...`);
+        
+        const fallbackResults = [];
+        for (let i = 0; i < batch.length; i++) {
+          const file = batch[i];
+          const globalIndex = batchStart + i;
+          const tid = toast.loading(`Reintentando ${file.name} (${globalIndex + 1}/${TOTAL_FILES})`);
+          
+          try {
+            // Procesar archivo individualmente
+            const hash = await sha256OfFile(file);
+            
+            if (await repoDexie.hasFileHash(hash)) {
+              skip++;
+              setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "skipped", reason: "duplicado" } : u)));
+              toast.dismiss(tid);
+              fallbackResults.push({ status: "skipped", reason: "duplicado" });
+              continue;
+            }
+            
+            const res = await parsePdfReceiptToRecord(file, showDebug);
+            const parsed = (res?.data ?? {}) as Record<string, string>;
+            
+            // Verificar si el PDF debe guardarse
+            if (parsed.GUARDAR === "false") {
+              if (showDebug) {
+                console.log(`⚠️ Archivo ${file.name} marcado como NO GUARDAR (fallback):`, parsed);
+              }
+              skip++;
+              setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "skipped", reason: "no guardar" } : u)));
+              toast.dismiss(tid);
+              fallbackResults.push({ status: "skipped", reason: "no guardar" });
+              continue;
+            }
+            
+            const legajo = String(parsed.LEGAJO ?? "").trim();
+            const periodo = String(parsed.PERIODO ?? "").trim();
+            
+            if (!legajo || !periodo) {
+              throw new Error("No se pudo detectar LEGAJO o PERIODO");
+            }
+            
+            const key = `${legajo}||${periodo}`;
+            let nombre = (parsed.NOMBRE ?? "").trim();
+            if (!nombre && officialNameByKey[key]) nombre = officialNameByKey[key];
+            
+            let uploadedName = file.name;
+            try {
+              const fd = new FormData();
+              fd.append("file", file, file.name);
+              fd.append("key", key);
+              const r = await fetch("/api/upload", { method: "POST", body: fd });
+              const raw: unknown = await r.json();
+              const j = parseUploadResponse(raw);
+              if (!r.ok) throw new Error(j.error || "Upload error");
+              uploadedName = j.name || uploadedName;
+            } catch (e: unknown) {
+              console.warn("upload falló:", errorMessage(e));
+              toast.warning("No se pudo guardar el PDF en el servidor", {
+                description: errorMessage(e),
+                id: tid,
+              });
+            }
+            
+            const data: Record<string, string> = {
+              ARCHIVO: uploadedName,
+              LEGAJO: legajo,
+              PERIODO: periodo,
+              NOMBRE: nombre,
+              CUIL: parsed.CUIL ?? "",
+              ...parsed,
+            };
+            
+            await repoDexie.addReceipt({
+              legajo,
+              periodo,
+              nombre,
+              cuil: data.CUIL,
+              data,
+              filename: uploadedName,
+              fileHash: hash,
+            });
+            
+            ok++;
+            console.log(`✅ Archivo ${globalIndex + 1}/${TOTAL_FILES} procesado exitosamente (fallback): ${file.name}`);
+            setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "ok" } : u)));
+            setLastProcessedIndex(globalIndex);
+            toast.dismiss(tid);
+            fallbackResults.push({ status: "ok" });
+            
+          } catch (err: unknown) {
+            fail++;
+            console.error(`❌ Error en archivo ${globalIndex + 1}/${TOTAL_FILES} (fallback): ${file.name}`, err);
+            setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "error" } : u)));
+            toast.dismiss(tid);
+            fallbackResults.push({ status: "error", error: err });
+          }
+        }
+        
+        batchResults = fallbackResults;
       }
-      // ceder control al event loop cada 10 archivos para evitar timeout
-      if ((i + 1) % 10 === 0) {
-        console.log(`⏸️ Pausa cada 10 archivos - Procesados: ${i + 1}/${arr.length}`);
-        await new Promise((r) => setTimeout(r, 100));
+      
+      // Log del progreso del lote
+      const batchOk = batchResults.filter(r => r.status === "ok").length;
+      const batchSkip = batchResults.filter(r => r.status === "skipped").length;
+      const batchFail = batchResults.filter(r => r.status === "error").length;
+      
+      console.log(`📊 Lote completado: ${batchOk} OK, ${batchSkip} omitidos, ${batchFail} errores`);
+      
+      // Pausa adaptativa entre lotes: más tiempo si hubo errores
+      if (batchEnd < TOTAL_FILES) {
+        const pauseTime = batchFail > 0 ? 200 : 50; // 200ms si hay errores, 50ms si todo OK
+        console.log(`⏸️ Pausa de ${pauseTime}ms antes del siguiente lote...`);
+        await new Promise((r) => setTimeout(r, pauseTime));
       }
     }
 
@@ -646,10 +845,8 @@ useEffect(() => {
       // Usar la empresa del filtro o detectar automáticamente
       const empresaToUse = empresaFiltro || "LIMPAR";
       
-      // Para LIME, el período viene del desplegable, no del Excel
-      const periodoResolver = empresaToUse === "LIME" 
-        ? () => periodoFiltro || "07/2025" // Usar el período del desplegable
-        : () => periodoFiltro || "06/2025"; // Para LIMPAR, usar el período del desplegable
+      // SIEMPRE usar el período del desplegable, nunca del Excel
+      const periodoResolver = () => periodoFiltro || "06/2025";
       
       if (showDebug) {
         console.log("🔍 Debug Excel Control - Configuración:", {
@@ -658,13 +855,25 @@ useEffect(() => {
           periodoResolver: "personalizado (siempre)",
           periodoUsado: periodoResolver()
         });
+        console.log("🔍 Debug Excel Control - Filtros del formulario:", {
+          empresaFiltro,
+          periodoFiltro,
+          empresaSeleccionada: empresaFiltro || "LIMPAR",
+          periodoSeleccionado: periodoFiltro || "06/2025"
+        });
       }
       
       const rows: OfficialRow[] = await readOfficialXlsxUnified(file, empresaToUse, { periodoResolver, debug: showDebug });
       
       // Debug: verificar valores del Excel de control
       if (showDebug) {
-        console.log("🔍 Debug Excel Control - Valores cargados:");
+        console.log("🔍 Debug Excel Control - Excel cargado:", {
+          totalFilas: rows.length,
+          empresaExcel: empresaToUse,
+          periodoExcel: "Se extrae del Excel (puede ser diferente al del formulario)"
+        });
+        
+        console.log("🔍 Debug Excel Control - Primeras 3 filas del Excel:");
         for (let i = 0; i < Math.min(3, rows.length); i++) {
           const row = rows[i];
           console.log(`  Fila ${i}:`, {
@@ -675,17 +884,63 @@ useEffect(() => {
             "20595 (CUOTA MUTUAL)": row.valores["20595"],
             "20620 (DESC. MUTUAL)": row.valores["20620"]
           });
-          console.log(`  Fila ${i} - Clave generada:`, row.key);
+          console.log(`  Fila ${i} - Clave original del Excel:`, row.key);
           console.log(`  Fila ${i} - Meta:`, row.meta);
         }
       }
       
-      await repoDexie.upsertControl(rows.map((r) => ({ key: r.key, valores: r.valores })));
+      // Regenerar las claves del control usando el periodo del desplegable
+      if (showDebug) {
+        console.log("🔍 Debug Excel Control - Iniciando regeneración de claves:", {
+          periodoFormulario: periodoFiltro,
+          periodoExcel: "Extraído de las claves del Excel",
+          totalClaves: rows.length
+        });
+      }
       
-      setOfficialKeys(rows.map((r) => r.key));
-      setOfficialNameByKey(Object.fromEntries(rows.map((r) => [r.key, r.meta?.nombre || ""])));
+      const controlRows = rows.map((r) => {
+        // Extraer legajo de la clave original (formato: legajo||periodoExcel)
+        const parts = r.key.split('||');
+        const legajo = parts[0];
+        const periodoExcel = parts[1] || "SIN_PERIODO";
+        // Crear nueva clave con el periodo del desplegable
+        const newKey = `${legajo}||${periodoFiltro}`;
+        
+        if (showDebug) {
+          console.log(`🔍 Regenerando clave: "${r.key}" → "${newKey}" (legajo: ${legajo}, periodoExcel: ${periodoExcel}, periodoFormulario: ${periodoFiltro})`);
+        }
+        
+        return { 
+          key: newKey, 
+          valores: r.valores,
+          originalKey: r.key, // Mantener referencia a la clave original
+          nombre: r.meta?.nombre || "" // Preservar el nombre
+        };
+      });
       
-      await computeControl(rows.map((r) => r.key));
+      if (showDebug) {
+        console.log("🔍 Debug Excel Control - Resumen de regeneración:", {
+          clavesOriginales: rows.slice(0, 3).map(r => r.key),
+          clavesRegeneradas: controlRows.slice(0, 3).map(r => r.key),
+          periodoFinal: periodoFiltro
+        });
+      }
+      
+      await repoDexie.upsertControl(controlRows.map((r) => ({ key: r.key, valores: r.valores })));
+      
+      if (showDebug) {
+        console.log("🔍 Debug Excel Control - Control guardado en BD:", {
+          totalClaves: controlRows.length,
+          ejemploClaves: controlRows.slice(0, 3).map(r => r.key),
+          periodoGuardado: periodoFiltro,
+          empresaGuardada: empresaFiltro
+        });
+      }
+      
+      setOfficialKeys(controlRows.map((r) => r.key));
+      setOfficialNameByKey(Object.fromEntries(controlRows.map((r) => [r.key, r.nombre])));
+      
+      await computeControl(controlRows.map((r) => r.key));
       
       // Forzar actualización de la lista de controles guardados
       setControlsRefreshKey(prev => prev + 1);
@@ -700,6 +955,15 @@ useEffect(() => {
   }
 
   async function computeControl(keysFromExcel?: string[]): Promise<void> {
+    console.log("🔍 computeControl - INICIO - Llamada a función con:", {
+      periodoFiltro,
+      empresaFiltro,
+      nombreFiltro,
+      keysFromExcelCount: keysFromExcel?.length || 0,
+      consolidatedCount: consolidated.length,
+      timestamp: new Date().toLocaleString()
+    });
+    
     const empresaOf = (r: ConsolidatedEntity) => String(r.data?.EMPRESA ?? "LIMPAR");
     
 
@@ -727,19 +991,68 @@ useEffect(() => {
         return nombre.toLowerCase().includes(nombreFiltro.toLowerCase());
       });
     const rows = filtered;
-    if (!rows.length) {
+    
+    // Debug: verificar si hay datos del Excel para guardar
+    const hasExcelData = keysFromExcel && keysFromExcel.length > 0;
+    if (showDebug) {
+      console.log("🔍 computeControl - Verificación de datos:", {
+        hasExcelData,
+        excelKeysCount: keysFromExcel?.length || 0,
+        consolidatedRowsCount: rows.length,
+        shouldSaveControl: hasExcelData || rows.length > 0
+      });
+    }
+    
+    // Solo retornar temprano si no hay datos del Excel Y no hay recibos consolidados
+    if (!hasExcelData && !rows.length) {
+      if (showDebug) {
+        console.log("⚠️ computeControl - No hay datos para procesar, retornando temprano");
+      }
       setControlSummaries([]);
       setControlOKs([]);
       setControlMissing([]);
       setControlStats({ comps: 0, compOk: 0, compDif: 0, okReceipts: 0, difReceipts: 0 });
       return;
     }
-    const pairs = await Promise.all(
-      rows.map(async (r: ConsolidatedEntity) => {
-        const ctl = await repoDexie.getControl(r.key);
-        return { r, ctl };
-      }),
-    );
+    let pairs: Array<{ r: ConsolidatedEntity; ctl: ControlRow | null }> = [];
+    
+    if (rows.length > 0) {
+      // Si hay recibos consolidados, procesarlos normalmente
+      pairs = await Promise.all(
+        rows.map(async (r: ConsolidatedEntity) => {
+          const ctl = await repoDexie.getControl(r.key);
+          return { r, ctl: ctl || null };
+        }),
+      );
+    } else if (hasExcelData) {
+      // Si no hay recibos pero sí hay datos del Excel, crear registros vacíos para procesar
+      if (showDebug) {
+        console.log("🔍 computeControl - No hay recibos consolidados, procesando solo datos del Excel");
+      }
+      
+      // Crear registros ficticios para cada clave del Excel
+      for (const excelKey of keysFromExcel!) {
+        const [legajo, periodo] = excelKey.split("||");
+        const fakeKey = `${legajo}||${periodo}||${empresaFiltro}`;
+        
+        // Crear un registro consolidado ficticio
+        const fakeConsolidated: ConsolidatedEntity = {
+          key: fakeKey,
+          legajo,
+          periodo,
+          nombre: officialNameByKey[excelKey] || nameByKey[excelKey] || "N/A",
+          data: {},
+          archivos: [],
+          cuil: undefined,
+          cuilNorm: undefined
+        };
+        
+        // Obtener el control del Excel
+        const ctl = await repoDexie.getControl(fakeKey);
+        
+        pairs.push({ r: fakeConsolidated, ctl: ctl || null });
+      }
+    }
 
     const summaries: ControlSummary[] = [];
     const oks: ControlOkRow[] = [];
@@ -972,8 +1285,22 @@ useEffect(() => {
     setControlMissing(missing);
     setControlStats({ comps, compOk, compDif, okReceipts: oks.length, difReceipts: summaries.length });
     
+    // Debug: verificar los filtros antes de guardar
+    if (showDebug) {
+      console.log("🔍 Debug computeControl - Filtros antes de guardar:", {
+        periodoFiltro,
+        empresaFiltro,
+        nombreFiltro,
+        totalSummaries: summaries.length,
+        totalOks: oks.length,
+        totalMissing: missing.length
+      });
+    }
+    
     // Guardar el control con los filtros actuales
     await saveControlToDexie(summaries, oks, missing, { comps, compOk, compDif, okReceipts: oks.length, difReceipts: summaries.length }, keysFromExcel ?? officialKeys, officialNameByKey, nameByKey);
+    
+    console.log("✅ computeControl - Control guardado exitosamente");
     
     // Actualizar el estado para habilitar el botón de eliminar control
     setHasControlForCurrentFilters(true);
@@ -1027,19 +1354,31 @@ useEffect(() => {
         </div>
       </header>
 
-      <Tabs defaultValue="agregado" className="w-full" onValueChange={setActiveTab}>
+      <Tabs defaultValue="agregado" className="w-full" onValueChange={(value) => {
+        setActiveTab(value);
+        
+        // Si se cambia a la pestaña "Recibos", limpiar filtros y mostrar resumen por empresa
+        if (value === "agregado") {
+          setPeriodoFiltro("");
+          setEmpresaFiltro("Todas");
+          setNombreFiltro("");
+          if (showDebug) {
+            console.log("🔄 Pestaña Recibos seleccionada - Filtros limpiados para mostrar resumen por empresa");
+          }
+        }
+      }}>
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="agregado">Tabla agregada</TabsTrigger>
+          <TabsTrigger value="agregado">Recibos</TabsTrigger>
           <TabsTrigger value="control">Control</TabsTrigger>
           <TabsTrigger value="export">Exportación</TabsTrigger>
         </TabsList>
 
-        {/* TABLA AGREGADA */}
+        {/* RECIBOS */}
         <TabsContent value="agregado" className="mt-4">
           <Card>
             <CardHeader className="flex items-center justify-between gap-2 sm:flex-row sm:items-center">
               <div>
-                <CardTitle>Tabla agregada</CardTitle>
+                <CardTitle>Recibos</CardTitle>
                 <CardDescription></CardDescription>
               </div>
               <div className="flex flex-col gap-3 sm:items-end">
@@ -1062,8 +1401,8 @@ useEffect(() => {
                       empresas={Array.from(new Set(consolidated.map((r) => String(r.data?.EMPRESA ?? "LIMPAR").trim()))).sort()}
                       valuePeriodo={periodoFiltro || null}
                       onPeriodo={(v: string | null) => setPeriodoFiltro(v ?? "")}
-                      valueEmpresa={empresaFiltro || null}
-                      onEmpresa={(v: string | null) => setEmpresaFiltro(v ?? "")}
+                      valueEmpresa={empresaFiltro === "Todas" ? null : empresaFiltro || null}
+                      onEmpresa={(v: string | null) => setEmpresaFiltro(v ?? "Todas")}
                       valueNombre={nombreFiltro}
                       onNombre={setNombreFiltro}
                     />
@@ -1151,7 +1490,8 @@ useEffect(() => {
                   onCloseDetails={() => setSelectedControl(null)}
                   onEmpresaChange={(empresa) => {
                     setEmpresaFiltro(empresa);
-                    setPeriodoFiltro("");
+                    // NO limpiar periodoFiltro para mantener la búsqueda del control
+                    // setPeriodoFiltro("");
                     setSelectedControl(null); // Cerrar el panel de detalles al cambiar de empresa
                     if (controlFileInputRef.current) {
                       controlFileInputRef.current.value = "";

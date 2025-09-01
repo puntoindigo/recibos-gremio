@@ -54,6 +54,7 @@ export default function SavedControlsList({ empresas, refreshKey, onViewDetails,
       setLoading(true);
       try {
         const controls = await repoDexie.getSavedControlsByEmpresa(selectedEmpresa);
+        console.log(`🔍 SavedControlsList - Controles encontrados para ${selectedEmpresa}:`, controls.map(c => ({ periodo: c.periodo, empresa: c.empresa, filterKey: c.filterKey })));
         setSavedControls(controls);
       } catch (error) {
         console.error("Error cargando controles guardados:", error);
@@ -69,7 +70,16 @@ export default function SavedControlsList({ empresas, refreshKey, onViewDetails,
   // Exportar errores y faltantes de un control específico
   const handleExport = async (control: SavedControlDB) => {
     try {
-      await exportControlErrors(control.summaries, control.oks, control.missing, control.nameByKey || {}, control.officialNameByKey, control.empresa, control.periodo);
+      // Transformar summaries para que coincida con ControlSummary
+      const transformedSummaries = control.summaries.map(summary => ({
+        ...summary,
+        difs: summary.difs.map(dif => ({
+          ...dif,
+          dir: dif.dir as "a favor" | "en contra"
+        }))
+      }));
+      
+      await exportControlErrors(transformedSummaries, control.oks, control.missing, control.nameByKey || {}, control.officialNameByKey, control.empresa, control.periodo);
       toast.success(`Control exportado: ${control.periodo}`);
     } catch (error) {
       console.error("Error exportando control:", error);

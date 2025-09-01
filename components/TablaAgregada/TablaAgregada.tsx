@@ -45,7 +45,7 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
     const empresaOf = (r: ConsolidatedEntity) => String(r.data?.EMPRESA ?? 'LIMPAR');
     return rows
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
-      .filter((r) => (empresaFiltro ? empresaOf(r) === empresaFiltro : true))
+      .filter((r) => (empresaFiltro && empresaFiltro !== 'Todas' ? empresaOf(r) === empresaFiltro : true))
       .filter((r) => {
         if (!nombreFiltro) return true;
         const nombre = nameByKey[r.key] || r.nombre || "";
@@ -60,6 +60,24 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
         data: r.data,
       }));
   }, [rows, periodoFiltro, empresaFiltro, nombreFiltro, nameByKey]);
+
+  // Generar resumen por empresa cuando no hay filtro específico
+  const empresasResumen = useMemo(() => {
+    if (empresaFiltro && empresaFiltro !== 'Todas') return null;
+    
+    const resumen = new Map<string, number>();
+    rows
+      .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
+      .forEach((r) => {
+        const empresa = String(r.data?.EMPRESA ?? 'LIMPAR');
+        resumen.set(empresa, (resumen.get(empresa) || 0) + 1);
+      });
+    
+    return Array.from(resumen.entries()).map(([empresa, cantidad]) => ({
+      empresa,
+      cantidad
+    })).sort((a, b) => b.cantidad - a.cantidad);
+  }, [rows, periodoFiltro, empresaFiltro]);
 
   const [pageSize, setPageSize] = useState<number>(50);
   const [page, setPage] = useState<number>(1);
@@ -98,6 +116,43 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
       </div>
     </div>
   );
+
+  // Vista de resumen por empresa
+  if (empresasResumen) {
+    return (
+      <div className="space-y-4">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Resumen por Empresa</h2>
+          <p className="text-gray-600">Selecciona una empresa para ver sus recibos</p>
+        </div>
+        
+        <div className="flex justify-center">
+          <div className="w-full max-w-2xl">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-center font-semibold">Empresa</TableHead>
+                  <TableHead className="text-center font-semibold">Cantidad de Recibos</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {empresasResumen.map((item) => (
+                  <TableRow 
+                    key={item.empresa}
+                    className="hover:bg-gray-50 cursor-pointer transition-colors"
+                    onClick={() => onEmpresaFiltroChange(item.empresa)}
+                  >
+                    <TableCell className="text-center font-medium">{item.empresa}</TableCell>
+                    <TableCell className="text-center">{item.cantidad.toLocaleString('es-AR')}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full overflow-x-auto">

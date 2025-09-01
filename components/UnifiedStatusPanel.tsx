@@ -98,23 +98,7 @@ export function UnifiedStatusPanel({ uploads }: Props) {
             </div>
           </div>
 
-          {/* Lista detallada de archivos */}
-          <div>
-            <div className="flex items-center space-x-2 text-sm font-medium mb-2">
-              <span>Archivos ({uploads.length})</span>
-            </div>
-            <div className="space-y-1 max-h-32 overflow-y-auto">
-              {uploads.map((upload, index) => (
-                <div key={`${upload.name}-${index}`} className="flex items-center space-x-2 text-sm">
-                                   {upload.status === "pending" && <Loader2 className="h-2.5 w-2.5 animate-spin status-warning" />}
-                 {upload.status === "ok" && <CheckCircle2 className="h-2.5 w-2.5 status-success" />}
-                 {upload.status === "skipped" && <div className="h-2.5 w-2.5 rounded-full status-skipped" />}
-                 {upload.status === "error" && <XCircle className="h-2.5 w-2.5 status-error" />}
-                  <span className="truncate flex-1 text-xs">{upload.name}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+
         </div>
       )}
     </div>

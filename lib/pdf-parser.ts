@@ -12,8 +12,8 @@ export type Parsed = {
 
 // Función para detectar la empresa del recibo
 function detectarEmpresa(texto: string): string {
-  // Detectar LIMPAR (más específico)
-  if (/LIMP\s*AR/i.test(texto) && /\bLEGAJO\b/i.test(texto)) {
+  // Detectar LIMPAR (más específico) - hacer más flexible
+  if (/LIMP\s*AR/i.test(texto) || /LIMPAR/i.test(texto)) {
     return "LIMPAR";
   }
   
@@ -57,6 +57,21 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
 
   // Detectar la empresa
   const empresa = detectarEmpresa(textoCompleto + " " + primerasLineas + " " + file.name);
+
+  // Debug: mostrar qué empresa se detectó
+  if (debug) {
+    console.log("🔍 Debug PDF Parser - Detección de empresa:", {
+      filename: file.name,
+      empresaDetectada: empresa,
+      textoCompletoLength: textoCompleto.length,
+      primerasLineasLength: primerasLineas.length,
+      contieneLIMP: /LIMP/i.test(textoCompleto + " " + primerasLineas),
+      contieneAR: /AR/i.test(textoCompleto + " " + primerasLineas),
+      contieneLIMPAR: /LIMPAR/i.test(textoCompleto + " " + primerasLineas),
+      textoCompleto: textoCompleto.substring(0, 200) + "...",
+      primerasLineas: primerasLineas.substring(0, 200) + "..."
+    });
+  }
 
   if (empresa === "LIMPAR") {
     // Usar el parser de LIMPAR
