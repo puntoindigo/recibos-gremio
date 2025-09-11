@@ -1,7 +1,7 @@
 // components/TablaAgregada/TablaAgregada.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,6 +18,8 @@ type Props = {
   empresaFiltro: string;
   onEmpresaFiltroChange: (v: string) => void;
   nombreFiltro: string;
+  controlesPorEmpresa?: Record<string, number>;
+  getControlesPorEmpresaPeriodo?: (empresa: string, periodo: string) => Promise<number>;
 };
 
 function fmtNumber(v?: string): string {
@@ -40,7 +42,7 @@ function formatHeader(header: string): string {
   return longHeaders[header] || header;
 }
 
-export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFiltro, empresaFiltro, nombreFiltro, onPeriodoFiltroChange, onEmpresaFiltroChange }: Props) {
+export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFiltro, empresaFiltro, nombreFiltro, onPeriodoFiltroChange, onEmpresaFiltroChange, controlesPorEmpresa, getControlesPorEmpresaPeriodo }: Props) {
   const enriched = useMemo(() => {
     const empresaOf = (r: ConsolidatedEntity) => String(r.data?.EMPRESA ?? 'LIMPAR');
     return rows
@@ -61,23 +63,69 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
       }));
   }, [rows, periodoFiltro, empresaFiltro, nombreFiltro, nameByKey]);
 
-  // Generar resumen por empresa cuando no hay filtro específico
+  // Estado para controles específicos del periodo
+  const [controlesPeriodo, setControlesPeriodo] = useState<Record<string, number>>({});
+
+  // Cargar controles específicos del periodo cuando cambie
+  useEffect(() => {
+    if (periodoFiltro && getControlesPorEmpresaPeriodo) {
+      const cargarControles = async () => {
+        const controlesMap: Record<string, number> = {};
+        const empresas = Array.from(new Set(rows.map(r => String(r.data?.EMPRESA ?? 'LIMPAR'))));
+        
+        for (const empresa of empresas) {
+          const cantidad = await getControlesPorEmpresaPeriodo(empresa, periodoFiltro);
+          controlesMap[empresa] = cantidad;
+        }
+        
+        setControlesPeriodo(controlesMap);
+      };
+      
+      void cargarControles();
+    } else {
+      setControlesPeriodo({});
+    }
+  }, [periodoFiltro, getControlesPorEmpresaPeriodo, rows]);
+
+  // Generar resumen por empresa cuando no hay filtro específico de empresa
   const empresasResumen = useMemo(() => {
-    if (empresaFiltro && empresaFiltro !== 'Todas') return null;
+    if (empresaFiltro !== 'Todas') return null;
     
-    const resumen = new Map<string, number>();
+    const resumen = new Map<string, { cantidad: number; controles: number }>();
+    
+    // Contar recibos por empresa
     rows
       .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
       .forEach((r) => {
         const empresa = String(r.data?.EMPRESA ?? 'LIMPAR');
-        resumen.set(empresa, (resumen.get(empresa) || 0) + 1);
+        const current = resumen.get(empresa) || { cantidad: 0, controles: 0 };
+        current.cantidad += 1;
+        resumen.set(empresa, current);
       });
     
-    return Array.from(resumen.entries()).map(([empresa, cantidad]) => ({
+    // Contar controles por empresa/periodo
+    if (periodoFiltro) {
+      // Si hay filtro de periodo, usar controles específicos del periodo
+      const empresasConControles = new Set(resumen.keys());
+      empresasConControles.forEach(empresa => {
+        const current = resumen.get(empresa)!;
+        current.controles = controlesPeriodo[empresa] || 0;
+      });
+    } else if (controlesPorEmpresa) {
+      // Sin filtro de periodo, mostrar total de controles por empresa
+      const empresasConControles = new Set(resumen.keys());
+      empresasConControles.forEach(empresa => {
+        const current = resumen.get(empresa)!;
+        current.controles = controlesPorEmpresa[empresa] || 0;
+      });
+    }
+    
+    return Array.from(resumen.entries()).map(([empresa, data]) => ({
       empresa,
-      cantidad
+      cantidad: data.cantidad,
+      controles: data.controles
     })).sort((a, b) => b.cantidad - a.cantidad);
-  }, [rows, periodoFiltro, empresaFiltro]);
+  }, [rows, periodoFiltro, empresaFiltro, controlesPorEmpresa, controlesPeriodo]);
 
   const [pageSize, setPageSize] = useState<number>(50);
   const [page, setPage] = useState<number>(1);
@@ -133,6 +181,7 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
                 <TableRow>
                   <TableHead className="text-center font-semibold">Empresa</TableHead>
                   <TableHead className="text-center font-semibold">Cantidad de Recibos</TableHead>
+                  <TableHead className="text-center font-semibold">Controles</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -144,6 +193,21 @@ export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFil
                   >
                     <TableCell className="text-center font-medium">{item.empresa}</TableCell>
                     <TableCell className="text-center">{item.cantidad.toLocaleString('es-AR')}</TableCell>
+                    <TableCell className="text-center">
+                      {periodoFiltro ? (
+                        item.controles > 0 ? (
+                          <span className="text-green-600 font-medium">✓ {item.controles}</span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )
+                      ) : (
+                        item.controles > 0 ? (
+                          <span className="text-blue-600 font-medium">{item.controles}</span>
+                        ) : (
+                          <span className="text-gray-400">0</span>
+                        )
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

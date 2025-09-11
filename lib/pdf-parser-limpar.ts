@@ -36,6 +36,31 @@ const UPPER_NAME_BLOCK = /\b[A-ZÁÉÍÓÚÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,}){1,
 
 type Word = { str: string; x: number; y: number };
 
+// Función para extraer conceptos por código específico
+function extraerConceptoPorCodigo(texto: string): string {
+  // Hacer split por espacios de todo el texto
+  const palabras = texto.split(' ');
+  
+  // Buscar el primer item que es exactamente "5.3.10"
+  for (let i = 0; i < palabras.length; i++) {
+    if (palabras[i] === "5.3.10") {
+      // El 3er item anterior (-3) tiene que ser el monto
+      const posicionMonto = i - 3;
+      
+      if (posicionMonto >= 0 && posicionMonto < palabras.length) {
+        const monto = palabras[posicionMonto];
+        
+        // Verificar que sea un valor monetario válido
+        if (/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(monto)) {
+          return monto;
+        }
+      }
+    }
+  }
+
+  return "0.00";
+}
+
 // Función para extraer conceptos específicos de LIMPAR
 function extraerConceptoLimpar(texto: string, concepto: string, debug: boolean = false): string {
   const conceptRegex = new RegExp(`${concepto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
@@ -207,6 +232,8 @@ function normalizeName(s: string): string {
 
 // --- parser principal (PERIODO y LEGAJO: sin tocar) ---
 export async function parsePdfReceiptToRecord(file: File, debug: boolean = false): Promise<Parsed> {
+  // Forzar debug para LIMPAR para diagnosticar ITEM 5.3.10
+  const debugLimpar = debug;
   assertClient();
 
   GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -272,6 +299,7 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
 
   const rawText = allWords.map((w) => w.str).join(" ");
   const data: Record<string, string> = { ARCHIVO: file.name, LEGAJO: "-", PERIODO: "-" };
+
 
   // ---------- PERIODO (sin cambios) ----------
   let per: string | null = null;
@@ -481,6 +509,7 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     console.log("  - 20595 (CUOTA MUTUAL):", data["20595"]);
     console.log("  - 20610 (RESGUARDO MUTUAL):", data["20610"]);
     console.log("  - 20620 (DESC. MUTUAL):", data["20620"]);
+    console.log("  - 5310 (ITEM 5.3.10):", data["5310"]);
   }
   
   // Solo extraer conceptos específicos si no existen ya en data o si son "-"
@@ -567,15 +596,19 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     }
   }
 
-  // Debug: mostrar los valores después de toDotDecimal
-  if (debug) {
-    console.log("🔍 Debug LIMPAR - Valores finales:", {
-      "20540": data["20540"],
-      "20590": data["20590"],
-      "20595": data["20595"],
-      "20610": data["20610"],
-      "20620": data["20620"]
-    });
+  // Extraer ITEM 5.3.10 - buscar por texto y por código 75
+  if (!data["5310"] || data["5310"] === "-") {
+    const item5310Texto = extraerConceptoLimpar(rawText, "ITEM 5.3.10", debugLimpar);
+    const item5310Texto2 = extraerConceptoLimpar(rawText, "ITEM 5,3,10", debugLimpar);
+    const item5310Texto3 = extraerConceptoLimpar(rawText, "5.3.10", debugLimpar);
+    const item5310Codigo = extraerConceptoPorCodigo(rawText);
+    
+    // Priorizar el valor del código si es válido, sino usar los valores de texto
+    const item5310 = (item5310Codigo && item5310Codigo !== "0.00") ? item5310Codigo : (item5310Texto || item5310Texto2 || item5310Texto3);
+    
+    if (item5310 && item5310 !== "0.00") {
+      data["5310"] = toDotDecimal(item5310);
+    }
   }
 
   const debugLines = allLines.slice(0, 150).map((line) => ({

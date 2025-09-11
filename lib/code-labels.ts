@@ -6,6 +6,7 @@ export const CODE_LABELS = [
   ["20595", "CUOTA MUTUAL"],
   ["20610", "RESGUARDO MUTUAL"],
   ["20620", "DESC. MUTUAL"],
+  ["5310", "ITEM 5.3.10"],
 
   // Aliases frecuentes
   ["20620", "DESC. MUTUAL 16 DE ABRIL"],
@@ -46,6 +47,7 @@ export const CODE_PRINCIPAL_LABELS = [
   ["20595", "CUOTA MUTUAL"],
   ["20610", "RESGUARDO MUTUAL"],
   ["20620", "DESC. MUTUAL"],
+  ["5310", "ITEM 5.3.10"],
 ] as const;
 
 export function isLabeled(code: string | number): boolean {
@@ -53,6 +55,7 @@ export function isLabeled(code: string | number): boolean {
 }
 
 // Función para obtener solo los conceptos principales (sin duplicados)
+// Excluye el código 5310 (ITEM 5.3.10) de los controles
 export function getPrincipalLabels() {
-  return CODE_PRINCIPAL_LABELS;
+  return CODE_PRINCIPAL_LABELS.filter(([code]) => code !== "5310");
 }

@@ -298,6 +298,8 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   const cuotaMutual = extraerConceptoTYSA(rawText, "Cuota Mutual Ap.Solidar.");
   const resguardoMutuo = extraerConceptoTYSA(rawText, "Resguardo Mutuo");
   const descMutual = extraerConceptoTYSA(rawText, "Mutual 16 de Abril");
+  const item5310 = extraerConceptoTYSA(rawText, "ITEM 5.3.10") || 
+                   extraerConceptoTYSA(rawText, "5.3.10");
 
 
 
@@ -307,6 +309,7 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   data["20595"] = toDotDecimal(cuotaMutual);      // CUOTA MUTUAL
   data["20610"] = toDotDecimal(resguardoMutuo);   // RESGUARDO MUTUAL
   data["20620"] = toDotDecimal(descMutual);       // DESC. MUTUAL
+  data["5310"] = toDotDecimal(item5310);          // ITEM 5.3.10
 
 
 

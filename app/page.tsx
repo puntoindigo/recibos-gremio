@@ -154,6 +154,7 @@ export default function Page() {
   });
   const [controlsRefreshKey, setControlsRefreshKey] = useState(0); // Para forzar actualización de controles guardados
   const [selectedControl, setSelectedControl] = useState<SavedControlDB | null>(null); // Control seleccionado para ver detalles
+  const [controlesPorEmpresa, setControlesPorEmpresa] = useState<Record<string, number>>({});
   
   // Función para cargar detalles de un control guardado
   const handleViewDetails = (control: SavedControlDB) => {
@@ -239,7 +240,7 @@ async function saveControlToDexie(
     
     // No guardar control si hay filtro de nombre (se calcula en tiempo real)
     if (nombreFiltro) {
-      console.log("⚠️ saveControlToDexie - No se guarda control con filtro de nombre");
+        console.log("⚠️ saveControlToDexie - No se guarda control con filtro de nombre");
       return;
     }
     
@@ -359,6 +360,7 @@ async function loadControlFromDexie(): Promise<{
 
 useEffect(() => {
   void loadConsolidated();
+  void loadControlesPorEmpresa();
   if (navigator?.storage?.persist) navigator.storage.persist().catch(() => {});
 }, []);
 
@@ -449,6 +451,45 @@ useEffect(() => {
     }
   }
 
+  async function loadControlesPorEmpresa(): Promise<void> {
+    try {
+      const allControls = await repoDexie.getAllSavedControls();
+      const controlesMap: Record<string, number> = {};
+      
+      // Contar controles por empresa (total de cualquier periodo)
+      allControls.forEach(control => {
+        const empresa = control.empresa;
+        controlesMap[empresa] = (controlesMap[empresa] || 0) + 1;
+      });
+      
+      setControlesPorEmpresa(controlesMap);
+      
+      if (showDebug) {
+        console.log("🔍 loadControlesPorEmpresa - Controles por empresa:", controlesMap);
+      }
+    } catch (error) {
+      console.warn('Error cargando controles por empresa:', error);
+    }
+  }
+
+  async function getControlesPorEmpresaPeriodo(empresa: string, periodo: string): Promise<number> {
+    try {
+      const allControls = await repoDexie.getAllSavedControls();
+      const controlesFiltrados = allControls.filter(control => 
+        control.empresa === empresa && control.periodo === periodo
+      );
+      
+      if (showDebug) {
+        console.log(`🔍 getControlesPorEmpresaPeriodo - Empresa: ${empresa}, Periodo: ${periodo}, Controles: ${controlesFiltrados.length}`);
+      }
+      
+      return controlesFiltrados.length;
+    } catch (error) {
+      console.warn('Error obteniendo controles por empresa/periodo:', error);
+      return 0;
+    }
+  }
+
   /* -------------------- subir PDFs + dedupe -------------------- */
 
   const handleFiles = useCallback(async (files: FileList, startIndex: number = 0): Promise<void> => {
@@ -492,20 +533,33 @@ useEffect(() => {
         const globalIndex = batchStart + batchIndex;
         const tid = toast.loading(`Procesando ${file.name} (${globalIndex + 1}/${TOTAL_FILES})`);
         
-        try {
-          const hash = await sha256OfFile(file);
+      try {
+        const hash = await sha256OfFile(file);
 
-          // dedupe por hash
-          if (await repoDexie.hasFileHash(hash)) {
-            skip++;
-            setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "skipped", reason: "duplicado" } : u)));
-            toast.dismiss(tid);
-            return { status: "skipped", reason: "duplicado" };
+        // dedupe por hash
+        if (await repoDexie.hasFileHash(hash)) {
+          if (showDebug) {
+            console.log(`⚠️ Archivo ${file.name} omitido por duplicado (hash ya existe)`);
           }
+          skip++;
+            setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "skipped", reason: "duplicado" } : u)));
+          toast.dismiss(tid);
+            return { status: "skipped", reason: "duplicado" };
+        }
 
-          // parsear PDF
+        // parsear PDF
           const res = await parsePdfReceiptToRecord(file, showDebug);
-          const parsed = (res?.data ?? {}) as Record<string, string>;
+        const parsed = (res?.data ?? {}) as Record<string, string>;
+          
+          // Debug: mostrar información del archivo procesado
+          if (showDebug) {
+            console.log(`🔍 Archivo ${file.name} procesado:`, {
+              GUARDAR: parsed.GUARDAR,
+              LEGAJO: parsed.LEGAJO,
+              PERIODO: parsed.PERIODO,
+              EMPRESA: parsed.EMPRESA
+            });
+          }
           
           // Verificar si el PDF debe guardarse
           if (parsed.GUARDAR === "false") {
@@ -518,64 +572,68 @@ useEffect(() => {
             return { status: "skipped", reason: "no guardar" };
           }
           
-          const legajo = String(parsed.LEGAJO ?? "").trim();
-          const periodo = String(parsed.PERIODO ?? "").trim();
-          if (!legajo || !periodo) throw new Error("No se pudo detectar LEGAJO o PERIODO");
+        const legajo = String(parsed.LEGAJO ?? "").trim();
+        const periodo = String(parsed.PERIODO ?? "").trim();
+        if (!legajo || !periodo) throw new Error("No se pudo detectar LEGAJO o PERIODO");
 
-          // nombre: PDF o Excel oficial (fallback)
-          const key = `${legajo}||${periodo}`;
-          let nombre = (parsed.NOMBRE ?? "").trim();
-          if (!nombre && officialNameByKey[key]) nombre = officialNameByKey[key];
+        // nombre: PDF o Excel oficial (fallback)
+        const key = `${legajo}||${periodo}`;
+        let nombre = (parsed.NOMBRE ?? "").trim();
+        if (!nombre && officialNameByKey[key]) nombre = officialNameByKey[key];
 
-          // subir archivo a /public/recibos
-          let uploadedName = file.name;
-          try {
-            const fd = new FormData();
-            fd.append("file", file, file.name);
-            fd.append("key", key);
-            const r = await fetch("/api/upload", { method: "POST", body: fd });
-            const raw: unknown = await r.json();
-            const j = parseUploadResponse(raw);
-            if (!r.ok) throw new Error(j.error || "Upload error");
-            uploadedName = j.name || uploadedName;
-          } catch (e: unknown) {
-            console.warn("upload falló:", errorMessage(e));
-            toast.warning("No se pudo guardar el PDF en el servidor", {
-              description: errorMessage(e),
-              id: tid,
-            });
-          }
-
-          const data: Record<string, string> = {
-            ARCHIVO: uploadedName,
-            LEGAJO: legajo,
-            PERIODO: periodo,
-            NOMBRE: nombre,
-            CUIL: parsed.CUIL ?? "",
-            ...parsed,
-          };
-
-          await repoDexie.addReceipt({
-            legajo,
-            periodo,
-            nombre,
-            cuil: data.CUIL,
-            data,
-            filename: uploadedName,
-            fileHash: hash,
+        // subir archivo a /public/recibos
+        let uploadedName = file.name;
+        try {
+          const fd = new FormData();
+          fd.append("file", file, file.name);
+          fd.append("key", key);
+          const r = await fetch("/api/upload", { method: "POST", body: fd });
+          const raw: unknown = await r.json();
+          const j = parseUploadResponse(raw);
+          if (!r.ok) throw new Error(j.error || "Upload error");
+          uploadedName = j.name || uploadedName;
+        } catch (e: unknown) {
+          console.warn("upload falló:", errorMessage(e));
+          toast.warning("No se pudo guardar el PDF en el servidor", {
+            description: errorMessage(e),
+            id: tid,
           });
+        }
 
-          ok++;
+        const data: Record<string, string> = {
+          ARCHIVO: uploadedName,
+          LEGAJO: legajo,
+          PERIODO: periodo,
+          NOMBRE: nombre,
+          CUIL: parsed.CUIL ?? "",
+          ...parsed,
+        };
+
+        await repoDexie.addReceipt({
+          legajo,
+          periodo,
+          nombre,
+          cuil: data.CUIL,
+          data,
+          filename: uploadedName,
+          fileHash: hash,
+        });
+
+        ok++;
           console.log(`✅ Archivo ${globalIndex + 1}/${TOTAL_FILES} procesado exitosamente: ${file.name}`);
           setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "ok" } : u)));
           setLastProcessedIndex(globalIndex);
-          toast.dismiss(tid);
+          
+          // Guardar último archivo procesado en localStorage (siempre, no solo en debug mode)
+          localStorage.setItem('lastProcessedFile', file.name);
+          
+        toast.dismiss(tid);
           return { status: "ok" };
-        } catch (err: unknown) {
-          fail++;
+      } catch (err: unknown) {
+        fail++;
           console.error(`❌ Error en archivo ${globalIndex + 1}/${TOTAL_FILES}: ${file.name}`, err);
           setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "error" } : u)));
-          toast.dismiss(tid);
+        toast.dismiss(tid);
           return { status: "error", error: err };
         }
       });
@@ -711,6 +769,11 @@ useEffect(() => {
     setProcessingFiles(null);
     setLastProcessedIndex(-1);
     
+    // Limpiar localStorage del último archivo procesado solo si no hubo errores
+    if (fail === 0) {
+      localStorage.removeItem('lastProcessedFile');
+    }
+    
     if (fileInputRef.current) fileInputRef.current.value = "";
     setTimeout(() => setUploads([]), 2000);
     await loadConsolidated();
@@ -793,35 +856,6 @@ useEffect(() => {
     }
   }
 
-  async function handleWipeAll(): Promise<void> {
-    try {
-      await repoDexie.wipe();
-      localStorage.removeItem(LS_KEY);
-      setConsolidated([]);
-      setTotalRows(0);
-      setControlSummaries([]);
-      setControlOKs([]);
-      setControlMissing([]);
-      setOfficialKeys([]);
-      setOpenDetail({});
-      setControlStats({ comps: 0, compOk: 0, compDif: 0, okReceipts: 0, difReceipts: 0 });
-      setOfficialNameByKey({});
-      setHasControlForCurrentFilters(false);
-
-      const resp = await fetch("/api/cleanup", { method: "POST" });
-      const raw: unknown = await resp.json();
-      const json = parseCleanupResponse(raw);
-      if (resp.ok && json.ok) {
-        toast.success(`Memoria borrada · ${json.deleted ?? 0} PDF(s) eliminados`);
-      } else {
-        toast.warning("Memoria borrada. No se pudo limpiar /recibos", {
-          description: json.error || "Revisá permisos del FS",
-        });
-      }
-    } catch (e: unknown) {
-      toast.error("No se pudo limpiar todo", { description: errorMessage(e) });
-    }
-  }
 
   /* ------------------ Excel oficial + Control ------------------ */
 
@@ -1027,11 +1061,11 @@ useEffect(() => {
     if (rows.length > 0) {
       // Si hay recibos consolidados, procesarlos normalmente
       pairs = await Promise.all(
-        rows.map(async (r: ConsolidatedEntity) => {
-          const ctl = await repoDexie.getControl(r.key);
+      rows.map(async (r: ConsolidatedEntity) => {
+        const ctl = await repoDexie.getControl(r.key);
           return { r, ctl: ctl || null };
-        }),
-      );
+      }),
+    );
     } else if (hasExcelData) {
       // Si no hay recibos pero sí hay datos del Excel, crear registros vacíos para procesar
       if (showDebug) {
@@ -1426,6 +1460,8 @@ useEffect(() => {
                     empresaFiltro={empresaFiltro}
                     onEmpresaFiltroChange={setEmpresaFiltro}
                     nombreFiltro={nombreFiltro}
+                    controlesPorEmpresa={controlesPorEmpresa}
+                    getControlesPorEmpresaPeriodo={getControlesPorEmpresaPeriodo}
                   />
                 </>
 
@@ -1595,12 +1631,13 @@ useEffect(() => {
             debugInfo={debugInfo}
             onDeleteVisible={handleDeleteVisible}
             onDeleteControl={handleDeleteControl}
-            onWipeAll={handleWipeAll}
             activeTab={activeTab}
             periodoFiltro={periodoFiltro}
             empresaFiltro={empresaFiltro}
             nombreFiltro={nombreFiltro}
             hasControlForCurrentFilters={hasControlForCurrentFilters}
+            processingFiles={processingFiles}
+            lastProcessedIndex={lastProcessedIndex}
           />
         )}
       </main>

@@ -258,6 +258,9 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   const cuotaAport = extraerConceptoSUMAR(rawText, "CUOTA APORT. SOLID. MUT.");
   const resguardoMutuo = extraerConceptoSUMAR(rawText, "RESG. MUTUAL FAM.");
   const descMutual = extraerConceptoSUMAR(rawText, "DESCUENTO MUTUAL");
+  const item5310 = extraerConceptoSUMAR(rawText, "CODIGO 5.3.10") || 
+                   extraerConceptoSUMAR(rawText, "5.3.10") ||
+                   extraerConceptoSUMAR(rawText, "ITEM 5.3.10");
 
   // Debug: mostrar los valores extraídos antes de toDotDecimal
   if (debug) console.log("🔍 Debug SUMAR - Valores extraídos:", {
@@ -265,7 +268,8 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     segSepelio,
     cuotaAport,
     resguardoMutuo,
-    descMutual
+    descMutual,
+    item5310
   });
 
   // Mapear a códigos estándar (corregido según la especificación)
@@ -274,6 +278,7 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   data["20595"] = toDotDecimal(cuotaAport);    // CUOTA MUTUAL (CUOTA APORT. SOLID. MUT.)
   data["20610"] = toDotDecimal(resguardoMutuo); // RESGUARDO MUTUAL (RESG. MUTUAL FAM.)
   data["20620"] = toDotDecimal(descMutual);    // DESC. MUTUAL (DESCUENTO MUTUAL)
+  data["5310"] = toDotDecimal(item5310);       // ITEM 5.3.10
 
   // Debug: mostrar los valores después de toDotDecimal
   if (debug) console.log("🔍 Debug SUMAR - Valores finales:", {
@@ -281,7 +286,8 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     "20590": data["20590"],
     "20595": data["20595"],
     "20610": data["20610"],
-    "20620": data["20620"]
+    "20620": data["20620"],
+    "5310": data["5310"]
   });
 
   const debugLines = allLines.slice(0, 150).map((line) => ({

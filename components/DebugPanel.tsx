@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Settings, Database, Info } from 'lucide-react';
+import { ChevronDown, ChevronUp, Settings, Database, Info, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 type DebugInfo = {
@@ -16,29 +16,50 @@ type Props = {
   debugInfo: DebugInfo;
   onDeleteVisible: () => void;
   onDeleteControl: () => void;
-  onWipeAll: () => void;
   activeTab: string;
   periodoFiltro: string;
   empresaFiltro: string;
   nombreFiltro: string;
   hasControlForCurrentFilters: boolean;
+  processingFiles: FileList | null;
+  lastProcessedIndex: number;
 };
 
 export function DebugPanel({ 
   debugInfo, 
   onDeleteVisible, 
   onDeleteControl, 
-  onWipeAll,
   activeTab,
   periodoFiltro,
   empresaFiltro,
   nombreFiltro,
-  hasControlForCurrentFilters
+  hasControlForCurrentFilters,
+  processingFiles,
+  lastProcessedIndex
 }: Props) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [lastProcessedFile, setLastProcessedFile] = useState<string | null>(null);
+
+  // Mantener información del último archivo procesado
+  React.useEffect(() => {
+    if (processingFiles && processingFiles.length > 0 && lastProcessedIndex >= 0) {
+      const fileName = processingFiles[lastProcessedIndex]?.name || 'archivo desconocido';
+      setLastProcessedFile(fileName);
+      // Guardar en localStorage para persistencia
+      localStorage.setItem('lastProcessedFile', fileName);
+    }
+  }, [processingFiles, lastProcessedIndex]);
+
+  // Cargar último archivo procesado desde localStorage al montar el componente
+  React.useEffect(() => {
+    const savedLastFile = localStorage.getItem('lastProcessedFile');
+    if (savedLastFile) {
+      setLastProcessedFile(savedLastFile);
+    }
+  }, []);
 
   return (
-    <div className="status-panel" style={{ bottom: '4rem', right: '1rem' }}>
+    <div className="status-panel" style={{ bottom: '8rem', right: '1rem' }}>
       {/* Header - siempre visible */}
       <div
         className="status-panel-header"
@@ -70,6 +91,87 @@ export function DebugPanel({
       {/* Contenido expandible */}
       {isExpanded && (
         <div className="border-t border-blue-500 px-4 py-3 max-h-56 overflow-y-auto">
+          {/* Información del último archivo procesado */}
+          {(processingFiles && processingFiles.length > 0) || lastProcessedFile ? (
+            <div className="mb-3">
+              <div className="flex items-center space-x-2 text-sm font-medium mb-2">
+                <FileText className="h-4 w-4" />
+                <span>Último archivo procesado</span>
+              </div>
+              <div className="space-y-1 text-sm">
+                {processingFiles && processingFiles.length > 0 ? (
+                  lastProcessedIndex >= 0 ? (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Progreso:</span>
+                        <span className="font-medium text-green-400">
+                          {lastProcessedIndex + 1}/{processingFiles.length}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Archivo actual:</span>
+                        <span 
+                          className="font-medium text-green-400 truncate max-w-32 cursor-help" 
+                          title={processingFiles[lastProcessedIndex]?.name}
+                        >
+                          {processingFiles[lastProcessedIndex]?.name}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Porcentaje:</span>
+                        <span className="font-medium text-green-400">
+                          {Math.round(((lastProcessedIndex + 1) / processingFiles.length) * 100)}%
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Archivos en cola:</span>
+                        <span className="font-medium text-blue-400">
+                          {processingFiles.length}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Primer archivo:</span>
+                        <span 
+                          className="font-medium text-blue-400 truncate max-w-32 cursor-help" 
+                          title={processingFiles[0]?.name}
+                        >
+                          {processingFiles[0]?.name}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Estado:</span>
+                        <span className="font-medium text-blue-400">
+                          Iniciando...
+                        </span>
+                      </div>
+                    </>
+                  )
+                ) : (
+                  <>
+                                          <div className="flex justify-between">
+                        <span>Último procesado:</span>
+                        <span 
+                          className="font-medium text-green-400 truncate max-w-32 cursor-help" 
+                          title={lastProcessedFile || ''}
+                        >
+                          {lastProcessedFile}
+                        </span>
+                      </div>
+                    <div className="flex justify-between">
+                      <span>Estado:</span>
+                      <span className="font-medium text-green-400">
+                        Completado
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : null}
+
           {/* Información de la base de datos */}
           <div className="mb-3">
             <div className="flex items-center space-x-2 text-sm font-medium mb-2">
@@ -130,6 +232,51 @@ export function DebugPanel({
             </div>
           </div>
 
+          {/* Información del último archivo procesado */}
+          {processingFiles && processingFiles.length > 0 && (
+            <div className="mb-3">
+              <div className="flex items-center space-x-2 text-sm font-medium mb-2">
+                <Info className="h-4 w-4" />
+                <span>Último archivo procesado</span>
+              </div>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span>Total archivos:</span>
+                  <span className="font-medium">{processingFiles.length}</span>
+                </div>
+                {lastProcessedIndex >= 0 ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Último procesado:</span>
+                      <span className="font-medium text-blue-200 truncate max-w-32" title={processingFiles[lastProcessedIndex]?.name}>
+                        {processingFiles[lastProcessedIndex]?.name}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Progreso:</span>
+                      <span className="font-medium">
+                        {lastProcessedIndex + 1} / {processingFiles.length}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Siguiente:</span>
+                      <span className="font-medium text-green-200 truncate max-w-32" title={processingFiles[lastProcessedIndex + 1]?.name}>
+                        {processingFiles[lastProcessedIndex + 1]?.name || 'Completado'}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex justify-between">
+                    <span>Primer archivo:</span>
+                    <span className="font-medium text-green-200 truncate max-w-32" title={processingFiles[0]?.name}>
+                      {processingFiles[0]?.name}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Acciones de debug */}
           <div>
             <div className="flex items-center space-x-2 text-sm font-medium mb-2">
@@ -145,14 +292,6 @@ export function DebugPanel({
                 disabled={activeTab === "control" && (!periodoFiltro && !empresaFiltro && !nombreFiltro || !hasControlForCurrentFilters)}
               >
                 {activeTab === "control" ? "Eliminar Control" : "Eliminar registros"}
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="w-full"
-                onClick={onWipeAll}
-              >
-                Limpiar todo
               </Button>
             </div>
           </div>

@@ -299,6 +299,8 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   const cuotaMutual = extraerConceptoLIME(rawText, "Cuota Mutual Ap.Solidar.");
   const resguardoMutuo = extraerConceptoLIME(rawText, "Resguardo Mutuo");
   const descMutual = extraerConceptoLIME(rawText, "Mutual 16 de Abril");
+  const item5310 = extraerConceptoLIME(rawText, "ITEM 5.3.10") || 
+                   extraerConceptoLIME(rawText, "5.3.10");
 
   // Debug: mostrar los valores extraídos antes de toDotDecimal
   if (debug) console.log("🔍 Debug LIME - Valores extraídos:", {
@@ -306,7 +308,8 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     gastosSepelio,
     cuotaMutual,
     resguardoMutuo,
-    descMutual
+    descMutual,
+    item5310
   });
 
   // Mapear a códigos estándar (usando los mismos que LIMPAR)
@@ -315,6 +318,7 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   data["20595"] = toDotDecimal(cuotaMutual);      // CUOTA MUTUAL
   data["20610"] = toDotDecimal(resguardoMutuo);   // RESGUARDO MUTUAL
   data["20620"] = toDotDecimal(descMutual);       // DESC. MUTUAL
+  data["5310"] = toDotDecimal(item5310);          // ITEM 5.3.10
 
   // Debug: mostrar los valores después de toDotDecimal
   if (debug) console.log("🔍 Debug LIME - Valores finales:", {
@@ -322,7 +326,8 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     "20590": data["20590"],
     "20595": data["20595"],
     "20610": data["20610"],
-    "20620": data["20620"]
+    "20620": data["20620"],
+    "5310": data["5310"]
   });
 
   const debugLines = allLines.slice(0, 150).map((line) => ({
