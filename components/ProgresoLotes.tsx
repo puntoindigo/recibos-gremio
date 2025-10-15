@@ -1,7 +1,5 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import { CheckCircle, Clock, AlertCircle, Loader2 } from 'lucide-react';
 import { LoteInfo } from '@/lib/pdf-splitter';
 
@@ -81,7 +79,12 @@ export function ProgresoLotes({
             <span>Progreso total</span>
             <span>{recibosProcesados}/{totalRecibos} recibos ({porcentajeTotal.toFixed(1)}%)</span>
           </div>
-          <Progress value={porcentajeTotal} className="h-2" />
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+              style={{ width: `${Math.min(100, porcentajeTotal)}%` }}
+            />
+          </div>
         </div>
 
         {/* Progreso por lotes */}
@@ -90,26 +93,31 @@ export function ProgresoLotes({
             <span>Progreso por lotes</span>
             <span>{lotesCompletados}/{lotes.length} lotes ({porcentajeLotes.toFixed(1)}%)</span>
           </div>
-          <Progress value={porcentajeLotes} className="h-2" />
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+            <div 
+              className="bg-green-600 h-2 rounded-full transition-all duration-300" 
+              style={{ width: `${Math.min(100, porcentajeLotes)}%` }}
+            />
+          </div>
         </div>
 
         {/* Resumen de estados */}
         <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="text-xs">
+          <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded border border-green-200">
             ✅ {lotesCompletados} completados
-          </Badge>
-          <Badge variant="outline" className="text-xs">
+          </span>
+          <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded border border-blue-200">
             🔄 {lotesProcesando} procesando
-          </Badge>
+          </span>
           {lotesPendientes > 0 && (
-            <Badge variant="outline" className="text-xs">
+            <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded border border-gray-200">
               ⏳ {lotesPendientes} pendientes
-            </Badge>
+            </span>
           )}
           {lotesConError > 0 && (
-            <Badge variant="outline" className="text-xs">
+            <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded border border-red-200">
               ❌ {lotesConError} errores
-            </Badge>
+            </span>
           )}
         </div>
 
@@ -122,9 +130,9 @@ export function ProgresoLotes({
                 <span className="font-medium">Lote {lote.id}/{lote.total}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className={`text-xs ${getEstadoColor(lote.estado)}`}>
+                <span className={`px-2 py-1 text-xs rounded border ${getEstadoColor(lote.estado)}`}>
                   {lote.estado}
-                </Badge>
+                </span>
                 <span className="text-muted-foreground">
                   {lote.recibosProcesados}/{lote.recibosTotal}
                 </span>
