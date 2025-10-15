@@ -1608,14 +1608,17 @@ useEffect(() => {
         }}
       />
       {/* botón visible para abrir el selector */}
-              <Button className="fixed bottom-6 right-6 shadow-lg" onClick={() => fileInputRef.current?.click()}>
-          <FileUp className="mr-2 h-4 w-4" /> Subir PDFs
-        </Button>
+      <Button 
+        className="fixed bottom-6 right-6 shadow-lg z-50 bg-blue-600 hover:bg-blue-700 text-white" 
+        onClick={() => fileInputRef.current?.click()}
+      >
+        <FileUp className="mr-2 h-4 w-4" /> Subir PDFs
+      </Button>
         
         {/* Botón para continuar procesamiento */}
         {processingFiles && lastProcessedIndex >= 0 && (
           <Button 
-            className="fixed bottom-6 right-32 shadow-lg bg-orange-600 hover:bg-orange-700" 
+            className="fixed bottom-6 right-32 shadow-lg z-50 bg-orange-600 hover:bg-orange-700 text-white" 
             onClick={() => handleFiles(processingFiles, lastProcessedIndex + 1)}
           >
             <FileUp className="mr-2 h-4 w-4" /> Continuar ({lastProcessedIndex + 1})
