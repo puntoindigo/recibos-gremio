@@ -464,19 +464,32 @@ export async function processPdfByTextSplit(pdfFile: File): Promise<SplitPdfResu
     // Cargar el PDF
     console.log(`🔍 Cargando PDF...`);
     const arrayBuffer = await pdfFile.arrayBuffer();
-    const pdfDoc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+    console.log(`📄 ArrayBuffer creado: ${arrayBuffer.byteLength} bytes`);
     
-    console.log(`📄 PDF cargado: ${pdfDoc.numPages} páginas reales`);
+    let pdfDoc;
+    try {
+      pdfDoc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+      console.log(`📄 PDF cargado: ${pdfDoc.numPages} páginas reales`);
+    } catch (pdfError) {
+      console.error(`❌ Error cargando PDF:`, pdfError);
+      throw pdfError;
+    }
     
     // Extraer texto de todas las páginas
     console.log(`🔍 Extrayendo texto de todas las páginas...`);
     let fullText = '';
     for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
-      const page = await pdfDoc.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items.map((item: any) => item.str).join(' ');
-      fullText += pageText + '\n';
-      console.log(`📄 Página ${pageNum}: ${pageText.length} caracteres`);
+      try {
+        console.log(`🔍 Procesando página ${pageNum}...`);
+        const page = await pdfDoc.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item: any) => item.str).join(' ');
+        fullText += pageText + '\n';
+        console.log(`📄 Página ${pageNum}: ${pageText.length} caracteres`);
+      } catch (pageError) {
+        console.error(`❌ Error procesando página ${pageNum}:`, pageError);
+        throw pageError;
+      }
     }
     
     console.log(`📄 Texto completo extraído: ${fullText.length} caracteres`);
