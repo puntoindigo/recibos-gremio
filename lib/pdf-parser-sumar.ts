@@ -103,7 +103,9 @@ function toDotDecimal(raw: string): string {
 export async function parsePdfReceiptToRecord(file: File, debug: boolean = false): Promise<Parsed> {
   assertClient();
 
-  // Verificar si el archivo tiene metadata de página (split real)
+  // Verificar si el archivo tiene metadata de recibo (división por texto)
+  const receiptText = (file as any).receiptText;
+  const receiptNumber = (file as any).receiptNumber;
   const pageText = (file as any).pageText;
   const pageNumber = (file as any).pageNumber;
   
@@ -111,8 +113,25 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   let allLines: Word[][] = [];
   let allWords: Word[] = [];
   
-  if (pageText && pageNumber) {
-    // Usar el texto extraído de la página específica
+  if (receiptText && receiptNumber) {
+    // Usar el texto extraído del recibo específico
+    texto = receiptText;
+    
+    if (debug) {
+      console.log(`🔍 Debug SUMAR - Usando texto de recibo específico:`, {
+        filename: file.name,
+        receiptNumber: receiptNumber,
+        textoLength: texto.length,
+        primerasLineas: texto.substring(0, 200) + "..."
+      });
+    }
+    
+    // Simular estructura de líneas para compatibilidad
+    const lines = texto.split('\n');
+    allLines = lines.map(line => [{ str: line, x: 0, y: 0 }]);
+    allWords = texto.split(' ').map(word => ({ str: word, x: 0, y: 0 }));
+  } else if (pageText && pageNumber) {
+    // Usar el texto extraído de la página específica (método anterior)
     texto = pageText;
     
     if (debug) {

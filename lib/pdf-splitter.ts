@@ -382,17 +382,17 @@ export async function procesarLoteEnPaginas(lote: LoteInfo): Promise<File[]> {
     
     const paginas: File[] = [];
     
-    // Intentar split real del PDF
+    // Intentar división por texto del PDF
     try {
-      console.log(`🔍 Intentando split real del PDF para ${lote.recibosTotal} páginas...`);
-      const splitResult = await splitPdfByPages(lote.archivo);
+      console.log(`🔍 Intentando división por texto del PDF...`);
+      const splitResult = await processPdfByTextSplit(lote.archivo);
       
       if (splitResult.pages && splitResult.pages.length > 0) {
-        console.log(`✅ Split real exitoso: ${splitResult.pages.length} páginas reales creadas`);
+        console.log(`✅ División por texto exitosa: ${splitResult.pages.length} recibos creados`);
         return splitResult.pages;
       }
     } catch (error) {
-      console.warn(`⚠️ Split real falló, usando simulación:`, error);
+      console.warn(`⚠️ División por texto falló, usando simulación:`, error);
     }
     
     // Fallback: crear archivos simulados para cada página del lote
@@ -443,5 +443,91 @@ export async function processPdfForSplit(pdfFile: File, forceSplit: boolean = fa
     console.error('Error al procesar PDF:', error);
     // En caso de error, devolver el archivo original
     return [pdfFile];
+  }
+}
+
+// Nueva función: procesar PDF completo y dividir por texto
+export async function processPdfByTextSplit(pdfFile: File): Promise<SplitPdfResult> {
+  console.log(`🔍 Iniciando procesamiento por división de texto: "${pdfFile.name}"`);
+  
+  try {
+    // Cargar PDF.js
+    const pdfjs = await loadPdfJs();
+    if (!pdfjs) {
+      throw new Error('PDF.js no disponible');
+    }
+    
+    // Cargar el PDF
+    const arrayBuffer = await pdfFile.arrayBuffer();
+    const pdfDoc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+    
+    console.log(`📄 PDF cargado: ${pdfDoc.numPages} páginas reales`);
+    
+    // Extraer texto de todas las páginas
+    let fullText = '';
+    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+      const page = await pdfDoc.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map((item: any) => item.str).join(' ');
+      fullText += pageText + '\n';
+    }
+    
+    console.log(`📄 Texto completo extraído: ${fullText.length} caracteres`);
+    
+    // Dividir por patrones de recibos (buscar "Legajo" como separador)
+    const receiptPatterns = [
+      /Legajo\s+\d+/gi,  // Patrón principal: "Legajo 00114"
+      /Legajo\s*:\s*\d+/gi,  // Patrón alternativo: "Legajo: 00114"
+    ];
+    
+    let receiptTexts: string[] = [];
+    
+    // Intentar dividir por cada patrón
+    for (const pattern of receiptPatterns) {
+      const matches = [...fullText.matchAll(pattern)];
+      if (matches.length > 1) {
+        console.log(`📄 Encontrados ${matches.length} recibos con patrón: ${pattern}`);
+        
+        // Dividir el texto en recibos individuales
+        for (let i = 0; i < matches.length; i++) {
+          const start = matches[i].index!;
+          const end = i < matches.length - 1 ? matches[i + 1].index! : fullText.length;
+          const receiptText = fullText.substring(start, end).trim();
+          
+          if (receiptText.length > 100) { // Solo incluir recibos con contenido suficiente
+            receiptTexts.push(receiptText);
+          }
+        }
+        break;
+      }
+    }
+    
+    // Si no se encontraron patrones, usar el texto completo
+    if (receiptTexts.length === 0) {
+      console.log(`⚠️ No se encontraron patrones de recibos, usando texto completo`);
+      receiptTexts = [fullText];
+    }
+    
+    console.log(`📄 Dividido en ${receiptTexts.length} recibos individuales`);
+    
+    // Crear archivos simulados para cada recibo
+    const pages: File[] = [];
+    for (let i = 0; i < receiptTexts.length; i++) {
+      const pageName = pdfFile.name.replace('.pdf', `_recibo${i + 1}.pdf`);
+      const pageFile = new File([pdfFile], pageName, { type: 'application/pdf' });
+      
+      // Agregar metadata del texto del recibo
+      (pageFile as any).receiptText = receiptTexts[i];
+      (pageFile as any).receiptNumber = i + 1;
+      
+      pages.push(pageFile);
+    }
+    
+    return { pages, totalPages: receiptTexts.length };
+    
+  } catch (error) {
+    console.error(`❌ Error en processPdfByTextSplit:`, error);
+    // Fallback: usar el método original
+    return await splitPdfByPages(pdfFile);
   }
 }

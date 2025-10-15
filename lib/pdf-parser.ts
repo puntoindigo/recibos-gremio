@@ -50,7 +50,9 @@ function detectarEmpresa(texto: string): string {
 // Función principal que detecta la empresa y usa el parser correspondiente
 export async function parsePdfReceiptToRecord(file: File, debug: boolean = false): Promise<Parsed> {
   try {
-    // Verificar si el archivo tiene metadata de página (split real)
+    // Verificar si el archivo tiene metadata de recibo (división por texto)
+    const receiptText = (file as any).receiptText;
+    const receiptNumber = (file as any).receiptNumber;
     const pageText = (file as any).pageText;
     const pageNumber = (file as any).pageNumber;
     
@@ -58,8 +60,30 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     let textoCompleto;
     let primerasLineas;
     
-    if (pageText && pageNumber) {
-      // Usar el texto extraído de la página específica
+    if (receiptText && receiptNumber) {
+      // Usar el texto extraído del recibo específico
+      textoCompleto = receiptText;
+      primerasLineas = receiptText.substring(0, 1000); // Primeras líneas del recibo
+      
+      // Crear un resultado genérico simulado
+      resultadoGenerico = {
+        data: {
+          "TEXTO_COMPLETO": textoCompleto,
+          "PRIMERAS_LINEAS": primerasLineas
+        },
+        debugLines: []
+      };
+      
+      if (debug) {
+        console.log(`🔍 Debug PDF Parser - Usando texto de recibo específico:`, {
+          filename: file.name,
+          receiptNumber: receiptNumber,
+          textoCompletoLength: textoCompleto.length,
+          primerasLineasLength: primerasLineas.length
+        });
+      }
+    } else if (pageText && pageNumber) {
+      // Usar el texto extraído de la página específica (método anterior)
       textoCompleto = pageText;
       primerasLineas = pageText.substring(0, 1000); // Primeras líneas de la página
       
