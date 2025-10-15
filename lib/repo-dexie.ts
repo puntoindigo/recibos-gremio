@@ -18,6 +18,7 @@ type AddReceiptInput = {
   data: Record<string, string>;
   filename: string;
   fileHash: string;
+  uniqueKey?: string; // Clave única para páginas divididas
 };
 
 function mergeSummingCodes(
@@ -58,7 +59,8 @@ export const repoDexie = {
     input: AddReceiptInput
   ): Promise<"skipped-duplicate" | "added" | "merged"> {
     const empresa = (input.data?.EMPRESA as string | undefined) || 'LIMPAR';
-    const key = makeKey(input.legajo, input.periodo, empresa);
+    // Usar uniqueKey si está disponible (para páginas divididas), sino usar la clave normal
+    const key = input.uniqueKey || makeKey(input.legajo, input.periodo, empresa);
     let result: "skipped-duplicate" | "added" | "merged" = "added";
 
     await db.transaction("rw", db.receipts, db.consolidated, async () => {

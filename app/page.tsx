@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useDraggable } from "@/hooks/useDraggable";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,8 @@ import ReceiptsFilters from "@/components/ReceiptsFilters";
 import { UnifiedStatusPanel } from "@/components/UnifiedStatusPanel";
 import { DebugPanel } from "@/components/DebugPanel";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { DescuentosPanel } from "@/components/DescuentosPanel";
+// import { PdfSplitDialog } from "@/components/PdfSplitDialog"; // Eliminado - split desactivado
 
 type UploadItem = { 
   name: string; 
@@ -128,6 +131,18 @@ export default function Page() {
   const [processingFiles, setProcessingFiles] = useState<FileList | null>(null);
   const [lastProcessedIndex, setLastProcessedIndex] = useState<number>(-1);
   const [hasControlForCurrentFilters, setHasControlForCurrentFilters] = useState<boolean>(false);
+  
+  // Hooks para elementos arrastrables
+  const getUploadButtonPosition = useCallback(() => {
+    if (typeof window === 'undefined') return { x: 0, y: 0 };
+    return {
+      x: window.innerWidth - 120,
+      y: window.innerHeight - 80
+    };
+  }, []);
+  
+  const uploadButtonDrag = useDraggable(getUploadButtonPosition);
+  
   const [debugInfo, setDebugInfo] = useState({
     totalRows: 0,
     consolidatedCount: 0,
@@ -155,6 +170,9 @@ export default function Page() {
   const [controlsRefreshKey, setControlsRefreshKey] = useState(0); // Para forzar actualización de controles guardados
   const [selectedControl, setSelectedControl] = useState<SavedControlDB | null>(null); // Control seleccionado para ver detalles
   const [controlesPorEmpresa, setControlesPorEmpresa] = useState<Record<string, number>>({});
+  
+  // Estado para el diálogo de split de PDF
+  // Split desactivado - estado eliminado
   
   // Función para cargar detalles de un control guardado
   const handleViewDetails = (control: SavedControlDB) => {
@@ -519,7 +537,7 @@ useEffect(() => {
       fail = 0;
 
     // Procesar archivos en lotes con concurrencia controlada
-    const BATCH_SIZE = 10; // Procesar 10 archivos en paralelo
+    const BATCH_SIZE = 200; // Procesar máximo 200 archivos por lote para evitar timeout
     const TOTAL_FILES = arr.length;
     
     for (let batchStart = startIndex; batchStart < TOTAL_FILES; batchStart += BATCH_SIZE) {
@@ -536,16 +554,20 @@ useEffect(() => {
       try {
         const hash = await sha256OfFile(file);
 
-        // dedupe por hash
-        if (await repoDexie.hasFileHash(hash)) {
+        // dedupe por hash (solo para archivos no divididos)
+        // PROTECCIÓN: No sobrescribir datos ya guardados en producción
+        if (!file.name.includes('_pagina') && await repoDexie.hasFileHash(hash)) {
           if (showDebug) {
-            console.log(`⚠️ Archivo ${file.name} omitido por duplicado (hash ya existe)`);
+            console.log(`⚠️ Archivo ${file.name} omitido por duplicado (hash ya existe) - DATOS PROTEGIDOS`);
           }
           skip++;
-            setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "skipped", reason: "duplicado" } : u)));
+            setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "skipped", reason: "duplicado (datos protegidos)" } : u)));
           toast.dismiss(tid);
-            return { status: "skipped", reason: "duplicado" };
+            return { status: "skipped", reason: "duplicado (datos protegidos)" };
         }
+
+            // Split automático desactivado - procesar como archivo único
+            console.log(`📄 Procesando ${file.name} como archivo único (split desactivado)`);
 
         // parsear PDF
           const res = await parsePdfReceiptToRecord(file, showDebug);
@@ -580,6 +602,10 @@ useEffect(() => {
         const key = `${legajo}||${periodo}`;
         let nombre = (parsed.NOMBRE ?? "").trim();
         if (!nombre && officialNameByKey[key]) nombre = officialNameByKey[key];
+        
+        // Para páginas divididas, usar el nombre del archivo como identificador único
+        const isDividedPage = file.name.includes('_pagina');
+        const uniqueKey = isDividedPage ? `${legajo}||${periodo}||${file.name}` : key;
 
         // subir archivo a /public/recibos
         let uploadedName = file.name;
@@ -617,6 +643,7 @@ useEffect(() => {
           data,
           filename: uploadedName,
           fileHash: hash,
+          uniqueKey: isDividedPage ? uniqueKey : undefined, // Pasar clave única para páginas divididas
         });
 
         ok++;
@@ -645,6 +672,14 @@ useEffect(() => {
       } catch (error) {
         console.error(`❌ Error en lote ${Math.floor(batchStart / BATCH_SIZE) + 1}:`, error);
         
+        // Si hay un error 500 o timeout, detener el procesamiento y mostrar botón de continuar
+        if (error instanceof Error && (error.message.includes('500') || error.message.includes('timeout'))) {
+          console.log(`🛑 Error 500/timeout detectado. Deteniendo procesamiento en archivo ${batchStart + 1}`);
+          setLastProcessedIndex(batchStart - 1); // Marcar el último archivo procesado exitosamente
+          toast.error(`Error de servidor en archivo ${batchStart + 1}. Usa el botón "Continuar" para reanudar.`);
+          return; // Salir sin limpiar processingFiles para permitir continuar
+        }
+        
         // Reintentar el lote con procesamiento secuencial como fallback
         console.log(`🔄 Reintentando lote ${Math.floor(batchStart / BATCH_SIZE) + 1} en modo secuencial...`);
         
@@ -658,7 +693,7 @@ useEffect(() => {
             // Procesar archivo individualmente
             const hash = await sha256OfFile(file);
             
-            if (await repoDexie.hasFileHash(hash)) {
+            if (!file.name.includes('_pagina') && await repoDexie.hasFileHash(hash)) {
               skip++;
               setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "skipped", reason: "duplicado" } : u)));
               toast.dismiss(tid);
@@ -691,6 +726,10 @@ useEffect(() => {
             const key = `${legajo}||${periodo}`;
             let nombre = (parsed.NOMBRE ?? "").trim();
             if (!nombre && officialNameByKey[key]) nombre = officialNameByKey[key];
+            
+            // Para páginas divididas, usar el nombre del archivo como identificador único
+            const isDividedPage = file.name.includes('_pagina');
+            const uniqueKey = isDividedPage ? `${legajo}||${periodo}||${file.name}` : key;
             
             let uploadedName = file.name;
             try {
@@ -727,6 +766,7 @@ useEffect(() => {
               data,
               filename: uploadedName,
               fileHash: hash,
+              uniqueKey: isDividedPage ? uniqueKey : undefined, // Pasar clave única para páginas divididas
             });
             
             ok++;
@@ -765,7 +805,7 @@ useEffect(() => {
 
     console.log(`🎉 Procesamiento completado: ${ok} ok, ${skip} omitidos, ${fail} errores`);
     
-    // Limpiar estado de procesamiento
+    // Limpiar estado de procesamiento solo si terminó completamente
     setProcessingFiles(null);
     setLastProcessedIndex(-1);
     
@@ -780,6 +820,8 @@ useEffect(() => {
   }, [officialNameByKey]);
 
   /* --------------------- utilitarios UI --------------------- */
+
+  // Funciones de split eliminadas - funcionalidad desactivada
 
   async function handleRefresh(): Promise<void> {
     try {
@@ -1411,10 +1453,11 @@ useEffect(() => {
           }
         }
       }}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="agregado">Recibos</TabsTrigger>
           <TabsTrigger value="control">Control</TabsTrigger>
           <TabsTrigger value="export">Exportación</TabsTrigger>
+          <TabsTrigger value="descuentos">Descuentos</TabsTrigger>
         </TabsList>
 
         {/* RECIBOS */}
@@ -1594,6 +1637,11 @@ useEffect(() => {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* DESCUENTOS */}
+        <TabsContent value="descuentos" className="mt-4">
+          <DescuentosPanel showDebug={showDebug} consolidatedData={consolidated} />
+        </TabsContent>
       </Tabs>
 
       {/* input oculto para usar handleFiles */}
@@ -1607,22 +1655,84 @@ useEffect(() => {
           if (e.target.files) void handleFiles(e.target.files);
         }}
       />
-      {/* botón visible para abrir el selector */}
-      <Button 
-        className="fixed bottom-6 right-6 shadow-lg z-50 bg-blue-600 hover:bg-blue-700 text-white" 
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <FileUp className="mr-2 h-4 w-4" /> Subir PDFs
-      </Button>
+      {/* Área de drag & drop para subir PDFs */}
+      <div className="fixed bottom-4 right-4 z-50">
+        <div
+          className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg shadow-lg cursor-pointer border-2 border-dashed border-blue-400 hover:border-blue-300 transition-colors min-w-[200px]"
+          onClick={() => {
+            console.log("🖱️ Área de subida clickeada");
+            console.log("📁 fileInputRef.current:", fileInputRef.current);
+            fileInputRef.current?.click();
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.classList.add('bg-blue-500', 'border-blue-200');
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.classList.remove('bg-blue-500', 'border-blue-200');
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.classList.remove('bg-blue-500', 'border-blue-200');
+            
+            console.log("📁 Archivos soltados:", e.dataTransfer.files);
+            if (e.dataTransfer.files.length > 0) {
+              void handleFiles(e.dataTransfer.files);
+            }
+          }}
+        >
+          <div className="flex flex-col items-center space-y-2">
+            <FileUp className="h-8 w-8" />
+            <div className="text-center">
+              <div className="font-medium">Subir PDFs</div>
+              <div className="text-xs text-blue-200">Click o arrastra archivos aquí</div>
+            </div>
+          </div>
+        </div>
+      </div>
         
-        {/* Botón para continuar procesamiento */}
-        {processingFiles && lastProcessedIndex >= 0 && (
-          <Button 
-            className="fixed bottom-6 right-32 shadow-lg z-50 bg-orange-600 hover:bg-orange-700 text-white" 
-            onClick={() => handleFiles(processingFiles, lastProcessedIndex + 1)}
-          >
-            <FileUp className="mr-2 h-4 w-4" /> Continuar ({lastProcessedIndex + 1})
-          </Button>
+        {/* Barra de progreso y botón para continuar procesamiento */}
+        {processingFiles && (
+          <div className="fixed bottom-6 right-32 shadow-lg z-50 bg-white dark:bg-gray-800 border rounded-lg p-3 min-w-[300px]">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">Procesando archivos</span>
+              <span className="text-xs text-muted-foreground">
+                {lastProcessedIndex + 1} / {processingFiles.length}
+              </span>
+            </div>
+            
+            {/* Barra de progreso */}
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                style={{ 
+                  width: `${Math.min(100, ((lastProcessedIndex + 1) / processingFiles.length) * 100)}%` 
+                }}
+              />
+            </div>
+            
+            {/* Botón continuar */}
+            {lastProcessedIndex >= 0 && lastProcessedIndex < processingFiles.length - 1 && (
+              <Button 
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white text-sm" 
+                onClick={() => handleFiles(processingFiles, lastProcessedIndex + 1)}
+              >
+                <FileUp className="mr-2 h-4 w-4" /> 
+                Continuar desde {lastProcessedIndex + 2}
+              </Button>
+            )}
+            
+            {/* Mensaje de completado */}
+            {lastProcessedIndex >= processingFiles.length - 1 && (
+              <div className="text-center text-sm text-green-600 dark:text-green-400">
+                ✅ Procesamiento completado
+              </div>
+            )}
+          </div>
         )}
       
               {/* Panel unificado de estado */}
@@ -1643,6 +1753,8 @@ useEffect(() => {
             lastProcessedIndex={lastProcessedIndex}
           />
         )}
+        
+        {/* Diálogo de split de PDF eliminado - funcionalidad desactivada */}
       </main>
     );
 }

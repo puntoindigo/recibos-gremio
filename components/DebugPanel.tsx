@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Settings, Database, Info, FileText } from 'lucide-react';
+import { ChevronDown, ChevronUp, Settings, Database, Info, FileText, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useDraggable } from '@/hooks/useDraggable';
 
 type DebugInfo = {
   totalRows: number;
@@ -39,6 +40,17 @@ export function DebugPanel({
 }: Props) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [lastProcessedFile, setLastProcessedFile] = useState<string | null>(null);
+  
+  // Hook para hacer el panel arrastrable
+  const getDebugPanelPosition = React.useCallback(() => {
+    if (typeof window === 'undefined') return { x: 0, y: 0 };
+    return {
+      x: window.innerWidth - 300,
+      y: window.innerHeight - 200
+    };
+  }, []);
+  
+  const drag = useDraggable(getDebugPanelPosition);
 
   // Mantener información del último archivo procesado
   React.useEffect(() => {
@@ -58,15 +70,42 @@ export function DebugPanel({
     }
   }, []);
 
+  if (!drag.isClient) {
+    return null;
+  }
+
   return (
-    <div className="status-panel" style={{ bottom: '8rem', right: '1rem' }}>
-      {/* Header - siempre visible */}
+    <div 
+      ref={drag.elementRef}
+      className="status-panel" 
+      style={{ 
+        position: 'fixed',
+        left: drag.position.x,
+        top: drag.position.y,
+        cursor: drag.isDragging ? 'grabbing' : 'grab',
+      }}
+    >
+      {/* Header - siempre visible - ARRASTRABLE */}
       <div
-        className="status-panel-header"
-        onClick={() => setIsExpanded(!isExpanded)}
+        className="status-panel-header select-none"
+        onMouseDown={(e) => {
+          // Solo arrastrar si se hace clic en el área del título, no en los iconos
+          const target = e.target as HTMLElement;
+          if (target.closest('.drag-handle') || target.classList.contains('drag-handle')) {
+            drag.handleMouseDown(e);
+          }
+        }}
+        onClick={(e) => {
+          // Solo expandir/contraer si no estamos arrastrando y no se hizo clic en el área de arrastre
+          const target = e.target as HTMLElement;
+          if (!drag.isDragging && !target.closest('.drag-handle')) {
+            setIsExpanded(!isExpanded);
+          }
+        }}
       >
-        {/* Indicador de estado principal */}
-        <div className="flex items-center space-x-2">
+        {/* Indicador de estado principal - ÁREA DE ARRASTRE */}
+        <div className="flex items-center space-x-2 drag-handle">
+          <GripVertical className="w-3 h-3 text-blue-200" />
           <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
           <span className="text-sm font-medium">Debug</span>
         </div>
