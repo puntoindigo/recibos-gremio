@@ -556,38 +556,42 @@ useEffect(() => {
           // Dividir lote en páginas individuales
           const paginas = await procesarLoteEnPaginas(lote);
           
-          // Procesar cada página como recibo individual
-          const { parsePdfReceiptToRecord } = await import("@/lib/pdf-parser");
-          
-          for (const pagina of paginas) {
-            try {
-              const res = await parsePdfReceiptToRecord(pagina, showDebug);
-              const parsed = (res?.data ?? {}) as Record<string, string>;
-              
-              if (parsed.GUARDAR === "false") {
-                console.log(`⚠️ Página ${pagina.name} marcada como NO GUARDAR`);
-                continue;
-              }
-              
-              const legajo = String(parsed.LEGAJO ?? "").trim();
-              const periodo = String(parsed.PERIODO ?? "").trim();
-              
-              if (!legajo || !periodo) {
-                console.warn(`⚠️ Página ${pagina.name} sin LEGAJO o PERIODO`);
-                continue;
-              }
-              
-              // Usar uniqueKey para páginas divididas
-              const uniqueKey = `${legajo}||${periodo}||${pagina.name}`;
-              
-              // Guardar en base de datos
-              await repoDexie.addReceipt({
-                legajo,
-                periodo,
-                data: parsed,
-                archivo: pagina.name,
-                uniqueKey
-              });
+                    // Procesar cada página como recibo individual
+                    const { parsePdfReceiptToRecord } = await import("@/lib/pdf-parser");
+                    
+                    for (const pagina of paginas) {
+                      try {
+                        const res = await parsePdfReceiptToRecord(pagina, showDebug);
+                        const parsed = (res?.data ?? {}) as Record<string, string>;
+                        
+                        if (parsed.GUARDAR === "false") {
+                          console.log(`⚠️ Página ${pagina.name} marcada como NO GUARDAR`);
+                          continue;
+                        }
+                        
+                        const legajo = String(parsed.LEGAJO ?? "").trim();
+                        const periodo = String(parsed.PERIODO ?? "").trim();
+                        
+                        if (!legajo || !periodo) {
+                          console.warn(`⚠️ Página ${pagina.name} sin LEGAJO o PERIODO`);
+                          continue;
+                        }
+                        
+                        // Generar hash único para la página simulada
+                        const hashPagina = await sha256OfFile(pagina);
+                        
+                        // Usar uniqueKey para páginas divididas
+                        const uniqueKey = `${legajo}||${periodo}||${pagina.name}`;
+                        
+                        // Guardar en base de datos
+                        await repoDexie.addReceipt({
+                          legajo,
+                          periodo,
+                          data: parsed,
+                          archivo: pagina.name,
+                          uniqueKey,
+                          fileHash: hashPagina
+                        });
               
               // Actualizar progreso
               setRecibosProcesados(prev => prev + 1);
