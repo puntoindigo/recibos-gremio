@@ -326,14 +326,28 @@ export async function procesarLoteEnPaginas(lote: LoteInfo): Promise<File[]> {
     
     const paginas: File[] = [];
     
-    // Crear archivos simulados para cada página del lote
+    // Intentar split real del PDF
+    try {
+      console.log(`🔍 Intentando split real del PDF para ${lote.recibosTotal} páginas...`);
+      const splitResult = await splitPdfByPages(lote.archivo);
+      
+      if (splitResult.pages && splitResult.pages.length > 0) {
+        console.log(`✅ Split real exitoso: ${splitResult.pages.length} páginas reales creadas`);
+        return splitResult.pages;
+      }
+    } catch (error) {
+      console.warn(`⚠️ Split real falló, usando simulación:`, error);
+    }
+    
+    // Fallback: crear archivos simulados para cada página del lote
+    console.log(`🔄 Usando simulación de páginas (fallback)...`);
     for (let i = 1; i <= lote.recibosTotal; i++) {
       const nombrePagina = lote.archivo.name.replace('.pdf', `_pagina${i}.pdf`);
       const paginaFile = new File([lote.archivo], nombrePagina, { type: 'application/pdf' });
       paginas.push(paginaFile);
     }
     
-    console.log(`✅ Lote ${lote.id}/${lote.total} procesado: ${paginas.length} páginas creadas`);
+    console.log(`✅ Lote ${lote.id}/${lote.total} procesado: ${paginas.length} páginas creadas (simuladas)`);
     return paginas;
     
   } catch (error) {
