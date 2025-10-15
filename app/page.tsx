@@ -571,6 +571,9 @@ useEffect(() => {
                         
                         const legajo = String(parsed.LEGAJO ?? "").trim();
                         const periodo = String(parsed.PERIODO ?? "").trim();
+                        const nombre = String(parsed.NOMBRE ?? "").trim();
+                        
+                        console.log(`📄 Página ${pagina.name}: LEGAJO=${legajo}, PERIODO=${periodo}, NOMBRE=${nombre}`);
                         
                         if (!legajo || !periodo) {
                           console.warn(`⚠️ Página ${pagina.name} sin LEGAJO o PERIODO`);
