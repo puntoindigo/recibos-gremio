@@ -390,6 +390,8 @@ export async function procesarLoteEnPaginas(lote: LoteInfo): Promise<File[]> {
       if (splitResult.pages && splitResult.pages.length > 0) {
         console.log(`✅ División por texto exitosa: ${splitResult.pages.length} recibos creados`);
         return splitResult.pages;
+      } else {
+        console.warn(`⚠️ División por texto no devolvió páginas, usando simulación`);
       }
     } catch (error) {
       console.warn(`⚠️ División por texto falló, usando simulación:`, error);
@@ -452,27 +454,33 @@ export async function processPdfByTextSplit(pdfFile: File): Promise<SplitPdfResu
   
   try {
     // Cargar PDF.js
+    console.log(`🔍 Cargando PDF.js...`);
     const pdfjs = await loadPdfJs();
     if (!pdfjs) {
       throw new Error('PDF.js no disponible');
     }
+    console.log(`✅ PDF.js cargado exitosamente`);
     
     // Cargar el PDF
+    console.log(`🔍 Cargando PDF...`);
     const arrayBuffer = await pdfFile.arrayBuffer();
     const pdfDoc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
     
     console.log(`📄 PDF cargado: ${pdfDoc.numPages} páginas reales`);
     
     // Extraer texto de todas las páginas
+    console.log(`🔍 Extrayendo texto de todas las páginas...`);
     let fullText = '';
     for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
       const page = await pdfDoc.getPage(pageNum);
       const textContent = await page.getTextContent();
       const pageText = textContent.items.map((item: any) => item.str).join(' ');
       fullText += pageText + '\n';
+      console.log(`📄 Página ${pageNum}: ${pageText.length} caracteres`);
     }
     
     console.log(`📄 Texto completo extraído: ${fullText.length} caracteres`);
+    console.log(`📄 Primeros 200 caracteres: ${fullText.substring(0, 200)}...`);
     
     // Dividir por patrones de recibos (buscar "Legajo" como separador)
     const receiptPatterns = [
@@ -484,7 +492,10 @@ export async function processPdfByTextSplit(pdfFile: File): Promise<SplitPdfResu
     
     // Intentar dividir por cada patrón
     for (const pattern of receiptPatterns) {
+      console.log(`🔍 Buscando patrón: ${pattern}`);
       const matches = [...fullText.matchAll(pattern)];
+      console.log(`📄 Encontrados ${matches.length} matches con patrón: ${pattern}`);
+      
       if (matches.length > 1) {
         console.log(`📄 Encontrados ${matches.length} recibos con patrón: ${pattern}`);
         
@@ -493,6 +504,8 @@ export async function processPdfByTextSplit(pdfFile: File): Promise<SplitPdfResu
           const start = matches[i].index!;
           const end = i < matches.length - 1 ? matches[i + 1].index! : fullText.length;
           const receiptText = fullText.substring(start, end).trim();
+          
+          console.log(`📄 Recibo ${i + 1}: ${receiptText.length} caracteres, primeros 100: ${receiptText.substring(0, 100)}...`);
           
           if (receiptText.length > 100) { // Solo incluir recibos con contenido suficiente
             receiptTexts.push(receiptText);
@@ -521,13 +534,16 @@ export async function processPdfByTextSplit(pdfFile: File): Promise<SplitPdfResu
       (pageFile as any).receiptNumber = i + 1;
       
       pages.push(pageFile);
+      console.log(`📄 Creado archivo: ${pageName} con ${receiptTexts[i].length} caracteres`);
     }
     
+    console.log(`✅ processPdfByTextSplit completado: ${pages.length} archivos creados`);
     return { pages, totalPages: receiptTexts.length };
     
   } catch (error) {
     console.error(`❌ Error en processPdfByTextSplit:`, error);
     // Fallback: usar el método original
+    console.log(`🔄 Usando fallback a splitPdfByPages...`);
     return await splitPdfByPages(pdfFile);
   }
 }
