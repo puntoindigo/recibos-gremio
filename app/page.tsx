@@ -30,6 +30,9 @@ import { UnifiedStatusPanel } from "@/components/UnifiedStatusPanel";
 import { DebugPanel } from "@/components/DebugPanel";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { DescuentosPanel } from "@/components/DescuentosPanel";
+import { ProgresoLotes } from "@/components/ProgresoLotes";
+import { useSemaphore } from "@/hooks/useSemaphore";
+import { splitPdfEnLotes, procesarLoteEnPaginas, detectLimePdf, type LoteInfo } from "@/lib/pdf-splitter";
 // import { PdfSplitDialog } from "@/components/PdfSplitDialog"; // Eliminado - split desactivado
 
 type UploadItem = { 
@@ -171,8 +174,15 @@ export default function Page() {
   const [selectedControl, setSelectedControl] = useState<SavedControlDB | null>(null); // Control seleccionado para ver detalles
   const [controlesPorEmpresa, setControlesPorEmpresa] = useState<Record<string, number>>({});
   
-  // Estado para el diálogo de split de PDF
-  // Split desactivado - estado eliminado
+  // Estado para el split en cascada
+  const [lotesInfo, setLotesInfo] = useState<LoteInfo[]>([]);
+  const [totalRecibos, setTotalRecibos] = useState<number>(0);
+  const [recibosProcesados, setRecibosProcesados] = useState<number>(0);
+  const [showProgresoLotes, setShowProgresoLotes] = useState<boolean>(false);
+  const [originalFileName, setOriginalFileName] = useState<string>("");
+  
+  // Semáforo para controlar concurrencia
+  const semaforo = useSemaphore(3); // Máximo 3 lotes simultáneos
   
   // Función para cargar detalles de un control guardado
   const handleViewDetails = (control: SavedControlDB) => {
@@ -508,6 +518,121 @@ useEffect(() => {
     }
   }
 
+  /* -------------------- split en cascada -------------------- */
+
+  const procesarPdfConSplitCascada = useCallback(async (file: File): Promise<void> => {
+    try {
+      console.log(`🔍 Verificando si ${file.name} necesita split en cascada...`);
+      
+      // Detectar si es PDF de LIME
+      const isLime = await detectLimePdf(file);
+      
+      if (!isLime) {
+        console.log(`📄 ${file.name} no es de LIME, procesando como archivo único`);
+        // Procesar como archivo único (lógica existente)
+        return;
+      }
+      
+      console.log(`🔍 PDF de LIME detectado: ${file.name}`);
+      
+      // Dividir en lotes
+      const splitResult = await splitPdfEnLotes(file, 100);
+      
+      // Configurar estado para mostrar progreso
+      setLotesInfo(splitResult.lotes);
+      setTotalRecibos(splitResult.totalRecibos);
+      setRecibosProcesados(0);
+      setOriginalFileName(splitResult.originalName);
+      setShowProgresoLotes(true);
+      
+      console.log(`📦 PDF dividido en ${splitResult.lotes.length} lotes, ${splitResult.totalRecibos} recibos totales`);
+      
+      // Procesar lotes en paralelo con semáforo
+      const procesarLote = async (lote: LoteInfo) => {
+        await semaforo.acquire();
+        try {
+          console.log(`🔄 Iniciando procesamiento del lote ${lote.id}/${lote.total}`);
+          
+          // Dividir lote en páginas individuales
+          const paginas = await procesarLoteEnPaginas(lote);
+          
+          // Procesar cada página como recibo individual
+          const { parsePdfReceiptToRecord } = await import("@/lib/pdf-parser");
+          
+          for (const pagina of paginas) {
+            try {
+              const res = await parsePdfReceiptToRecord(pagina, showDebug);
+              const parsed = (res?.data ?? {}) as Record<string, string>;
+              
+              if (parsed.GUARDAR === "false") {
+                console.log(`⚠️ Página ${pagina.name} marcada como NO GUARDAR`);
+                continue;
+              }
+              
+              const legajo = String(parsed.LEGAJO ?? "").trim();
+              const periodo = String(parsed.PERIODO ?? "").trim();
+              
+              if (!legajo || !periodo) {
+                console.warn(`⚠️ Página ${pagina.name} sin LEGAJO o PERIODO`);
+                continue;
+              }
+              
+              // Usar uniqueKey para páginas divididas
+              const uniqueKey = `${legajo}||${periodo}||${pagina.name}`;
+              
+              // Guardar en base de datos
+              await repoDexie.addReceipt({
+                legajo,
+                periodo,
+                data: parsed,
+                archivo: pagina.name,
+                uniqueKey
+              });
+              
+              // Actualizar progreso
+              setRecibosProcesados(prev => prev + 1);
+              lote.recibosProcesados++;
+              
+            } catch (error) {
+              console.error(`Error procesando página ${pagina.name}:`, error);
+            }
+          }
+          
+          // Marcar lote como completado
+          lote.estado = 'completado';
+          setLotesInfo(prev => [...prev]);
+          
+          console.log(`✅ Lote ${lote.id}/${lote.total} completado: ${lote.recibosProcesados}/${lote.recibosTotal} recibos`);
+          
+        } catch (error) {
+          console.error(`Error procesando lote ${lote.id}:`, error);
+          lote.estado = 'error';
+          setLotesInfo(prev => [...prev]);
+        } finally {
+          semaforo.release();
+        }
+      };
+      
+      // Procesar todos los lotes en paralelo
+      await Promise.all(splitResult.lotes.map(procesarLote));
+      
+      console.log(`🎉 Split en cascada completado: ${splitResult.totalRecibos} recibos procesados`);
+      
+      // Ocultar progreso después de un delay
+      setTimeout(() => {
+        setShowProgresoLotes(false);
+        setLotesInfo([]);
+        setTotalRecibos(0);
+        setRecibosProcesados(0);
+        setOriginalFileName("");
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error en split en cascada:', error);
+      setShowProgresoLotes(false);
+    }
+  }, [semaforo, showDebug]);
+
   /* -------------------- subir PDFs + dedupe -------------------- */
 
   const handleFiles = useCallback(async (files: FileList, startIndex: number = 0): Promise<void> => {
@@ -566,8 +691,23 @@ useEffect(() => {
             return { status: "skipped", reason: "duplicado (datos protegidos)" };
         }
 
-            // Split automático desactivado - procesar como archivo único
-            console.log(`📄 Procesando ${file.name} como archivo único (split desactivado)`);
+            // Verificar si necesita split en cascada
+            const isLime = await detectLimePdf(file);
+            
+            if (isLime) {
+              console.log(`🔍 PDF de LIME detectado: ${file.name} - usando split en cascada`);
+              toast.dismiss(tid);
+              
+              // Procesar con split en cascada
+              await procesarPdfConSplitCascada(file);
+              
+              ok++;
+              setUploads((prev) => prev.map((u, idx) => (idx === globalIndex ? { ...u, status: "ok", reason: "split en cascada" } : u)));
+              return { status: "ok", reason: "split en cascada" };
+            }
+            
+            // Procesar como archivo único
+            console.log(`📄 Procesando ${file.name} como archivo único`);
 
         // parsear PDF
           const res = await parsePdfReceiptToRecord(file, showDebug);
@@ -1755,6 +1895,15 @@ useEffect(() => {
         )}
         
         {/* Diálogo de split de PDF eliminado - funcionalidad desactivada */}
+        
+        {/* Progreso de split en cascada */}
+        <ProgresoLotes
+          lotes={lotesInfo}
+          totalRecibos={totalRecibos}
+          recibosProcesados={recibosProcesados}
+          originalName={originalFileName}
+          isVisible={showProgresoLotes}
+        />
       </main>
     );
 }

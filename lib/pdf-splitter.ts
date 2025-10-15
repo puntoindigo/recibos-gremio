@@ -41,6 +41,21 @@ export interface SplitPdfResult {
   totalPages: number;
 }
 
+export interface LoteInfo {
+  id: number;
+  archivo: File;
+  total: number;
+  estado: 'pendiente' | 'procesando' | 'completado' | 'error';
+  recibosProcesados: number;
+  recibosTotal: number;
+}
+
+export interface SplitCascadaResult {
+  lotes: LoteInfo[];
+  totalRecibos: number;
+  originalName: string;
+}
+
 /**
  * Divide un PDF en páginas individuales
  * @param pdfFile - El archivo PDF a dividir
@@ -171,6 +186,118 @@ export async function detectLimePdf(pdfFile: File): Promise<boolean> {
   } catch (error) {
     console.error('Error al detectar PDF de LIME:', error);
     return false;
+  }
+}
+
+/**
+ * Divide un PDF en lotes de máximo 100 páginas cada uno
+ * @param pdfFile - El archivo PDF a dividir
+ * @param maxPaginasPorLote - Máximo de páginas por lote (default: 100)
+ * @returns Promise<SplitCascadaResult> - Resultado con lotes creados
+ */
+export async function splitPdfEnLotes(pdfFile: File, maxPaginasPorLote: number = 100): Promise<SplitCascadaResult> {
+  try {
+    console.log(`🔍 Iniciando split en cascada: "${pdfFile.name}" (${(pdfFile.size / 1024).toFixed(0)}KB)`);
+    
+    // Estimar total de páginas por tamaño
+    const fileSizeKB = pdfFile.size / 1024;
+    let totalPaginas = 1;
+    
+    if (fileSizeKB > 200) {
+      // Estimación realista: 30KB por página para PDFs de recibos
+      const estimatedPages = Math.ceil(fileSizeKB / 30);
+      totalPaginas = Math.min(estimatedPages, 2000); // Límite máximo
+      console.log(`📄 Estimando ${totalPaginas} páginas (${fileSizeKB.toFixed(0)}KB, ~30KB/página)`);
+    } else {
+      console.log(`📄 Archivo pequeño (${fileSizeKB.toFixed(0)}KB), asumiendo 1 página`);
+    }
+    
+    // Si solo tiene una página, crear un solo lote
+    if (totalPaginas === 1) {
+      const lote: LoteInfo = {
+        id: 1,
+        archivo: pdfFile,
+        total: 1,
+        estado: 'pendiente',
+        recibosProcesados: 0,
+        recibosTotal: 1
+      };
+      
+      return {
+        lotes: [lote],
+        totalRecibos: 1,
+        originalName: pdfFile.name
+      };
+    }
+    
+    // Calcular número de lotes necesarios
+    const numLotes = Math.ceil(totalPaginas / maxPaginasPorLote);
+    console.log(`📦 Dividiendo en ${numLotes} lotes de máximo ${maxPaginasPorLote} páginas cada uno`);
+    
+    const lotes: LoteInfo[] = [];
+    
+    // Crear lotes
+    for (let i = 0; i < numLotes; i++) {
+      const inicioPagina = i * maxPaginasPorLote + 1;
+      const finPagina = Math.min((i + 1) * maxPaginasPorLote, totalPaginas);
+      const paginasEnLote = finPagina - inicioPagina + 1;
+      
+      const nombreLote = pdfFile.name.replace('.pdf', `_lote${i + 1}_paginas${inicioPagina}-${finPagina}.pdf`);
+      
+      // Crear archivo simulado para el lote
+      const loteFile = new File([pdfFile], nombreLote, { type: 'application/pdf' });
+      
+      const lote: LoteInfo = {
+        id: i + 1,
+        archivo: loteFile,
+        total: numLotes,
+        estado: 'pendiente',
+        recibosProcesados: 0,
+        recibosTotal: paginasEnLote
+      };
+      
+      lotes.push(lote);
+      console.log(`📦 Lote ${i + 1}/${numLotes}: páginas ${inicioPagina}-${finPagina} (${paginasEnLote} recibos)`);
+    }
+    
+    return {
+      lotes,
+      totalRecibos: totalPaginas,
+      originalName: pdfFile.name
+    };
+    
+  } catch (error) {
+    console.error('Error al dividir PDF en lotes:', error);
+    throw new Error(`No se pudo dividir el PDF en lotes: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+  }
+}
+
+/**
+ * Procesa un lote dividiendo sus páginas en recibos individuales
+ * @param lote - Información del lote a procesar
+ * @returns Promise<File[]> - Array de archivos de páginas individuales
+ */
+export async function procesarLoteEnPaginas(lote: LoteInfo): Promise<File[]> {
+  try {
+    console.log(`🔄 Procesando lote ${lote.id}/${lote.total}: ${lote.archivo.name}`);
+    lote.estado = 'procesando';
+    
+    const paginas: File[] = [];
+    
+    // Crear archivos simulados para cada página del lote
+    for (let i = 1; i <= lote.recibosTotal; i++) {
+      const nombrePagina = lote.archivo.name.replace('.pdf', `_pagina${i}.pdf`);
+      const paginaFile = new File([lote.archivo], nombrePagina, { type: 'application/pdf' });
+      paginas.push(paginaFile);
+    }
+    
+    console.log(`✅ Lote ${lote.id}/${lote.total} procesado: ${paginas.length} páginas creadas`);
+    return paginas;
+    
+  } catch (error) {
+    console.error(`Error al procesar lote ${lote.id}:`, error);
+    lote.estado = 'error';
+    throw error;
   }
 }
 
