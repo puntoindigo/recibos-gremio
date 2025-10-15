@@ -32,7 +32,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { DescuentosPanel } from "@/components/DescuentosPanel";
 import { ProgresoLotes } from "@/components/ProgresoLotes";
 import { useSemaphore } from "@/hooks/useSemaphore";
-import { splitPdfEnLotes, procesarLoteEnPaginas, detectLimePdf, type LoteInfo } from "@/lib/pdf-splitter";
+import { splitPdfEnLotes, procesarLoteEnPaginas, detectMultiPagePdf, detectLimePdf, type LoteInfo } from "@/lib/pdf-splitter";
 // import { PdfSplitDialog } from "@/components/PdfSplitDialog"; // Eliminado - split desactivado
 
 type UploadItem = { 
@@ -524,16 +524,16 @@ useEffect(() => {
     try {
       console.log(`🔍 Verificando si ${file.name} necesita split en cascada...`);
       
-      // Detectar si es PDF de LIME
-      const isLime = await detectLimePdf(file);
+      // Detectar si es PDF multi-página
+      const isMultiPage = await detectMultiPagePdf(file);
       
-      if (!isLime) {
-        console.log(`📄 ${file.name} no es de LIME, procesando como archivo único`);
+      if (!isMultiPage) {
+        console.log(`📄 ${file.name} es de 1 página, procesando como archivo único`);
         // Procesar como archivo único (lógica existente)
         return;
       }
       
-      console.log(`🔍 PDF de LIME detectado: ${file.name}`);
+      console.log(`🔍 PDF multi-página detectado: ${file.name}`);
       
       // Dividir en lotes
       const splitResult = await splitPdfEnLotes(file, 100);
@@ -692,10 +692,10 @@ useEffect(() => {
         }
 
             // Verificar si necesita split en cascada
-            const isLime = await detectLimePdf(file);
+            const isMultiPage = await detectMultiPagePdf(file);
             
-            if (isLime) {
-              console.log(`🔍 PDF de LIME detectado: ${file.name} - usando split en cascada`);
+            if (isMultiPage) {
+              console.log(`🔍 PDF multi-página detectado: ${file.name} - usando split en cascada`);
               toast.dismiss(tid);
               
               // Procesar con split en cascada

@@ -144,6 +144,48 @@ export async function splitPdfByPages(pdfFile: File): Promise<SplitPdfResult> {
 }
 
 /**
+ * Detecta si un PDF necesita split en cascada (más de una página)
+ * @param pdfFile - El archivo PDF a analizar
+ * @returns Promise<boolean> - true si necesita split
+ */
+export async function detectMultiPagePdf(pdfFile: File): Promise<boolean> {
+  try {
+    const fileName = pdfFile.name.toUpperCase();
+    
+    // NO detectar si ya es una página dividida
+    if (fileName.includes('_PAGINA') || fileName.includes('_LOTE')) {
+      console.log(`⚠️ Archivo ya dividido detectado: ${fileName} - No se volverá a dividir`);
+      return false;
+    }
+    
+    // Estimar páginas por tamaño de archivo
+    const fileSizeKB = pdfFile.size / 1024;
+    
+    // Si el archivo es muy pequeño (< 100KB), probablemente es de 1 página
+    if (fileSizeKB < 100) {
+      console.log(`📄 Archivo pequeño (${fileSizeKB.toFixed(0)}KB): asumiendo 1 página - no necesita split`);
+      return false;
+    }
+    
+    // Para archivos medianos/grandes, estimar páginas
+    // Estimación conservadora: 30KB por página
+    const estimatedPages = Math.ceil(fileSizeKB / 30);
+    
+    if (estimatedPages > 1) {
+      console.log(`🔍 PDF multi-página detectado: ${fileName} (${fileSizeKB.toFixed(0)}KB, ~${estimatedPages} páginas estimadas)`);
+      return true;
+    }
+    
+    console.log(`📄 PDF de 1 página detectado: ${fileName} (${fileSizeKB.toFixed(0)}KB) - no necesita split`);
+    return false;
+    
+  } catch (error) {
+    console.error('Error al detectar PDF multi-página:', error);
+    return false;
+  }
+}
+
+/**
  * Detecta si un PDF es de la empresa LIME basándose SOLO en el nombre del archivo
  * @param pdfFile - El archivo PDF a analizar
  * @returns Promise<boolean> - true si es de LIME
