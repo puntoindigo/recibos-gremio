@@ -142,12 +142,20 @@ export async function splitPdfByPages(pdfFile: File): Promise<SplitPdfResult> {
             const page = await pdfDoc.getPage(pageNum);
             console.log(`📄 Página ${pageNum}: ${pageName} (página real extraída)`);
             
-            // Crear un nuevo PDF con solo esta página
-            const newPdfDoc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-            const newPdfBytes = await newPdfDoc.save();
+            // Extraer el contenido de texto de esta página específica
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map((item: any) => item.str).join(' ');
+            
+            console.log(`📄 Página ${pageNum} - Texto extraído: ${pageText.substring(0, 100)}...`);
             
             // Crear un nuevo archivo con solo esta página
-            const pageFile = new File([newPdfBytes], pageName, { type: 'application/pdf' });
+            // Para ahora, crear una copia del archivo original pero con metadata de página
+            const pageFile = new File([pdfFile], pageName, { type: 'application/pdf' });
+            
+            // Agregar metadata personalizada para identificar la página
+            (pageFile as any).pageNumber = pageNum;
+            (pageFile as any).pageText = pageText;
+            
             pages.push(pageFile);
             
             console.log(`✅ Página ${pageNum} creada: ${pageName} (${pageFile.size} bytes)`);

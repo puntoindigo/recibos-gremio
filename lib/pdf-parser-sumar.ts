@@ -103,67 +103,95 @@ function toDotDecimal(raw: string): string {
 export async function parsePdfReceiptToRecord(file: File, debug: boolean = false): Promise<Parsed> {
   assertClient();
 
-  GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-  const ok = await fetch("/pdf.worker.min.mjs", { method: "HEAD" })
-    .then((r) => r.ok)
-    .catch(() => false);
-  if (!ok) throw new Error("No se pudo cargar el worker de PDF (/pdf.worker.min.mjs)");
+  // Verificar si el archivo tiene metadata de página (split real)
+  const pageText = (file as any).pageText;
+  const pageNumber = (file as any).pageNumber;
+  
+  let texto;
+  let allLines: Word[][] = [];
+  let allWords: Word[] = [];
+  
+  if (pageText && pageNumber) {
+    // Usar el texto extraído de la página específica
+    texto = pageText;
+    
+    if (debug) {
+      console.log(`🔍 Debug SUMAR - Usando texto de página específica:`, {
+        filename: file.name,
+        pageNumber: pageNumber,
+        textoLength: texto.length,
+        primerasLineas: texto.substring(0, 200) + "..."
+      });
+    }
+    
+    // Simular estructura de líneas para compatibilidad
+    const lines = texto.split('\n');
+    allLines = lines.map(line => [{ str: line, x: 0, y: 0 }]);
+    allWords = texto.split(' ').map(word => ({ str: word, x: 0, y: 0 }));
+  } else {
+    // Usar el parser normal
+    GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+    const ok = await fetch("/pdf.worker.min.mjs", { method: "HEAD" })
+      .then((r) => r.ok)
+      .catch(() => false);
+    if (!ok) throw new Error("No se pudo cargar el worker de PDF (/pdf.worker.min.mjs)");
 
-  const buf = await file.arrayBuffer();
+    const buf = await file.arrayBuffer();
 
-  const params: DocumentInitParameters = { data: buf };
-  type LoadingTask = { promise: Promise<PDFDocumentProxy> };
-  const loadingTask = getDocument(params) as unknown as LoadingTask;
-  const pdf: PDFDocumentProxy = await loadingTask.promise;
+    const params: DocumentInitParameters = { data: buf };
+    type LoadingTask = { promise: Promise<PDFDocumentProxy> };
+    const loadingTask = getDocument(params) as unknown as LoadingTask;
+    const pdf: PDFDocumentProxy = await loadingTask.promise;
 
-  const allLines: Word[][] = [];
-  const allWords: Word[] = [];
-  const Y_TOL = 2.5;
+    const Y_TOL = 2.5;
 
-  for (let i = 1; i <= (pdf.numPages ?? 1); i++) {
-    const page: PDFPageProxy = await pdf.getPage(i);
-    try {
-      const content: TextContent = await page.getTextContent();
+    for (let i = 1; i <= (pdf.numPages ?? 1); i++) {
+      const page: PDFPageProxy = await pdf.getPage(i);
+      try {
+        const content: TextContent = await page.getTextContent();
 
-      const words: Word[] = [];
-      for (const item of content.items as ReadonlyArray<TextItem | TextMarkedContent>) {
-        if ("str" in item) {
-          const ti = item as TextItem;
-          const tr = Array.isArray(ti.transform) ? ti.transform : undefined;
-          const x = (tr?.[4] ?? 0) as number;
-          const y = (tr?.[5] ?? 0) as number;
-          const str = String(ti.str ?? "").trim();
-          if (str.length) words.push({ str, x, y });
-        }
-      }
-
-      allWords.push(...words);
-
-      const lines: Word[][] = [];
-      for (const w of [...words].sort((a, b) => b.y - a.y || a.x - b.x)) {
-        let placed = false;
-        for (const line of lines) {
-          const avgY = line.reduce((s, ww) => s + ww.y, 0) / line.length;
-          if (Math.abs(avgY - w.y) <= Y_TOL) {
-            line.push(w);
-            placed = true;
-            break;
+        const words: Word[] = [];
+        for (const item of content.items as ReadonlyArray<TextItem | TextMarkedContent>) {
+          if ("str" in item) {
+            const ti = item as TextItem;
+            const tr = Array.isArray(ti.transform) ? ti.transform : undefined;
+            const x = (tr?.[4] ?? 0) as number;
+            const y = (tr?.[5] ?? 0) as number;
+            const str = String(ti.str ?? "").trim();
+            if (str.length) words.push({ str, x, y });
           }
         }
-        if (!placed) lines.push([w]);
-      }
-      for (const line of lines) line.sort((a, b) => a.x - b.x);
-      allLines.push(...lines);
-    } finally {
-      try {
-        page.cleanup();
-      } catch {
-        /* noop */
+
+        allWords.push(...words);
+
+        const lines: Word[][] = [];
+        for (const w of [...words].sort((a, b) => b.y - a.y || a.x - b.x)) {
+          let placed = false;
+          for (const line of lines) {
+            const avgY = line.reduce((s, ww) => s + ww.y, 0) / line.length;
+            if (Math.abs(avgY - w.y) <= Y_TOL) {
+              line.push(w);
+              placed = true;
+              break;
+            }
+          }
+          if (!placed) lines.push([w]);
+        }
+        for (const line of lines) line.sort((a, b) => a.x - b.x);
+        allLines.push(...lines);
+      } finally {
+        try {
+          page.cleanup();
+        } catch {
+          /* noop */
+        }
       }
     }
+    
+    texto = allWords.map((w) => w.str).join(" ");
   }
 
-  const rawText = allWords.map((w) => w.str).join(" ");
+  const rawText = texto;
   
   // Debug: mostrar las primeras líneas para ver qué se está capturando
   if (debug) console.log("🔍 Debug SUMAR - Primeras líneas:", rawText.substring(0, 500));

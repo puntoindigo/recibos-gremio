@@ -50,10 +50,42 @@ function detectarEmpresa(texto: string): string {
 // Función principal que detecta la empresa y usa el parser correspondiente
 export async function parsePdfReceiptToRecord(file: File, debug: boolean = false): Promise<Parsed> {
   try {
-    // Primero usamos el parser genérico para detectar la empresa
-    const resultadoGenerico = await parseGeneric(file);
-  const textoCompleto = resultadoGenerico.data["TEXTO_COMPLETO"] || "";
-  const primerasLineas = resultadoGenerico.data["PRIMERAS_LINEAS"] || "";
+    // Verificar si el archivo tiene metadata de página (split real)
+    const pageText = (file as any).pageText;
+    const pageNumber = (file as any).pageNumber;
+    
+    let resultadoGenerico;
+    let textoCompleto;
+    let primerasLineas;
+    
+    if (pageText && pageNumber) {
+      // Usar el texto extraído de la página específica
+      textoCompleto = pageText;
+      primerasLineas = pageText.substring(0, 1000); // Primeras líneas de la página
+      
+      // Crear un resultado genérico simulado
+      resultadoGenerico = {
+        data: {
+          "TEXTO_COMPLETO": textoCompleto,
+          "PRIMERAS_LINEAS": primerasLineas
+        },
+        debugLines: []
+      };
+      
+      if (debug) {
+        console.log(`🔍 Debug PDF Parser - Usando texto de página específica:`, {
+          filename: file.name,
+          pageNumber: pageNumber,
+          textoCompletoLength: textoCompleto.length,
+          primerasLineasLength: primerasLineas.length
+        });
+      }
+    } else {
+      // Usar el parser genérico normal
+      resultadoGenerico = await parseGeneric(file);
+      textoCompleto = resultadoGenerico.data["TEXTO_COMPLETO"] || "";
+      primerasLineas = resultadoGenerico.data["PRIMERAS_LINEAS"] || "";
+    }
 
   // Detectar la empresa
   const empresa = detectarEmpresa(textoCompleto + " " + primerasLineas + " " + file.name);
