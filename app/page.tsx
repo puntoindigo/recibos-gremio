@@ -678,6 +678,12 @@ useEffect(() => {
         
       try {
         const hash = await sha256OfFile(file);
+        
+        // Validar que el hash se generó correctamente
+        if (!hash || typeof hash !== 'string' || hash.trim() === '') {
+          console.error(`❌ Error generando hash para ${file.name}:`, hash);
+          throw new Error('No se pudo generar hash del archivo');
+        }
 
         // dedupe por hash (solo para archivos no divididos)
         // PROTECCIÓN: No sobrescribir datos ya guardados en producción
@@ -832,6 +838,12 @@ useEffect(() => {
           try {
             // Procesar archivo individualmente
             const hash = await sha256OfFile(file);
+            
+            // Validar que el hash se generó correctamente
+            if (!hash || typeof hash !== 'string' || hash.trim() === '') {
+              console.error(`❌ Error generando hash para ${file.name}:`, hash);
+              throw new Error('No se pudo generar hash del archivo');
+            }
             
             if (!file.name.includes('_pagina') && await repoDexie.hasFileHash(hash)) {
               skip++;

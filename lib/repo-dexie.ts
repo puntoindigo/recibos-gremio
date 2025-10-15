@@ -42,11 +42,18 @@ function mergeSummingCodes(
 }
 
 async function findReceiptByHash(hash: string) {
+  // Validar que el hash sea un string válido
+  if (!hash || typeof hash !== 'string' || hash.trim() === '') {
+    console.warn('Hash inválido proporcionado a findReceiptByHash:', hash);
+    return null;
+  }
+  
   // Si existe índice multiEntry en `hashes`, esto es O(log n).
   // Si no, el filter hace un scan pero sigue siendo correcto.
   try {
     return await db.receipts.where("hashes").equals(hash).first();
-  } catch {
+  } catch (error) {
+    console.warn('Error en findReceiptByHash con índice, usando filter:', error);
     return await db.receipts
       .filter((r) => Array.isArray(r.hashes) && r.hashes.includes(hash))
       .first();
@@ -65,6 +72,12 @@ export const repoDexie = {
 
     await db.transaction("rw", db.receipts, db.consolidated, async () => {
       // 🔒 Dedupe global por hash (antes de tocar nada)
+      // Validar que el hash sea válido antes de usarlo
+      if (!input.fileHash || typeof input.fileHash !== 'string' || input.fileHash.trim() === '') {
+        console.warn('Hash de archivo inválido en addReceipt:', input.fileHash);
+        throw new Error('Hash de archivo inválido');
+      }
+      
       const dupAny = await findReceiptByHash(input.fileHash);
       if (dupAny) {
         result = "skipped-duplicate";
@@ -113,6 +126,12 @@ export const repoDexie = {
 
   /** ¿Existe ya este hash en algún receipt? (pre-chequeo opcional para la UI) */
   async hasFileHash(hash: string): Promise<boolean> {
+    // Validar que el hash sea válido
+    if (!hash || typeof hash !== 'string' || hash.trim() === '') {
+      console.warn('Hash inválido proporcionado a hasFileHash:', hash);
+      return false;
+    }
+    
     const r = await findReceiptByHash(hash);
     return !!r;
   },
