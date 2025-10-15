@@ -249,7 +249,9 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     // SUMAR: Usar CUIL como identificador principal para generar claves
     // Normalizar CUIL (solo dígitos) para que coincida con el Excel de control
     const cuilNorm = cuilMatch[1].replace(/[^0-9]/g, "");
-    data.LEGAJO = cuilNorm; // Sobrescribir LEGAJO con CUIL normalizado
+    data.CUIL = cuilMatch[1]; // Guardar CUIL original
+    data.CUIL_NORM = cuilNorm; // Guardar CUIL normalizado
+    // NO sobrescribir LEGAJO - mantener el legajo original para split en cascada
   }
 
   // Extraer conceptos específicos de SUMAR y mapearlos a códigos estándar
