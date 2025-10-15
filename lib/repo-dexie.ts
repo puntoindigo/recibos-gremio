@@ -68,6 +68,7 @@ export const repoDexie = {
     const empresa = (input.data?.EMPRESA as string | undefined) || 'LIMPAR';
     // Usar uniqueKey si está disponible (para páginas divididas), sino usar la clave normal
     const key = input.uniqueKey || makeKey(input.legajo, input.periodo, empresa);
+    const isUniqueKey = !!input.uniqueKey; // Determinar si es una página dividida
     let result: "skipped-duplicate" | "added" | "merged" = "added";
 
     await db.transaction("rw", db.receipts, db.consolidated, async () => {
@@ -99,26 +100,43 @@ export const repoDexie = {
       });
 
       // Upsert en consolidado
-      const prev = await db.consolidated.get(key);
-      const archivos = new Set<string>(
-        Array.isArray(prev?.archivos) ? prev!.archivos : []
-      );
-      archivos.add(input.filename);
+      if (isUniqueKey) {
+        // Para páginas divididas, crear registro único sin consolidación
+        const row: ConsolidatedEntity = {
+          key,
+          legajo: input.legajo,
+          periodo: input.periodo,
+          nombre: input.nombre,
+          cuil: input.cuil,
+          cuilNorm: normCuil(input.cuil),
+          archivos: [input.filename],
+          data: input.data,
+        };
+        await db.consolidated.put(row);
+        result = "added";
+      } else {
+        // Para archivos normales, consolidar como antes
+        const prev = await db.consolidated.get(key);
+        const archivos = new Set<string>(
+          Array.isArray(prev?.archivos) ? prev!.archivos : []
+        );
+        archivos.add(input.filename);
 
-      const mergedData = mergeSummingCodes(prev?.data ?? {}, input.data);
-      const row: ConsolidatedEntity = {
-        key,
-        legajo: input.legajo,
-        periodo: input.periodo,
-        nombre: input.nombre ?? prev?.nombre,
-        cuil: input.cuil ?? prev?.cuil,
-        cuilNorm: normCuil(input.cuil ?? prev?.cuil),
-        archivos: Array.from(archivos),
-        data: mergedData,
-      };
+        const mergedData = mergeSummingCodes(prev?.data ?? {}, input.data);
+        const row: ConsolidatedEntity = {
+          key,
+          legajo: input.legajo,
+          periodo: input.periodo,
+          nombre: input.nombre ?? prev?.nombre,
+          cuil: input.cuil ?? prev?.cuil,
+          cuilNorm: normCuil(input.cuil ?? prev?.cuil),
+          archivos: Array.from(archivos),
+          data: mergedData,
+        };
 
-      await db.consolidated.put(row);
-      result = prev ? "merged" : "added";
+        await db.consolidated.put(row);
+        result = prev ? "merged" : "added";
+      }
     });
 
     return result;
