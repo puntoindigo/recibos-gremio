@@ -1,8 +1,6 @@
 // lib/auth.ts
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { getUserByEmail, updateUserLastLogin } from './user-management';
-import { db } from './db';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -18,23 +16,15 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          const user = await getUserByEmail(credentials.email);
-          
-          if (!user || !user.isActive) {
-            return null;
-          }
-
-          // Para simplificar, usamos una validación básica
-          // En producción, deberías usar bcrypt o similar
-          if (user.passwordHash && user.passwordHash === credentials.password) {
-            await updateUserLastLogin(user.id);
+          // Usuario por defecto para desarrollo
+          if (credentials.email === 'admin@recibos.com' && credentials.password === 'admin123') {
             return {
-              id: user.id,
-              email: user.email,
-              name: user.name,
-              role: user.role,
-              empresaId: user.empresaId,
-              permissions: user.permissions
+              id: 'superadmin_initial',
+              email: 'admin@recibos.com',
+              name: 'Super Administrador',
+              role: 'SUPERADMIN',
+              empresaId: undefined,
+              permissions: ['*']
             };
           }
 
@@ -75,26 +65,3 @@ export const authOptions: NextAuthOptions = {
   },
   secret: process.env.NEXTAUTH_SECRET || 'fallback-secret-key'
 };
-
-// Función para crear usuario inicial (SuperAdmin)
-export async function createInitialSuperAdmin() {
-  const existingSuperAdmin = await db.users.where('role').equals('SUPERADMIN').first();
-  
-  if (!existingSuperAdmin) {
-    const superAdmin = await db.users.add({
-      id: 'superadmin_initial',
-      email: 'admin@recibos.com',
-      name: 'Super Administrador',
-      role: 'SUPERADMIN',
-      permissions: ['*'], // Todos los permisos
-      isActive: true,
-      createdAt: Date.now(),
-      passwordHash: 'admin123' // Cambiar en producción
-    });
-    
-    console.log('SuperAdmin inicial creado:', superAdmin);
-    return superAdmin;
-  }
-  
-  return existingSuperAdmin;
-}

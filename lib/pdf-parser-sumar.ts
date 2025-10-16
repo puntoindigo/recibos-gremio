@@ -149,7 +149,10 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     allWords = texto.split(' ').map(word => ({ str: word, x: 0, y: 0 }));
   } else {
     // Usar el parser normal
-    GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+    // Configurar el worker de PDF.js
+    if (typeof window !== 'undefined') {
+      GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+    }
     const ok = await fetch("/pdf.worker.min.mjs", { method: "HEAD" })
       .then((r) => r.ok)
       .catch(() => false);
@@ -338,6 +341,9 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     "20620": data["20620"],
     "5310": data["5310"]
   });
+
+  // Configurar empresa
+  data["EMPRESA"] = "SUMAR";
 
   const debugLines = allLines.slice(0, 150).map((line) => ({
     y: Math.round(line.reduce((s, w) => s + w.y, 0) / line.length),

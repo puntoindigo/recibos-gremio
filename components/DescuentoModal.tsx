@@ -22,21 +22,25 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, ChevronDown } from 'lucide-react';
 import { 
   createDescuento, 
   updateDescuento, 
   searchDescuentosByNombre,
   Descuento 
 } from '@/lib/descuentos-manager';
+import { toast } from 'sonner';
+import { EmployeeSelector } from './EmployeeSelector';
+import type { ConsolidatedEntity } from '@/lib/db';
 
 interface DescuentoModalProps {
   descuento?: Descuento | null;
   onClose: () => void;
   onSave: () => void;
+  employees: ConsolidatedEntity[];
 }
 
-export default function DescuentoModal({ descuento, onClose, onSave }: DescuentoModalProps) {
+export default function DescuentoModal({ descuento, onClose, onSave, employees }: DescuentoModalProps) {
   const { data: session } = useSession();
   const [formData, setFormData] = useState({
     legajo: '',
@@ -54,6 +58,7 @@ export default function DescuentoModal({ descuento, onClose, onSave }: Descuento
   const [isLoading, setIsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     if (descuento) {
@@ -119,6 +124,17 @@ export default function DescuentoModal({ descuento, onClose, onSave }: Descuento
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validación: al menos uno de los campos opcionales debe estar completo
+    const hasDescripcion = formData.descripcion.trim().length > 0;
+    const hasMotivo = formData.motivo.trim().length > 0;
+    const hasTags = formData.tags.length > 0;
+    
+    if (!hasDescripcion && !hasMotivo && !hasTags) {
+      alert('Debe completar al menos uno de los siguientes campos: Descripción, Motivo o Tags');
+      return;
+    }
+    
     setIsLoading(true);
 
     try {
@@ -139,9 +155,10 @@ export default function DescuentoModal({ descuento, onClose, onSave }: Descuento
       }
 
       onSave();
+      toast.success(descuento ? 'Descuento actualizado correctamente' : 'Descuento creado correctamente');
     } catch (error) {
       console.error('Error guardando descuento:', error);
-      alert('Error al guardar el descuento');
+      toast.error('Error al guardar el descuento');
     } finally {
       setIsLoading(false);
     }
@@ -162,69 +179,80 @@ export default function DescuentoModal({ descuento, onClose, onSave }: Descuento
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="legajo">Legajo *</Label>
-              <div className="relative">
-                <Input
-                  id="legajo"
-                  value={formData.legajo}
-                  onChange={(e) => handleLegajoChange(e.target.value)}
-                  placeholder="Ej: 12345"
-                  required
-                />
-                {showSuggestions && suggestions.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
-                    {suggestions.map((suggestion, index) => (
-                      <div
-                        key={index}
-                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                        onClick={() => handleSuggestionClick(suggestion)}
-                      >
-                        {suggestion}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre *</Label>
-              <Input
-                id="nombre"
-                value={formData.nombre}
-                onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
-                placeholder="Nombre del empleado"
-                required
+              <Label>Empleado *</Label>
+              <EmployeeSelector
+                employees={employees}
+                value={formData.legajo ? `${formData.legajo}||${formData.periodo || ''}` : ''}
+                onValueChange={(value) => {
+                  if (value) {
+                    const [legajo, periodo] = value.split('||');
+                    const employee = employees.find(emp => emp.legajo === legajo && emp.periodo === periodo);
+                    if (employee) {
+                      setFormData(prev => ({
+                        ...prev,
+                        legajo: employee.legajo,
+                        nombre: employee.nombre || '',
+                        empresa: employee.data?.EMPRESA || '',
+                        periodo: employee.periodo
+                      }));
+                    }
+                  } else {
+                    setFormData(prev => ({
+                      ...prev,
+                      legajo: '',
+                      nombre: '',
+                      empresa: '',
+                      periodo: ''
+                    }));
+                  }
+                }}
+                placeholder="Seleccionar empleado..."
               />
             </div>
+
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="monto">Monto *</Label>
-              <Input
-                id="monto"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.monto}
-                onChange={(e) => setFormData(prev => ({ ...prev, monto: parseFloat(e.target.value) || 0 }))}
-                placeholder="0.00"
-                required
-              />
+              <Label htmlFor="monto">Monto ($) *</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                <Input
+                  id="monto"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.monto || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, monto: parseFloat(e.target.value) || 0 }))}
+                  onFocus={(e) => {
+                    if (e.target.value === '0' || e.target.value === '') {
+                      e.target.select();
+                    }
+                  }}
+                  placeholder="0.00"
+                  className="pl-8"
+                  required
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="cuotas">Cantidad de Cuotas *</Label>
-              <Input
-                id="cuotas"
-                type="number"
-                min="1"
-                value={formData.cantidadCuotas}
-                onChange={(e) => setFormData(prev => ({ ...prev, cantidadCuotas: parseInt(e.target.value) || 1 }))}
-                placeholder="1"
-                required
-              />
+              <Select
+                value={(formData.cantidadCuotas || 1).toString()}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, cantidadCuotas: parseInt(value) }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar cuotas" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 24 }, (_, i) => i + 1).map(num => (
+                    <SelectItem key={num} value={num.toString()}>
+                      {num} {num === 1 ? 'cuota' : 'cuotas'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -244,28 +272,6 @@ export default function DescuentoModal({ descuento, onClose, onSave }: Descuento
                 <SelectItem value="JUDICIAL">Judicial</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="descripcion">Descripción *</Label>
-            <Textarea
-              id="descripcion"
-              value={formData.descripcion}
-              onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
-              placeholder="Descripción del descuento"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="motivo">Motivo *</Label>
-            <Input
-              id="motivo"
-              value={formData.motivo}
-              onChange={(e) => setFormData(prev => ({ ...prev, motivo: e.target.value }))}
-              placeholder="Motivo del descuento"
-              required
-            />
           </div>
 
           <div className="space-y-2">
@@ -294,15 +300,53 @@ export default function DescuentoModal({ descuento, onClose, onSave }: Descuento
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="observaciones">Observaciones</Label>
-            <Textarea
-              id="observaciones"
-              value={formData.observaciones}
-              onChange={(e) => setFormData(prev => ({ ...prev, observaciones: e.target.value }))}
-              placeholder="Observaciones adicionales"
-            />
+          {/* Botón para mostrar/ocultar campos avanzados */}
+          <div className="flex justify-center">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="flex items-center gap-2"
+            >
+              {showAdvanced ? 'Menos opciones' : 'Más opciones'}
+              <ChevronDown className={`h-4 w-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+            </Button>
           </div>
+
+          {/* Campos avanzados */}
+          {showAdvanced && (
+            <div className="space-y-4 border-t pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="descripcion">Descripción</Label>
+                <Textarea
+                  id="descripcion"
+                  value={formData.descripcion}
+                  onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
+                  placeholder="Descripción del descuento (opcional)"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="motivo">Motivo</Label>
+                <Input
+                  id="motivo"
+                  value={formData.motivo}
+                  onChange={(e) => setFormData(prev => ({ ...prev, motivo: e.target.value }))}
+                  placeholder="Motivo del descuento (opcional)"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="observaciones">Observaciones</Label>
+                <Textarea
+                  id="observaciones"
+                  value={formData.observaciones}
+                  onChange={(e) => setFormData(prev => ({ ...prev, observaciones: e.target.value }))}
+                  placeholder="Observaciones adicionales"
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end space-x-2 pt-4">
             <Button type="button" variant="outline" onClick={onClose}>
@@ -317,3 +361,5 @@ export default function DescuentoModal({ descuento, onClose, onSave }: Descuento
     </Dialog>
   );
 }
+
+export { DescuentoModal };

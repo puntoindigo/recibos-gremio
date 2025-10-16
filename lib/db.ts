@@ -159,6 +159,17 @@ export type UserActivity = {
   userAgent?: string;
 };
 
+/** Configuración de columnas por usuario. */
+export type ColumnConfigDB = {
+  id?: number;
+  userId: string;
+  tableType: string;                    // 'recibos', 'control', etc.
+  visibleColumns: string[];             // columnas visibles
+  columnAliases: Record<string, string>; // alias de columnas
+  createdAt: number;
+  updatedAt: number;
+};
+
 export class RecibosDB extends Dexie {
   receipts!: Table<ReceiptRowDB, number>;
   consolidated!: Table<ConsolidatedEntity, string>;
@@ -170,11 +181,12 @@ export class RecibosDB extends Dexie {
   invitations!: Table<Invitation, string>;
   descuentos!: Table<Descuento, string>;
   userActivities!: Table<UserActivity, string>;
+  columnConfigs!: Table<ColumnConfigDB, number>;
 
   constructor() {
     super("recibosDB-v2");
     // Nota: *hashes => índice multiEntry para búsquedas por hash.
-    this.version(3).stores({
+    this.version(5).stores({
       receipts: "++id, key, legajo, periodo, cuilNorm, createdAt, *hashes",
       consolidated: "key, legajo, periodo, cuilNorm",
       control: "key",
@@ -185,6 +197,7 @@ export class RecibosDB extends Dexie {
       invitations: "id, email, empresaId, token, expiresAt, isUsed, createdAt",
       descuentos: "id, legajo, empresa, tipoDescuento, estado, fechaInicio, fechaCreacion, *tags",
       userActivities: "id, userId, action, resource, timestamp",
+      columnConfigs: "++id, userId, tableType, [userId+tableType], createdAt, updatedAt",
     });
   }
 }

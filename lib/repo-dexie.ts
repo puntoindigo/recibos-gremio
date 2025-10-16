@@ -61,6 +61,11 @@ async function findReceiptByHash(hash: string) {
 }
 
 export const repoDexie = {
+  /** Buscar recibo por hash */
+  async findReceiptByHash(hash: string) {
+    return findReceiptByHash(hash);
+  },
+
   /** Alta + consolidación (suma por LEGAJO+PERIODO) + dedupe por hash (global). */
   async addReceipt(
     input: AddReceiptInput

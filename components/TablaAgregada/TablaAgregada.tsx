@@ -2,24 +2,18 @@
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { labelFor } from '@/lib/code-labels';
-import ArchivosCell from './ArchivosCell';
+import Pagination from '@/components/Pagination';
+import { usePagination } from '@/hooks/usePagination';
+import ColumnSelector from '@/components/ColumnSelector';
+import { ColumnConfigManager } from '@/lib/column-config-manager';
 import type { ConsolidatedEntity } from '@/lib/repo';
 
 type Props = {
-  rows: ConsolidatedEntity[];
-  visibleCols: string[];
-  nameByKey: Record<string, string>;
-  periodoFiltro: string;
-  onPeriodoFiltroChange: (v: string) => void;
-  empresaFiltro: string;
-  onEmpresaFiltroChange: (v: string) => void;
-  nombreFiltro: string;
-  controlesPorEmpresa?: Record<string, number>;
-  getControlesPorEmpresaPeriodo?: (empresa: string, periodo: string) => Promise<number>;
+  data: ConsolidatedEntity[];
+  showEmpresa?: boolean;
+  onColumnsChange?: (visibleColumns: string[], aliases: Record<string, string>) => void;
 };
 
 function fmtNumber(v?: string): string {
@@ -29,233 +23,202 @@ function fmtNumber(v?: string): string {
   return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 }
 
-// Función para formatear headers largos en dos líneas
-function formatHeader(header: string): string {
-  const longHeaders: Record<string, string> = {
-    'CONTRIBUCION SOLIDARIA': 'CONTRIBUCION\nSOLIDARIA',
-    'SEGURO SEPELIO': 'SEGURO\nSEPELIO',
-    'CUOTA MUTUAL': 'CUOTA\nMUTUAL',
-    'RESGUARDO MUTUAL': 'RESGUARDO\nMUTUAL',
-    'DESC. MUTUAL': 'DESC.\nMUTUAL'
-  };
-  
-  return longHeaders[header] || header;
+function extractEmpresaFromArchivo(archivo: string): string {
+  if (!archivo) return 'N/A';
+  const archivoUpper = archivo.toUpperCase();
+  if (archivoUpper.includes('LIME')) return 'LIME';
+  if (archivoUpper.includes('LIMPAR')) return 'LIMPAR';
+  if (archivoUpper.includes('SUMAR')) return 'SUMAR';
+  if (archivoUpper.includes('TYSA')) return 'TYSA';
+  return 'N/A';
 }
 
-export default function TablaAgregada({ rows, visibleCols, nameByKey, periodoFiltro, empresaFiltro, nombreFiltro, onPeriodoFiltroChange, onEmpresaFiltroChange, controlesPorEmpresa, getControlesPorEmpresaPeriodo }: Props) {
-  const enriched = useMemo(() => {
-    const empresaOf = (r: ConsolidatedEntity) => String(r.data?.EMPRESA ?? 'LIMPAR');
-    return rows
-      .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
-      .filter((r) => (empresaFiltro && empresaFiltro !== 'Todas' ? empresaOf(r) === empresaFiltro : true))
-      .filter((r) => {
-        if (!nombreFiltro) return true;
-        const nombre = nameByKey[r.key] || r.nombre || "";
-        return nombre.toLowerCase().includes(nombreFiltro.toLowerCase());
-      })
-      .map((r) => ({
-        key: r.key,
-        legajo: r.legajo,
-        nombre: nameByKey[r.key] || r.nombre || '',
-        periodo: r.periodo,
-        archivo: JSON.stringify(r.archivos.map((n: string) => ({ name: n }))),
-        data: r.data,
-      }));
-  }, [rows, periodoFiltro, empresaFiltro, nombreFiltro, nameByKey]);
+export default function TablaAgregada({ data, showEmpresa = false, onColumnsChange }: Props) {
+  const { data: session } = useSession();
+  const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
+  const [columnAliases, setColumnAliases] = useState<Record<string, string>>({});
+  const [configLoaded, setConfigLoaded] = useState(false);
 
-  // Estado para controles específicos del periodo
-  const [controlesPeriodo, setControlesPeriodo] = useState<Record<string, number>>({});
-
-  // Cargar controles específicos del periodo cuando cambie
+  // Cargar configuración de columnas al montar el componente
   useEffect(() => {
-    if (periodoFiltro && getControlesPorEmpresaPeriodo) {
-      const cargarControles = async () => {
-        const controlesMap: Record<string, number> = {};
-        const empresas = Array.from(new Set(rows.map(r => String(r.data?.EMPRESA ?? 'LIMPAR'))));
-        
-        for (const empresa of empresas) {
-          const cantidad = await getControlesPorEmpresaPeriodo(empresa, periodoFiltro);
-          controlesMap[empresa] = cantidad;
-        }
-        
-        setControlesPeriodo(controlesMap);
-      };
+    const loadConfig = async () => {
+      if (!session?.user?.id) return;
       
-      void cargarControles();
-    } else {
-      setControlesPeriodo({});
-    }
-  }, [periodoFiltro, getControlesPorEmpresaPeriodo, rows]);
+      try {
+        const config = await ColumnConfigManager.getConfig(session.user.id, 'recibos');
+        if (config) {
+          setVisibleColumns(config.visibleColumns);
+          setColumnAliases(config.columnAliases);
+        }
+      } catch (error) {
+        console.error('Error loading column config:', error);
+      } finally {
+        setConfigLoaded(true);
+      }
+    };
 
-  // Generar resumen por empresa cuando no hay filtro específico de empresa
-  const empresasResumen = useMemo(() => {
-    if (empresaFiltro !== 'Todas') return null;
-    
-    const resumen = new Map<string, { cantidad: number; controles: number }>();
-    
-    // Contar recibos por empresa
-    rows
-      .filter((r) => (periodoFiltro ? r.periodo === periodoFiltro : true))
-      .forEach((r) => {
-        const empresa = String(r.data?.EMPRESA ?? 'LIMPAR');
-        const current = resumen.get(empresa) || { cantidad: 0, controles: 0 };
-        current.cantidad += 1;
-        resumen.set(empresa, current);
-      });
-    
-    // Contar controles por empresa/periodo
-    if (periodoFiltro) {
-      // Si hay filtro de periodo, usar controles específicos del periodo
-      const empresasConControles = new Set(resumen.keys());
-      empresasConControles.forEach(empresa => {
-        const current = resumen.get(empresa)!;
-        current.controles = controlesPeriodo[empresa] || 0;
-      });
-    } else if (controlesPorEmpresa) {
-      // Sin filtro de periodo, mostrar total de controles por empresa
-      const empresasConControles = new Set(resumen.keys());
-      empresasConControles.forEach(empresa => {
-        const current = resumen.get(empresa)!;
-        current.controles = controlesPorEmpresa[empresa] || 0;
-      });
+    loadConfig();
+  }, [session?.user?.id]);
+
+  const enriched = useMemo(() => {
+    // Validar que data sea un array válido
+    if (!data || !Array.isArray(data)) {
+      return [];
     }
     
-    return Array.from(resumen.entries()).map(([empresa, data]) => ({
-      empresa,
-      cantidad: data.cantidad,
-      controles: data.controles
-    })).sort((a, b) => b.cantidad - a.cantidad);
-  }, [rows, periodoFiltro, empresaFiltro, controlesPorEmpresa, controlesPeriodo]);
+    return data.map((r) => ({
+      key: r.key,
+      legajo: r.legajo,
+      nombre: r.nombre || '',
+      periodo: r.periodo,
+      archivo: r.archivos ? r.archivos.join(', ') : '',
+      data: r.data,
+    }));
+  }, [data]);
 
-  const [pageSize, setPageSize] = useState<number>(50);
-  const [page, setPage] = useState<number>(1);
+  // Obtener todas las columnas únicas de los datos, excluyendo duplicados
+  const allColumns = useMemo(() => {
+    const columns = new Set<string>();
+    
+    // Agregar columnas fijas que se pueden mostrar/ocultar
+    columns.add('PERIODO');
+    columns.add('ARCHIVO');
+    if (showEmpresa) {
+      columns.add('EMPRESA');
+    }
+    
+    // Agregar columnas de datos
+    enriched.forEach(item => {
+      if (item.data) {
+        Object.keys(item.data).forEach(key => {
+          // Excluir columnas duplicadas y de texto
+          if (key !== 'TEXTO_COMPLETO' && 
+              key !== 'PRIMERAS_LINEAS' && 
+              key !== 'CUIL' && 
+              key !== 'NOMBRE' && 
+              key !== 'NRO. DE CUIL' &&
+              key !== 'PERIODO' && // Ya agregado arriba
+              key !== 'ARCHIVO' && // Ya agregado arriba
+              key !== 'EMPRESA') { // Ya agregado arriba si showEmpresa
+            columns.add(key);
+          }
+        });
+      }
+    });
+    return Array.from(columns).sort();
+  }, [enriched, showEmpresa]);
 
-  const totalPages = Math.max(1, Math.ceil(enriched.length / pageSize));
-  const pageRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return enriched.slice(start, start + pageSize);
-  }, [enriched, page, pageSize]);
+  // Inicializar columnas visibles si no están configuradas
+  const displayColumns = useMemo(() => {
+    if (visibleColumns.length === 0) {
+      return allColumns; // Mostrar todas por defecto
+    }
+    return visibleColumns;
+  }, [visibleColumns, allColumns]);
 
-  if (page > totalPages) {
-    setPage(totalPages);
-  }
+  const handleColumnsChange = async (newVisibleColumns: string[], newAliases: Record<string, string>) => {
+    setVisibleColumns(newVisibleColumns);
+    setColumnAliases(newAliases);
+    onColumnsChange?.(newVisibleColumns, newAliases);
+    
+    // Guardar configuración en la base de datos
+    if (session?.user?.id) {
+      try {
+        await ColumnConfigManager.saveConfig(
+          session.user.id, 
+          'recibos', 
+          newVisibleColumns, 
+          newAliases
+        );
+      } catch (error) {
+        console.error('Error saving column config:', error);
+      }
+    }
+  };
 
-  const headers = useMemo(() => {
-    return visibleCols.map(col => labelFor(col));
-  }, [visibleCols]);
+  const {
+    currentPage,
+    itemsPerPage,
+    totalPages,
+    totalItems,
+    paginatedData,
+    setCurrentPage,
+    setItemsPerPage
+  } = usePagination({
+    data: enriched,
+    initialItemsPerPage: 25
+  });
 
-  // Componente de paginación reutilizable
-  const PaginationControls = () => (
-    <div className="flex items-center gap-3">
-      <div className="text-sm text-muted-foreground">Mostrando {pageRows.length} de {enriched.length}</div>
-      <div className="ml-auto flex items-center gap-4">
-        <span className="text-sm text-muted-foreground">Filas por página</span>
-        <Select value={String(pageSize)} onValueChange={(v) => { setPage(1); setPageSize(Number(v) || 50); }}>
-          <SelectTrigger className="w-24"><SelectValue placeholder="50" /></SelectTrigger>
-          <SelectContent>
-            {[25, 50, 100, 200].map((n: number) => (<SelectItem key={n} value={String(n)}>{n}</SelectItem>))}
-          </SelectContent>
-        </Select>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>←</Button>
-          <div className="text-sm tabular-nums">{page} / {totalPages}</div>
-          <Button size="sm" variant="outline" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>→</Button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Vista de resumen por empresa
-  if (empresasResumen) {
+  if (enriched.length === 0) {
     return (
-      <div className="space-y-4">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Resumen por Empresa</h2>
-          <p className="text-gray-600">Selecciona una empresa para ver sus recibos</p>
-        </div>
-        
-        <div className="flex justify-center">
-          <div className="w-full max-w-2xl">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-center font-semibold">Empresa</TableHead>
-                  <TableHead className="text-center font-semibold">Cantidad de Recibos</TableHead>
-                  <TableHead className="text-center font-semibold">Controles</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {empresasResumen.map((item) => (
-                  <TableRow 
-                    key={item.empresa}
-                    className="hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => onEmpresaFiltroChange(item.empresa)}
-                  >
-                    <TableCell className="text-center font-medium">{item.empresa}</TableCell>
-                    <TableCell className="text-center">{item.cantidad.toLocaleString('es-AR')}</TableCell>
-                    <TableCell className="text-center">
-                      {periodoFiltro ? (
-                        item.controles > 0 ? (
-                          <span className="text-green-600 font-medium">✓ {item.controles}</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )
-                      ) : (
-                        item.controles > 0 ? (
-                          <span className="text-blue-600 font-medium">{item.controles}</span>
-                        ) : (
-                          <span className="text-gray-400">0</span>
-                        )
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
+      <div className="text-center py-8 text-gray-500">
+        No hay datos para mostrar
       </div>
     );
   }
 
   return (
-    <div className="w-full overflow-x-auto">
-      {/* Paginación superior */}
-      <div className="mb-3">
-        <PaginationControls />
+    <div className="border rounded-lg overflow-hidden">
+      <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+        <div className="text-sm text-gray-600">
+          Mostrando {displayColumns.length} de {allColumns.length} columnas
+        </div>
+        <ColumnSelector
+          columns={allColumns}
+          onColumnsChange={handleColumnsChange}
+          initialVisible={visibleColumns}
+          initialAliases={columnAliases}
+        />
       </div>
-
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {headers.map((h) => (
-              <TableHead key={h} className="whitespace-pre-line text-center min-w-0 max-w-32">
-                {formatHeader(h)}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {pageRows.map((r) => (
-            <TableRow key={r.key}>
-              {visibleCols.map((col, index) => {
-                const header = headers[index];
-                if (col === 'LEGAJO') return <TableCell key={col}>{r.legajo}</TableCell>;
-                if (col === 'NOMBRE') return <TableCell key={col}>{r.nombre}</TableCell>;
-                if (col === 'PERIODO') return <TableCell key={col}>{r.periodo}</TableCell>;
-                if (col === 'ARCHIVO') return <TableCell key={col}><ArchivosCell value={r.archivo} /></TableCell>;
-                const v = r.data?.[col];
-                return <TableCell key={col}>{fmtNumber(v)}</TableCell>;
-              })}
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Legajo</TableHead>
+              <TableHead>Nombre</TableHead>
+              {displayColumns.includes('PERIODO') && <TableHead>Período</TableHead>}
+              {displayColumns.includes('EMPRESA') && <TableHead>Empresa</TableHead>}
+              {displayColumns.includes('ARCHIVO') && <TableHead>Archivo</TableHead>}
+              {displayColumns.filter(col => !['PERIODO', 'EMPRESA', 'ARCHIVO'].includes(col)).map(column => (
+                <TableHead key={column} className="text-right">
+                  {columnAliases[column] || column}
+                </TableHead>
+              ))}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      
-      {/* Paginación inferior */}
-      <div className="mt-3">
-        <PaginationControls />
+          </TableHeader>
+          <TableBody>
+            {paginatedData.map((row) => (
+              <TableRow key={row.key}>
+                <TableCell className="font-medium">{row.legajo}</TableCell>
+                <TableCell>{row.nombre}</TableCell>
+                {displayColumns.includes('PERIODO') && (
+                  <TableCell>{row.periodo}</TableCell>
+                )}
+                {displayColumns.includes('EMPRESA') && (
+                  <TableCell>{row.data?.EMPRESA || extractEmpresaFromArchivo(row.archivo)}</TableCell>
+                )}
+                {displayColumns.includes('ARCHIVO') && (
+                  <TableCell className="text-sm text-gray-500">{row.archivo}</TableCell>
+                )}
+                {displayColumns.filter(col => !['PERIODO', 'EMPRESA', 'ARCHIVO'].includes(col)).map(column => (
+                  <TableCell key={column} className="text-right">
+                    {fmtNumber(row.data?.[column])}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
+      
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        itemsPerPage={itemsPerPage}
+        onPageChange={setCurrentPage}
+        onItemsPerPageChange={setItemsPerPage}
+      />
     </div>
   );
 }

@@ -19,6 +19,7 @@ import {
   Calendar,
   User
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { 
   getDescuentosByEmpresa, 
   getDescuentosActivos,
@@ -32,13 +33,14 @@ import FichaEmpleadoModal from './FichaEmpleadoModal';
 
 interface DescuentosPanelProps {
   empresaFiltro: string;
+  employees: any[]; // ConsolidatedEntity[]
 }
 
-export default function DescuentosPanel({ empresaFiltro }: DescuentosPanelProps) {
+export default function DescuentosPanel({ empresaFiltro, employees }: DescuentosPanelProps) {
   const { data: session } = useSession();
   const [descuentos, setDescuentos] = useState<Descuento[]>([]);
   const [estadisticas, setEstadisticas] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [tipoFiltro, setTipoFiltro] = useState<string>('TODOS');
   const [estadoFiltro, setEstadoFiltro] = useState<string>('TODOS');
@@ -48,6 +50,22 @@ export default function DescuentosPanel({ empresaFiltro }: DescuentosPanelProps)
   const [selectedLegajo, setSelectedLegajo] = useState<string>('');
 
   const canManage = session?.user ? canManageDescuentos(session.user) : false;
+  
+  // Debug: verificar permisos
+  useEffect(() => {
+    if (session?.user) {
+      console.log("🔍 Permisos de descuentos:", {
+        user: session.user.name,
+        role: session.user.role,
+        permissions: session.user.permissions,
+        canManage,
+        hasCreate: session.user.permissions?.includes('descuentos:create'),
+        hasEdit: session.user.permissions?.includes('descuentos:edit'),
+        empresaFiltro,
+        empresaId: session.user.empresaId
+      });
+    }
+  }, [session, canManage, empresaFiltro]);
 
   useEffect(() => {
     loadDescuentos();
@@ -56,11 +74,15 @@ export default function DescuentosPanel({ empresaFiltro }: DescuentosPanelProps)
   const loadDescuentos = async () => {
     setIsLoading(true);
     try {
-      const empresa = empresaFiltro === 'Todas' ? undefined : empresaFiltro;
-      const descuentosData = empresa ? await getDescuentosByEmpresa(empresa) : await getDescuentosActivos();
+      // Cargar descuentos de la base de datos
+      const descuentosData = empresaFiltro && empresaFiltro !== 'Todas' 
+        ? await getDescuentosByEmpresa(empresaFiltro)
+        : await getDescuentosActivos();
+      
       setDescuentos(descuentosData);
       
-      const stats = await getEstadisticasDescuentos(empresa);
+      // Cargar estadísticas
+      const stats = await getEstadisticasDescuentos(empresaFiltro && empresaFiltro !== 'Todas' ? empresaFiltro : undefined);
       setEstadisticas(stats);
     } catch (error) {
       console.error('Error cargando descuentos:', error);
@@ -83,9 +105,14 @@ export default function DescuentosPanel({ empresaFiltro }: DescuentosPanelProps)
     if (confirm('¿Estás seguro de que quieres eliminar este descuento?')) {
       try {
         await deleteDescuento(id, session?.user?.id || '');
-        await loadDescuentos();
+        setDescuentos(prev => prev.filter(d => d.id !== id));
+        toast.success('Descuento eliminado correctamente');
+        // Recargar estadísticas
+        const stats = await getEstadisticasDescuentos(empresaFiltro && empresaFiltro !== 'Todas' ? empresaFiltro : undefined);
+        setEstadisticas(stats);
       } catch (error) {
         console.error('Error eliminando descuento:', error);
+        toast.error('Error al eliminar el descuento');
       }
     }
   };
@@ -98,7 +125,7 @@ export default function DescuentosPanel({ empresaFiltro }: DescuentosPanelProps)
   const filteredDescuentos = descuentos.filter(descuento => {
     const matchesSearch = descuento.legajo.includes(searchTerm) || 
                          descuento.nombre.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesTipo = tipoFiltro === 'TODOS' || descuento.tipoDescuento === tipoFiltro;
+    const matchesTipo = tipoFiltro === 'TODOS' || descuento.tipo === tipoFiltro;
     const matchesEstado = estadoFiltro === 'TODOS' || descuento.estado === estadoFiltro;
     
     return matchesSearch && matchesTipo && matchesEstado;
@@ -147,7 +174,7 @@ export default function DescuentosPanel({ empresaFiltro }: DescuentosPanelProps)
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total Activos</p>
                   <p className="text-2xl font-bold text-green-600">
-                    ${estadisticas.montoActivos.toLocaleString()}
+                    ${(estadisticas?.montoActivos || 0).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -241,17 +268,19 @@ export default function DescuentosPanel({ empresaFiltro }: DescuentosPanelProps)
             </div>
             
             <div className="w-[140px]">
-              <label className="text-xs font-medium text-muted-foreground">Estado</label>
+              <label className="text-xs font-medium text-muted-foreground">Empresas</label>
               <select
                 value={estadoFiltro}
                 onChange={(e) => setEstadoFiltro(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               >
-                <option value="TODOS">Todos</option>
-                <option value="ACTIVO">Activo</option>
-                <option value="SUSPENDIDO">Suspendido</option>
-                <option value="FINALIZADO">Finalizado</option>
-                <option value="CANCELADO">Cancelado</option>
+                <option value="TODOS">Todas</option>
+                <option value="LIMPAR">LIMPAR</option>
+                <option value="LIME">LIME</option>
+                <option value="SUMAR">SUMAR</option>
+                <option value="TYSA">TYSA</option>
+                <option value="ESTRATEGIA AMBIENTAL">ESTRATEGIA AMBIENTAL</option>
+                <option value="ESTRATEGIA URBANA">ESTRATEGIA URBANA</option>
               </select>
             </div>
             
@@ -308,11 +337,11 @@ export default function DescuentosPanel({ empresaFiltro }: DescuentosPanelProps)
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge className={getTipoBadgeColor(descuento.tipoDescuento)}>
-                        {descuento.tipoDescuento.replace('_', ' ')}
+                        {(descuento.tipoDescuento || '').replace('_', ' ')}
                       </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${descuento.monto.toLocaleString()}
+                      ${(descuento.monto || 0).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {descuento.cuotaActual}/{descuento.cantidadCuotas}
@@ -375,6 +404,7 @@ export default function DescuentosPanel({ empresaFiltro }: DescuentosPanelProps)
             setSelectedDescuento(null);
             loadDescuentos();
           }}
+          employees={employees}
         />
       )}
 
@@ -391,3 +421,5 @@ export default function DescuentosPanel({ empresaFiltro }: DescuentosPanelProps)
     </div>
   );
 }
+
+export { DescuentosPanel };

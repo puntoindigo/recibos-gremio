@@ -329,3 +329,5 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
     </Dialog>
   );
 }
+
+export { FichaEmpleadoModal };

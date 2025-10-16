@@ -5,6 +5,12 @@ import { ChevronDown, ChevronUp, Settings, Database, Info, FileText, GripVertica
 import { Button } from '@/components/ui/button';
 import { useDraggable } from '@/hooks/useDraggable';
 
+type UploadItem = { 
+  name: string; 
+  status: "pending" | "ok" | "error" | "skipped";
+  reason?: string;
+};
+
 type DebugInfo = {
   totalRows: number;
   consolidatedCount: number;
@@ -22,7 +28,7 @@ type Props = {
   empresaFiltro: string;
   nombreFiltro: string;
   hasControlForCurrentFilters: boolean;
-  processingFiles: FileList | null;
+  processingFiles: UploadItem[] | null;
   lastProcessedIndex: number;
 };
 

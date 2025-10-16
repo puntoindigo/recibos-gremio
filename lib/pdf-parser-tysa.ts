@@ -161,35 +161,40 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     EMPRESA: "TYSA"
   };
 
-  // Extraer período - buscar "Periodo de Pago" específicamente para TYSA
+  // Extraer período - buscar patrones más flexibles para TYSA
+  // 1. Buscar "Periodo de Pago" específicamente
   const periodoPagoMatch = rawText.match(/Periodo de Pago:\s*(\d{1,2})\/(\d{4})/i);
   if (periodoPagoMatch) {
     data.PERIODO = `${periodoPagoMatch[1]}/${periodoPagoMatch[2]}`;
   } else {
-    // Buscar en el nombre del archivo: TYSA 072025 - CCT - SUELDOS-8-1.pdf
+    // 2. Buscar en el nombre del archivo: TYSA 072025 - CCT - SUELDOS-8-1.pdf
     const archivoMatch = rawText.match(/TYSA\s*(\d{2})(\d{4})/i);
     if (archivoMatch) {
       data.PERIODO = `${archivoMatch[1]}/${archivoMatch[2]}`;
     } else {
-      // Buscar "07/2025" específicamente (evitar falsos positivos como "80/5940")
-      const periodoEspecificoMatch = rawText.match(/(?:^|\s)(07)\/(2025)(?:\s|$)/);
-      if (periodoEspecificoMatch) {
-        data.PERIODO = `${periodoEspecificoMatch[1]}/${periodoEspecificoMatch[2]}`;
-      } else {
-        // Fallback a otros patrones
-        const periodoMatch = rawText.match(/Mensual\s*(\d{1,2})\/(\d{4})|(\d{1,2})\/(\d{4})|(\d{6})/);
-        if (periodoMatch) {
-          if (periodoMatch[1] && periodoMatch[2]) {
-            // Formato "Mensual 07/2025"
-            data.PERIODO = `${periodoMatch[1]}/${periodoMatch[2]}`;
-          } else if (periodoMatch[3] && periodoMatch[4]) {
-            // Formato "07/2025"
-            data.PERIODO = `${periodoMatch[3]}/${periodoMatch[4]}`;
-          } else if (periodoMatch[5]) {
-            // Formato 072025
-            const mes = periodoMatch[5].substring(0, 2);
-            const año = periodoMatch[5].substring(2);
-            data.PERIODO = `${mes}/${año}`;
+      // 3. Buscar patrones de fecha más flexibles
+      const periodoMatch = rawText.match(/(\d{1,2})\/(\d{4})/g);
+      if (periodoMatch) {
+        // Tomar el primer match que parezca un período válido
+        for (const match of periodoMatch) {
+          const parts = match.split('/');
+          const mes = parseInt(parts[0]);
+          const año = parseInt(parts[1]);
+          if (mes >= 1 && mes <= 12 && año >= 2020 && año <= 2030) {
+            data.PERIODO = match;
+            break;
+          }
+        }
+      }
+      
+      // 4. Si no se encontró, buscar formato 072025
+      if (data.PERIODO === "-") {
+        const formatoMatch = rawText.match(/(\d{2})(\d{4})/);
+        if (formatoMatch) {
+          const mes = parseInt(formatoMatch[1]);
+          const año = parseInt(formatoMatch[2]);
+          if (mes >= 1 && mes <= 12 && año >= 2020 && año <= 2030) {
+            data.PERIODO = `${formatoMatch[1]}/${formatoMatch[2]}`;
           }
         }
       }
@@ -313,13 +318,14 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
 
 
 
+  // Configurar empresa
+  data["EMPRESA"] = "TYSA";
+
   const debugLines = allLines.slice(0, 150).map((line) => ({
     y: Math.round(line.reduce((s, w) => s + w.y, 0) / line.length),
     text: line.map((w) => w.str).join(" "),
     tokens: line.map((w) => ({ str: w.str, x: Math.round(w.x), y: Math.round(w.y) })),
   }));
-
-
 
   return { data, debugLines };
   } catch (e: unknown) {

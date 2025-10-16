@@ -236,7 +236,10 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   const debugLimpar = debug;
   assertClient();
 
-  GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+  // Configurar el worker de PDF.js
+  if (typeof window !== 'undefined') {
+    GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+  }
   const ok = await fetch("/pdf.worker.min.mjs", { method: "HEAD" })
     .then((r) => r.ok)
     .catch(() => false);
@@ -610,6 +613,9 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
       data["5310"] = toDotDecimal(item5310);
     }
   }
+
+  // Configurar empresa
+  data["EMPRESA"] = "LIMPAR";
 
   const debugLines = allLines.slice(0, 150).map((line) => ({
     y: Math.round(line.reduce((s, w) => s + w.y, 0) / line.length),
