@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useSession } from "next-auth/react";
 import { useDraggable } from "@/hooks/useDraggable";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,8 @@ import { DescuentosPanel } from "@/components/DescuentosPanel";
 import { ProgresoLotes } from "@/components/ProgresoLotes";
 import { useSemaphore } from "@/hooks/useSemaphore";
 import { splitPdfEnLotes, procesarLoteEnPaginas, detectMultiPagePdf, detectLimePdf, type LoteInfo } from "@/lib/pdf-splitter";
+import Navigation from "@/components/Navigation";
+import { createInitialSuperAdmin } from "@/lib/auth";
 // import { PdfSplitDialog } from "@/components/PdfSplitDialog"; // Eliminado - split desactivado
 
 type UploadItem = { 
@@ -126,11 +129,12 @@ type SavedControl = {
 /* --------------------------- page ---------------------------- */
 
 export default function Page() {
+  const { data: session, status } = useSession();
   const [consolidated, setConsolidated] = useState<ConsolidatedEntity[]>([]);
   const [totalRows, setTotalRows] = useState(0);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [showDebug, setShowDebug] = useState(false);
-  const [activeTab, setActiveTab] = useState<string>("agregado");
+  const [activeTab, setActiveTab] = useState<string>("recibos");
   const [processingFiles, setProcessingFiles] = useState<FileList | null>(null);
   const [lastProcessedIndex, setLastProcessedIndex] = useState<number>(-1);
   const [hasControlForCurrentFilters, setHasControlForCurrentFilters] = useState<boolean>(false);
@@ -173,6 +177,13 @@ export default function Page() {
   const [controlsRefreshKey, setControlsRefreshKey] = useState(0); // Para forzar actualización de controles guardados
   const [selectedControl, setSelectedControl] = useState<SavedControlDB | null>(null); // Control seleccionado para ver detalles
   const [controlesPorEmpresa, setControlesPorEmpresa] = useState<Record<string, number>>({});
+  
+  // Inicializar SuperAdmin si no existe
+  useEffect(() => {
+    if (status === 'authenticated') {
+      createInitialSuperAdmin();
+    }
+  }, [status]);
   
   // Estado para el split en cascada
   const [lotesInfo, setLotesInfo] = useState<LoteInfo[]>([]);
@@ -685,7 +696,7 @@ useEffect(() => {
         
       try {
         const hash = await sha256OfFile(file);
-        
+
         // Validar que el hash se generó correctamente
         if (!hash || typeof hash !== 'string' || hash.trim() === '') {
           console.error(`❌ Error generando hash para ${file.name}:`, hash);
@@ -1581,9 +1592,39 @@ useEffect(() => {
 
   /* ----------------------------- UI ---------------------------- */
 
+  // Mostrar loading mientras se verifica la autenticación
+  if (status === 'loading') {
   return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Verificando autenticación...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirigir a login si no está autenticado
+  if (status === 'unauthenticated') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Acceso Requerido</h1>
+          <p className="text-gray-600 mb-6">Necesitas iniciar sesión para acceder al sistema</p>
+          <Button onClick={() => window.location.href = '/auth/signin'}>
+            Ir a Login
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
+      
     <main className="mx-auto max-w-6xl p-6">
-      <header className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">
           Gestor de Recibos <span className="ml-2 text-sm text-muted-foreground">({totalRows})</span>
         </h1>
@@ -1597,30 +1638,24 @@ useEffect(() => {
           </Button>
           <ThemeToggle />
         </div>
-      </header>
+        </div>
 
-      <Tabs defaultValue="agregado" className="w-full" onValueChange={(value) => {
-        setActiveTab(value);
-        
-        // Si se cambia a la pestaña "Recibos", limpiar filtros y mostrar resumen por empresa
-        if (value === "agregado") {
-          setPeriodoFiltro("");
-          setEmpresaFiltro("Todas");
-          setNombreFiltro("");
-          if (showDebug) {
-            console.log("🔄 Pestaña Recibos seleccionada - Filtros limpiados para mostrar resumen por empresa");
+        <Tabs value={activeTab} className="w-full" onValueChange={(value) => {
+          setActiveTab(value);
+          
+          // Si se cambia a la pestaña "Recibos", limpiar filtros y mostrar resumen por empresa
+          if (value === "recibos") {
+            setPeriodoFiltro("");
+            setEmpresaFiltro("Todas");
+            setNombreFiltro("");
+            if (showDebug) {
+              console.log("🔄 Pestaña Recibos seleccionada - Filtros limpiados para mostrar resumen por empresa");
+            }
           }
-        }
-      }}>
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="agregado">Recibos</TabsTrigger>
-          <TabsTrigger value="control">Control</TabsTrigger>
-          <TabsTrigger value="export">Exportación</TabsTrigger>
-          <TabsTrigger value="descuentos">Descuentos</TabsTrigger>
-        </TabsList>
+        }}>
 
         {/* RECIBOS */}
-        <TabsContent value="agregado" className="mt-4">
+        <TabsContent value="recibos" className="mt-4">
           <Card>
             <CardHeader className="flex items-center justify-between gap-2 sm:flex-row sm:items-center">
               <div>
@@ -1799,7 +1834,27 @@ useEffect(() => {
 
         {/* DESCUENTOS */}
         <TabsContent value="descuentos" className="mt-4">
-          <DescuentosPanel showDebug={showDebug} consolidatedData={consolidated} />
+          <DescuentosPanel empresaFiltro={empresaFiltro} />
+        </TabsContent>
+
+        {/* USUARIOS */}
+        <TabsContent value="usuarios" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Gestión de Usuarios</CardTitle>
+              <CardDescription>
+                Administra usuarios, roles y permisos del sistema
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8">
+                <p className="text-gray-500">Módulo de usuarios en desarrollo</p>
+                <p className="text-sm text-gray-400 mt-2">
+                  Aquí se implementará la gestión completa de usuarios
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
@@ -1876,13 +1931,13 @@ useEffect(() => {
             
             {/* Botón continuar */}
             {lastProcessedIndex >= 0 && lastProcessedIndex < processingFiles.length - 1 && (
-              <Button 
+          <Button 
                 className="w-full bg-orange-600 hover:bg-orange-700 text-white text-sm" 
-                onClick={() => handleFiles(processingFiles, lastProcessedIndex + 1)}
-              >
+            onClick={() => handleFiles(processingFiles, lastProcessedIndex + 1)}
+          >
                 <FileUp className="mr-2 h-4 w-4" /> 
                 Continuar desde {lastProcessedIndex + 2}
-              </Button>
+          </Button>
             )}
             
             {/* Mensaje de completado */}
