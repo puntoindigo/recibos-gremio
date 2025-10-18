@@ -53,6 +53,19 @@ export const authOptions: NextAuthOptions = {
         session.user.permissions = token.permissions as string[];
       }
       return session;
+    },
+    async redirect({ url, baseUrl }) {
+      console.log('NextAuth Redirect:', { url, baseUrl });
+      // Evitar bucles de redirección
+      if (url === baseUrl + '/auth/signin') {
+        return baseUrl;
+      }
+      // Si la URL es relativa, agregar baseUrl
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // Si la URL es del mismo dominio, permitirla
+      if (url.startsWith(baseUrl)) return url;
+      // Por defecto, redirigir a la página principal
+      return baseUrl;
     }
   },
   pages: {
@@ -63,5 +76,17 @@ export const authOptions: NextAuthOptions = {
     strategy: 'jwt',
     maxAge: 24 * 60 * 60 // 24 horas
   },
-  secret: process.env.NEXTAUTH_SECRET || 'fallback-secret-key'
+  secret: process.env.NEXTAUTH_SECRET || 'fallback-secret-key',
+  debug: true, // Habilitar debug siempre para diagnosticar
+  logger: {
+    error(code, metadata) {
+      console.error('NextAuth Error:', code, metadata);
+    },
+    warn(code) {
+      console.warn('NextAuth Warning:', code);
+    },
+    debug(code, metadata) {
+      console.log('NextAuth Debug:', code, metadata);
+    }
+  }
 };

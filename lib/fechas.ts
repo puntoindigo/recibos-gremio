@@ -71,10 +71,14 @@ export function normalizarPeriodo(raw: unknown): string {
   {
     const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
     if (m) {
-      const a = Number(m[1]), b = Number(m[2]);
-      const month = a > 12 ? b : (b <= 12 ? b : a);
-      const mm = clampMM(String(month));
-      return `${mm}/${m[3]}`;
+      const año = parseInt(m[3]);
+      // Validar que el año sea razonable (2020-2030)
+      if (año >= 2020 && año <= 2030) {
+        const a = Number(m[1]), b = Number(m[2]);
+        const month = a > 12 ? b : (b <= 12 ? b : a);
+        const mm = clampMM(String(month));
+        return `${mm}/${m[3]}`;
+      }
     }
   }
 
@@ -93,7 +97,11 @@ export function normalizarPeriodo(raw: unknown): string {
     const m = s.match(/^(\d{1,2})[\/\-](\d{4})$/);
     if (m) {
       const mm = clampMM(m[1]);
-      return `${mm}/${m[2]}`;
+      const año = parseInt(m[2]);
+      // Validar que el año sea razonable (2020-2030)
+      if (año >= 2020 && año <= 2030) {
+        return `${mm}/${m[2]}`;
+      }
     }
   }
 

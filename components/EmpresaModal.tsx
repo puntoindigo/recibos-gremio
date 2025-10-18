@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,10 +21,19 @@ interface EmpresaModalProps {
   fileName: string;
 }
 
-const EMPRESAS_DISPONIBLES = ['LIMPAR', 'LIME', 'SUMAR', 'TYSA', 'ESTRATEGIA AMBIENTAL', 'ESTRATEGIA URBANA'];
+const EMPRESAS_DISPONIBLES = ['LIMPAR', 'LIME', 'SUMAR', 'TYSA', 'ESTRATEGIA AMBIENTAL', 'MAGEVA', 'RESICOM'];
 
 export default function EmpresaModal({ isOpen, onClose, onConfirm, fileName }: EmpresaModalProps) {
   const [empresa, setEmpresa] = useState('');
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (isOpen && confirmButtonRef.current) {
+      setTimeout(() => {
+        confirmButtonRef.current?.focus();
+      }, 100);
+    }
+  }, [isOpen]);
 
   const handleConfirm = () => {
     if (empresa.trim()) {
@@ -89,7 +98,7 @@ export default function EmpresaModal({ isOpen, onClose, onConfirm, fileName }: E
           <Button variant="outline" onClick={handleCancel}>
             Cancelar
           </Button>
-          <Button onClick={handleConfirm} disabled={!empresa.trim()}>
+          <Button ref={confirmButtonRef} onClick={handleConfirm} disabled={!empresa.trim()}>
             Confirmar
           </Button>
         </DialogFooter>

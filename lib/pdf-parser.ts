@@ -6,81 +6,86 @@ export type Parsed = {
   debugLines: { y: number; text: string; tokens: { str: string; x: number; y: number }[] }[];
 };
 
-// Función para detectar la empresa del recibo
+// Función para detectar la empresa del recibo con patrones mejorados
 function detectarEmpresa(texto: string, debug: boolean = false): string {
   if (debug) {
     console.log(`🔍 Detectando empresa en texto:`, {
       textoLength: texto.length,
       textoPreview: texto.substring(0, 500) + "...",
-      nombreArchivo: texto.includes(".") ? texto.split(" ").pop() : "N/A",
-      contieneESTRATEGIA: texto.includes("ESTRATEGIA"),
-      contieneAMBIENTAL: texto.includes("AMBIENTAL"),
-      contieneSA: texto.includes("S.A."),
-      textoCompleto: texto // Mostrar el texto completo para debug
+      nombreArchivo: texto.includes(".") ? texto.split(" ").pop() : "N/A"
     });
   }
 
-  // Detectar LIMPAR (más específico y prioritario)
-  if (/LIMPAR/i.test(texto) || /LIMP\s*AR/i.test(texto) || /LIMPAR\s+S\.A\./i.test(texto) || /LIMPAR\s+SOCIEDAD/i.test(texto)) {
-    if (debug) {
-      console.log("✅ Empresa detectada: LIMPAR");
-      console.log("🔍 Texto que contiene LIMPAR:", texto.substring(0, 1000));
+  // Patrones de detección de empresas (ordenados por prioridad)
+  const empresaPatterns = [
+    { 
+      patterns: [/LIMPAR/i, /LIMP\s*AR/i, /LIMPAR\s+S\.A\./i, /LIMPAR\s+SOCIEDAD/i], 
+      empresa: "LIMPAR" 
+    },
+    { 
+      patterns: [/SUMAR/i, /CUOTA\s*APORT\./i, /SEG\.\s*SEPELIO/i], 
+      empresa: "SUMAR" 
+    },
+    { 
+      patterns: [/TYSA/i, /TALLER\s*TYSA/i], 
+      empresa: "TYSA" 
+    },
+    { 
+      patterns: [/ESTRATEGIA\s*AMBIENTAL/i, /ESTRATEGIA\s*AMBIENTAL\s*S\.A\./i], 
+      empresa: "ESTRATEGIA AMBIENTAL" 
+    },
+    { 
+      patterns: [/LIME/i, /J09/i, /J10/i, /J11/i, /J12/i, /Contrib\.Solidaria/i, /Gastos\s*de\s*sepelio/i], 
+      empresa: "LIME" 
+    },
+    { 
+      patterns: [/MAGEVA/i, /MAGEVA\s*SRL/i], 
+      empresa: "MAGEVA" 
+    },
+    { 
+      patterns: [/RESICOM/i, /RESICOM\s*INGENIERIA/i, /RESICOM\s*INGENIERIA\s*AMBIENTAL/i], 
+      empresa: "RESICOM" 
     }
-    return "LIMPAR";
-  }
+  ];
   
-  // Detectar SUMAR (prioritario)
-  if (/SUMAR/i.test(texto) || (/CUOTA APORT\./i.test(texto) && /SEG\. SEPELIO/i.test(texto))) {
-    if (debug) console.log("✅ Empresa detectada: SUMAR");
-    return "SUMAR";
-  }
-  
-  // Detectar TYSA (prioritario)
-  if (/TYSA/i.test(texto) || /TALLER TYSA/i.test(texto)) {
-    if (debug) console.log("✅ Empresa detectada: TYSA");
-    return "TYSA";
-  }
-  
-  // Detectar ESTRATEGIA AMBIENTAL
-  if (/ESTRATEGIA AMBIENTAL/i.test(texto) || /ESTRATEGIA\s*AMBIENTAL/i.test(texto) || /ESTRATEGIA AMBIENTAL S\.A\./i.test(texto) || texto.includes("ESTRATEGIA AMBIENTAL")) {
-    if (debug) console.log("✅ Empresa detectada: ESTRATEGIA AMBIENTAL");
-    return "ESTRATEGIA AMBIENTAL";
-  }
-  
-  // Detectar ESTRATEGIA URBANA
-  if (/ESTRATEGIA URBANA/i.test(texto) || /ESTRATEGIA\s*URBANA/i.test(texto)) {
-    if (debug) console.log("✅ Empresa detectada: ESTRATEGIA URBANA");
-    return "ESTRATEGIA URBANA";
-  }
-  
-  // Detectar LIME (por patrones específicos)
-  if (/J09|J10|J11|J12/i.test(texto) || /LIME/i.test(texto) || (/Contrib\.Solidaria/i.test(texto) && /Gastos de sepelio/i.test(texto))) {
-    if (debug) console.log("✅ Empresa detectada: LIME");
-    return "LIME";
-  }
-  
-  // Debug: mostrar qué patrones se probaron
   if (debug) {
-    console.log(`🔍 Patrones de detección probados:`, {
-      tieneLIMPAR: /LIMPAR/i.test(texto),
-      tieneLIMP_AR: /LIMP\s*AR/i.test(texto),
-      tieneSUMAR: /SUMAR/i.test(texto),
-      tieneTYSA: /TYSA/i.test(texto),
-      tieneTALLER_TYSA: /TALLER TYSA/i.test(texto),
-      tieneESTRATEGIA_AMBIENTAL: /ESTRATEGIA AMBIENTAL/i.test(texto),
-      tieneESTRATEGIA_AMBIENTAL_SA: /ESTRATEGIA AMBIENTAL S\.A\./i.test(texto),
-      tieneESTRATEGIA_URBANA: /ESTRATEGIA URBANA/i.test(texto),
-      tieneJ09: /J09/i.test(texto),
-      tieneJ10: /J10/i.test(texto),
-      tieneJ11: /J11/i.test(texto),
-      tieneJ12: /J12/i.test(texto),
-      tieneLIME: /LIME/i.test(texto),
-      tieneContribSolidaria: /Contrib\.Solidaria/i.test(texto),
-      tieneGastosSepelio: /Gastos de sepelio/i.test(texto)
+    console.log(`🔍 Total de patrones de empresa cargados: ${empresaPatterns.length}`, {
+      empresas: empresaPatterns.map(ep => ep.empresa)
     });
   }
   
-  if (debug) console.log("❌ Empresa NO detectada, retornando DESCONOCIDA");
+  // Probar cada patrón de empresa
+  for (const { patterns, empresa } of empresaPatterns) {
+    for (const pattern of patterns) {
+      if (debug) {
+        console.log(`🔍 Probando patrón para ${empresa}:`, {
+          patron: pattern.source,
+          testResult: pattern.test(texto),
+          textoRelevante: texto.substring(0, 200)
+        });
+      }
+      if (pattern.test(texto)) {
+        if (debug) {
+          console.log(`✅ Empresa detectada: ${empresa}`, {
+            patronUsado: pattern.source,
+            textoRelevante: texto.substring(0, 500) + "..."
+          });
+        }
+        return empresa;
+      }
+    }
+  }
+  
+  if (debug) {
+    console.log("❌ Empresa NO detectada, retornando DESCONOCIDA", {
+      textoCompleto: texto.substring(0, 1000) + "...",
+      patronesProbados: empresaPatterns.map(ep => ({
+        empresa: ep.empresa,
+        patrones: ep.patterns.map(p => p.source)
+      }))
+    });
+  }
+  
   return "DESCONOCIDA";
 }
 
@@ -241,8 +246,28 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     // Usar el parser de SUMAR con import dinámico
     const { parsePdfReceiptToRecord: parseSumar } = await import("./pdf-parser-sumar");
     return await parseSumar(file, debug);
-  } else if (empresa === "ESTRATEGIA AMBIENTAL" || empresa === "ESTRATEGIA URBANA") {
-    // Para ESTRATEGIA AMBIENTAL y ESTRATEGIA URBANA, usar el parser genérico pero permitir guardar
+  } else if (empresa === "ESTRATEGIA AMBIENTAL") {
+    // Para ESTRATEGIA AMBIENTAL, usar el parser genérico pero permitir guardar
+    return {
+      ...resultadoGenerico,
+      data: {
+        ...resultadoGenerico.data,
+        "EMPRESA": empresa,
+        "GUARDAR": "true"
+      }
+    };
+  } else if (empresa === "MAGEVA") {
+    // Para MAGEVA, usar el parser genérico pero permitir guardar
+    return {
+      ...resultadoGenerico,
+      data: {
+        ...resultadoGenerico.data,
+        "EMPRESA": empresa,
+        "GUARDAR": "true"
+      }
+    };
+  } else if (empresa === "RESICOM") {
+    // Para RESICOM, usar el parser genérico pero permitir guardar
     return {
       ...resultadoGenerico,
       data: {

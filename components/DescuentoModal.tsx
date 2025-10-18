@@ -1,7 +1,7 @@
 // components/DescuentoModal.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +31,9 @@ import {
 } from '@/lib/descuentos-manager';
 import { toast } from 'sonner';
 import { EmployeeSelector } from './EmployeeSelector';
+import { CuotasSelector } from './CuotasSelector';
+import { TagsSelector } from './TagsSelector';
+import CreateEmployeeModal from './CreateEmployeeModal';
 import type { ConsolidatedEntity } from '@/lib/db';
 
 interface DescuentoModalProps {
@@ -38,9 +41,13 @@ interface DescuentoModalProps {
   onClose: () => void;
   onSave: () => void;
   employees: ConsolidatedEntity[];
+  allDescuentos?: Descuento[]; // Para autocompletado de tags
+  onEmployeeCreated?: (employee: ConsolidatedEntity) => void;
 }
 
-export default function DescuentoModal({ descuento, onClose, onSave, employees }: DescuentoModalProps) {
+import { parseDateToTimestamp, formatTimestampToDateString, getCurrentDateString } from '@/lib/date-utils';
+
+export default function DescuentoModal({ descuento, onClose, onSave, employees, allDescuentos = [], onEmployeeCreated }: DescuentoModalProps) {
   const { data: session } = useSession();
   const [formData, setFormData] = useState({
     legajo: '',
@@ -52,13 +59,56 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
     tipoDescuento: 'PRESTAMO' as const,
     motivo: '',
     tags: [] as string[],
-    observaciones: ''
+    observaciones: '',
+    fechaInicio: getCurrentDateString() // Fecha actual en formato YYYY-MM-DD
   });
-  const [newTag, setNewTag] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showCreateEmployee, setShowCreateEmployee] = useState(false);
+  const [localEmployees, setLocalEmployees] = useState<ConsolidatedEntity[]>(employees);
+  const [employeeSearchValue, setEmployeeSearchValue] = useState('');
+
+  // Refs para manejo de focus
+  const employeeRef = useRef<HTMLInputElement>(null);
+  const fechaRef = useRef<HTMLInputElement>(null);
+  const montoRef = useRef<HTMLInputElement>(null);
+  const cuotasRef = useRef<HTMLInputElement>(null);
+  const tagsRef = useRef<HTMLInputElement>(null);
+  const crearRef = useRef<HTMLButtonElement>(null);
+  const cancelarRef = useRef<HTMLButtonElement>(null);
+  const masOpcionesRef = useRef<HTMLButtonElement>(null);
+
+  // Tags existentes para autocompletado
+  const existingTags = ['prestamo', 'adelanto', 'cuota', 'multa', 'seguro', 'obra social', 'sindicato'];
+
+  // Obtener el último tag usado
+  const getLastUsedTag = (): string => {
+    if (allDescuentos.length === 0) return '';
+    
+    // Ordenar descuentos por fecha de creación descendente
+    const sortedDescuentos = [...allDescuentos].sort((a, b) => {
+      const fechaA = a.fechaCreacion || 0;
+      const fechaB = b.fechaCreacion || 0;
+      return fechaB - fechaA;
+    });
+    
+    // Buscar el primer descuento que tenga tags
+    for (const descuento of sortedDescuentos) {
+      if (descuento.tags && descuento.tags.length > 0) {
+        // Retornar el primer tag del descuento más reciente
+        return descuento.tags[0];
+      }
+    }
+    
+    return '';
+  };
+
+  const lastUsedTag = getLastUsedTag();
+
+  // Sincronizar empleados locales con el prop
+  useEffect(() => {
+    setLocalEmployees(employees);
+  }, [employees]);
 
   useEffect(() => {
     if (descuento) {
@@ -72,7 +122,8 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
         tipoDescuento: descuento.tipoDescuento,
         motivo: descuento.motivo,
         tags: descuento.tags,
-        observaciones: descuento.observaciones || ''
+        observaciones: descuento.observaciones || '',
+        fechaInicio: descuento.fechaInicio ? formatTimestampToDateString(descuento.fechaInicio) : getCurrentDateString()
       });
     } else {
       // Establecer empresa por defecto basada en la sesión
@@ -80,8 +131,28 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
         ...prev,
         empresa: session?.user?.empresaId || ''
       }));
+      
+      // Focus automático en el campo de empleado cuando se abre el modal
+      setTimeout(() => {
+        employeeRef.current?.focus();
+      }, 100);
     }
   }, [descuento, session]);
+
+  // Atajo de teclado ESC para cancelar
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   const handleLegajoChange = async (value: string) => {
     setFormData(prev => ({ ...prev, legajo: value }));
@@ -105,25 +176,21 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
     setShowSuggestions(false);
   };
 
-  const handleAddTag = () => {
-    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        tags: [...prev.tags, newTag.trim()]
-      }));
-      setNewTag('');
-    }
-  };
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    setFormData(prev => ({
-      ...prev,
-      tags: prev.tags.filter(tag => tag !== tagToRemove)
-    }));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validación: empleado es obligatorio
+    if (!formData.legajo || !formData.nombre) {
+      alert('Debe seleccionar un empleado');
+      return;
+    }
+    
+    // Validación: monto es obligatorio
+    if (!formData.monto || formData.monto <= 0) {
+      alert('Debe ingresar un monto válido');
+      return;
+    }
     
     // Validación: al menos uno de los campos opcionales debe estar completo
     const hasDescripcion = formData.descripcion.trim().length > 0;
@@ -140,6 +207,7 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
     try {
       const descuentoData = {
         ...formData,
+        fechaInicio: parseDateToTimestamp(formData.fechaInicio),
         cuotaActual: descuento?.cuotaActual || 0,
         estado: descuento?.estado || 'ACTIVO',
         autorizadoPor: session?.user?.name || '',
@@ -164,16 +232,41 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
     }
   };
 
+  const handleCreateEmployee = () => {
+    setShowCreateEmployee(true);
+  };
+
+  const handleEmployeeCreated = (newEmployee: ConsolidatedEntity) => {
+    // Agregar el nuevo empleado a la lista local
+    setLocalEmployees(prev => [...prev, newEmployee]);
+    
+    // Seleccionar automáticamente el nuevo empleado
+    setFormData(prev => ({
+      ...prev,
+      legajo: newEmployee.legajo,
+      nombre: newEmployee.nombre || '',
+      empresa: newEmployee.data?.EMPRESA || ''
+    }));
+    
+    // Notificar al componente padre
+    if (onEmployeeCreated) {
+      onEmployeeCreated(newEmployee);
+    }
+    
+    setShowCreateEmployee(false);
+  };
+
   return (
-    <Dialog open={true} onOpenChange={onClose}>
+    <>
+      <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {descuento ? 'Editar Descuento' : 'Nuevo Descuento'}
-          </DialogTitle>
-          <DialogDescription>
-            {descuento ? 'Modifica los datos del descuento' : 'Crea un nuevo descuento para un empleado'}
-          </DialogDescription>
+        <DialogTitle>
+          {descuento ? 'Editar Descuento' : 'Nuevo Descuento'}
+        </DialogTitle>
+        <DialogDescription>
+          {descuento ? 'Modifica los datos del descuento' : 'Registra un nuevo descuento para un empleado'}
+        </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -181,12 +274,15 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
             <div className="space-y-2">
               <Label>Empleado *</Label>
               <EmployeeSelector
-                employees={employees}
-                value={formData.legajo ? `${formData.legajo}||${formData.periodo || ''}` : ''}
+                ref={employeeRef}
+                employees={localEmployees}
+                value={formData.legajo || ''}
+                tabIndex={1}
+                onCreateEmployee={handleCreateEmployee}
+                onSearchChange={setEmployeeSearchValue}
                 onValueChange={(value) => {
                   if (value) {
-                    const [legajo, periodo] = value.split('||');
-                    const employee = employees.find(emp => emp.legajo === legajo && emp.periodo === periodo);
+                    const employee = localEmployees.find(emp => emp.legajo === value);
                     if (employee) {
                       setFormData(prev => ({
                         ...prev,
@@ -195,6 +291,11 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
                         empresa: employee.data?.EMPRESA || '',
                         periodo: employee.periodo
                       }));
+                      
+                      // Focus automático en el campo de fecha
+                      setTimeout(() => {
+                        fechaRef.current?.focus();
+                      }, 100);
                     }
                   } else {
                     setFormData(prev => ({
@@ -210,6 +311,24 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
               />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="fecha">Fecha *</Label>
+              <Input
+                ref={fechaRef}
+                id="fecha"
+                type="date"
+                value={formData.fechaInicio}
+                onChange={(e) => setFormData(prev => ({ ...prev, fechaInicio: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    montoRef.current?.focus();
+                  }
+                }}
+                tabIndex={2}
+                required
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -218,12 +337,19 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
               <div className="relative">
                 <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
                 <Input
+                  ref={montoRef}
                   id="monto"
                   type="number"
                   step="0.01"
                   min="0"
                   value={formData.monto || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, monto: parseFloat(e.target.value) || 0 }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      cuotasRef.current?.focus();
+                    }
+                  }}
                   onFocus={(e) => {
                     if (e.target.value === '0' || e.target.value === '') {
                       e.target.select();
@@ -231,6 +357,7 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
                   }}
                   placeholder="0.00"
                   className="pl-8"
+                  tabIndex={3}
                   required
                 />
               </div>
@@ -238,66 +365,32 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
 
             <div className="space-y-2">
               <Label htmlFor="cuotas">Cantidad de Cuotas *</Label>
-              <Select
-                value={(formData.cantidadCuotas || 1).toString()}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, cantidadCuotas: parseInt(value) }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar cuotas" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 24 }, (_, i) => i + 1).map(num => (
-                    <SelectItem key={num} value={num.toString()}>
-                      {num} {num === 1 ? 'cuota' : 'cuotas'}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <CuotasSelector
+                ref={cuotasRef}
+                value={formData.cantidadCuotas || 1}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, cantidadCuotas: value }))}
+                onEnterPress={() => {
+                  // Focus en el campo de tags
+                  setTimeout(() => {
+                    tagsRef.current?.focus();
+                  }, 100);
+                }}
+                tabIndex={4}
+              />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="tipo">Tipo de Descuento *</Label>
-            <Select
-              value={formData.tipoDescuento}
-              onValueChange={(value: any) => setFormData(prev => ({ ...prev, tipoDescuento: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="PRESTAMO">Préstamo</SelectItem>
-                <SelectItem value="ADELANTO">Adelanto</SelectItem>
-                <SelectItem value="DESCUENTO_VARIO">Descuento Varios</SelectItem>
-                <SelectItem value="JUDICIAL">Judicial</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="space-y-2">
             <Label>Tags</Label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {formData.tags.map((tag, index) => (
-                <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                  {tag}
-                  <X
-                    className="h-3 w-3 cursor-pointer"
-                    onClick={() => handleRemoveTag(tag)}
-                  />
-                </Badge>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                placeholder="Agregar tag"
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-              />
-              <Button type="button" onClick={handleAddTag} size="sm">
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
+            <TagsSelector
+              ref={tagsRef}
+              tags={formData.tags}
+              onTagsChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
+              existingTags={existingTags}
+              allDescuentos={allDescuentos}
+              defaultTag={lastUsedTag}
+              tabIndex={5}
+            />
           </div>
 
           {/* Botón para mostrar/ocultar campos avanzados */}
@@ -307,6 +400,8 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
               variant="outline"
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="flex items-center gap-2"
+              ref={masOpcionesRef}
+              tabIndex={8}
             >
               {showAdvanced ? 'Menos opciones' : 'Más opciones'}
               <ChevronDown className={`h-4 w-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
@@ -316,6 +411,24 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
           {/* Campos avanzados */}
           {showAdvanced && (
             <div className="space-y-4 border-t pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="tipo">Tipo de Descuento *</Label>
+                <Select
+                  value={formData.tipoDescuento}
+                  onValueChange={(value: any) => setFormData(prev => ({ ...prev, tipoDescuento: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PRESTAMO">Préstamo</SelectItem>
+                    <SelectItem value="ADELANTO">Adelanto</SelectItem>
+                    <SelectItem value="DESCUENTO_VARIO">Descuento Varios</SelectItem>
+                    <SelectItem value="JUDICIAL">Judicial</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="descripcion">Descripción</Label>
                 <Textarea
@@ -349,16 +462,24 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees }
           )}
 
           <div className="flex justify-end space-x-2 pt-4">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose} ref={cancelarRef} tabIndex={7}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Guardando...' : (descuento ? 'Actualizar' : 'Crear')}
+            <Button type="submit" disabled={isLoading} ref={crearRef} tabIndex={6}>
+              {isLoading ? 'Guardando...' : (descuento ? 'Actualizar' : 'Registrar')}
             </Button>
           </div>
         </form>
       </DialogContent>
     </Dialog>
+
+    <CreateEmployeeModal
+      open={showCreateEmployee}
+      onClose={() => setShowCreateEmployee(false)}
+      onSave={handleEmployeeCreated}
+      initialNombre={employeeSearchValue}
+    />
+    </>
   );
 }
 

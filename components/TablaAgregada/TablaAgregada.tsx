@@ -4,9 +4,11 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Edit, Trash2 } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 import { usePagination } from '@/hooks/usePagination';
-import ColumnSelector from '@/components/ColumnSelector';
+import ColumnConfigWithPreview from '@/components/ColumnConfigWithPreview';
 import { ColumnConfigManager } from '@/lib/column-config-manager';
 import type { ConsolidatedEntity } from '@/lib/repo';
 
@@ -14,6 +16,8 @@ type Props = {
   data: ConsolidatedEntity[];
   showEmpresa?: boolean;
   onColumnsChange?: (visibleColumns: string[], aliases: Record<string, string>) => void;
+  onEditRow?: (row: ConsolidatedEntity) => void;
+  onDeleteRow?: (row: ConsolidatedEntity) => void;
 };
 
 function fmtNumber(v?: string): string {
@@ -33,7 +37,7 @@ function extractEmpresaFromArchivo(archivo: string): string {
   return 'N/A';
 }
 
-export default function TablaAgregada({ data, showEmpresa = false, onColumnsChange }: Props) {
+export default function TablaAgregada({ data, showEmpresa = false, onColumnsChange, onEditRow, onDeleteRow }: Props) {
   const { data: session } = useSession();
   const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
   const [columnAliases, setColumnAliases] = useState<Record<string, string>>({});
@@ -47,7 +51,19 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
       try {
         const config = await ColumnConfigManager.getConfig(session.user.id, 'recibos');
         if (config) {
-          setVisibleColumns(config.visibleColumns);
+          // Filtrar columnas problemáticas de la configuración guardada
+          const cleanVisibleColumns = config.visibleColumns.filter(col => 
+            col !== 'MANUA' && 
+            col !== 'FECHA_CREACION' && 
+            col !== 'GUARDAR' && 
+            col !== 'EMPRESA_DETECTADA' &&
+            col !== 'LEGAJO' && // Evitar duplicado
+            !col.includes('_DETECTADA') &&
+            !col.includes('_CREACION') &&
+            !col.includes('_SISTEMA')
+          );
+          
+          setVisibleColumns(cleanVisibleColumns);
           setColumnAliases(config.columnAliases);
         }
       } catch (error) {
@@ -91,15 +107,23 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
     enriched.forEach(item => {
       if (item.data) {
         Object.keys(item.data).forEach(key => {
-          // Excluir columnas duplicadas y de texto
+          // Excluir columnas duplicadas, de texto y columnas que no deberían mostrarse
           if (key !== 'TEXTO_COMPLETO' && 
               key !== 'PRIMERAS_LINEAS' && 
               key !== 'CUIL' && 
               key !== 'NOMBRE' && 
               key !== 'NRO. DE CUIL' &&
+              key !== 'LEGAJO' && // Evitar duplicado con la columna fija
               key !== 'PERIODO' && // Ya agregado arriba
               key !== 'ARCHIVO' && // Ya agregado arriba
-              key !== 'EMPRESA') { // Ya agregado arriba si showEmpresa
+              key !== 'EMPRESA' && // Ya agregado arriba si showEmpresa
+              key !== 'MANUA' && // Columna innecesaria
+              key !== 'FECHA_CREACION' && // Columna de sistema
+              key !== 'GUARDAR' && // Columna de sistema
+              key !== 'EMPRESA_DETECTADA' && // Columna de sistema
+              !key.includes('_DETECTADA') && // Evitar columnas de detección
+              !key.includes('_CREACION') && // Evitar columnas de creación
+              !key.includes('_SISTEMA')) { // Evitar columnas de sistema
             columns.add(key);
           }
         });
@@ -110,16 +134,28 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
 
   // Inicializar columnas visibles si no están configuradas
   const displayColumns = useMemo(() => {
-    if (visibleColumns.length === 0) {
-      return allColumns; // Mostrar todas por defecto
+    if (visibleColumns.length === 0 && !configLoaded) {
+      return allColumns; // Mostrar todas por defecto solo mientras se carga la configuración
     }
-    return visibleColumns;
-  }, [visibleColumns, allColumns]);
+    return visibleColumns.length > 0 ? visibleColumns : allColumns;
+  }, [visibleColumns, allColumns, configLoaded]);
 
   const handleColumnsChange = async (newVisibleColumns: string[], newAliases: Record<string, string>) => {
-    setVisibleColumns(newVisibleColumns);
+    // Filtrar columnas problemáticas antes de guardar
+    const cleanVisibleColumns = newVisibleColumns.filter(col => 
+      col !== 'MANUA' && 
+      col !== 'FECHA_CREACION' && 
+      col !== 'GUARDAR' && 
+      col !== 'EMPRESA_DETECTADA' &&
+      col !== 'LEGAJO' && // Evitar duplicado
+      !col.includes('_DETECTADA') &&
+      !col.includes('_CREACION') &&
+      !col.includes('_SISTEMA')
+    );
+    
+    setVisibleColumns(cleanVisibleColumns);
     setColumnAliases(newAliases);
-    onColumnsChange?.(newVisibleColumns, newAliases);
+    onColumnsChange?.(cleanVisibleColumns, newAliases);
     
     // Guardar configuración en la base de datos
     if (session?.user?.id) {
@@ -127,11 +163,25 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
         await ColumnConfigManager.saveConfig(
           session.user.id, 
           'recibos', 
-          newVisibleColumns, 
+          cleanVisibleColumns, 
           newAliases
         );
       } catch (error) {
         console.error('Error saving column config:', error);
+      }
+    }
+  };
+
+  // Función para limpiar configuración de columnas
+  const handleResetColumns = async () => {
+    if (session?.user?.id) {
+      try {
+        await ColumnConfigManager.deleteConfig(session.user.id, 'recibos');
+        setVisibleColumns([]);
+        setColumnAliases({});
+        onColumnsChange?.([], {});
+      } catch (error) {
+        console.error('Error resetting column config:', error);
       }
     }
   };
@@ -163,12 +213,22 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
         <div className="text-sm text-gray-600">
           Mostrando {displayColumns.length} de {allColumns.length} columnas
         </div>
-        <ColumnSelector
-          columns={allColumns}
-          onColumnsChange={handleColumnsChange}
-          initialVisible={visibleColumns}
-          initialAliases={columnAliases}
-        />
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleResetColumns}
+            title="Resetear configuración de columnas"
+          >
+            Reset
+          </Button>
+          <ColumnConfigWithPreview
+            columns={allColumns}
+            onColumnsChange={handleColumnsChange}
+            initialVisible={visibleColumns}
+            initialAliases={columnAliases}
+          />
+        </div>
       </div>
       <div className="overflow-x-auto">
         <Table>
@@ -184,6 +244,7 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
                   {columnAliases[column] || column}
                 </TableHead>
               ))}
+              {(onEditRow || onDeleteRow) && <TableHead className="w-24">Acciones</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -205,6 +266,40 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
                     {fmtNumber(row.data?.[column])}
                   </TableCell>
                 ))}
+                {(onEditRow || onDeleteRow) && (
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {onEditRow && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onEditRow({
+                            ...row,
+                            archivos: [row.archivo]
+                          })}
+                          className="h-8 w-8 p-0"
+                          title="Editar"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {onDeleteRow && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onDeleteRow({
+                            ...row,
+                            archivos: [row.archivo]
+                          })}
+                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>

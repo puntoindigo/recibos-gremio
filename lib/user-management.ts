@@ -134,6 +134,9 @@ export async function getRecentActivities(limit: number = 100): Promise<UserActi
 
 // Validaciones de permisos
 export function hasPermission(user: User, permission: string): boolean {
+  // Si tiene permisos de SUPERADMIN (todos los permisos)
+  if (user.permissions.includes('*')) return true;
+  
   return user.permissions.includes(permission);
 }
 
@@ -147,5 +150,8 @@ export function canManageUsers(user: User): boolean {
 }
 
 export function canManageDescuentos(user: User): boolean {
+  // Si tiene permisos de SUPERADMIN (todos los permisos)
+  if (user.permissions.includes('*')) return true;
+  
   return hasPermission(user, 'descuentos:create') || hasPermission(user, 'descuentos:edit');
 }

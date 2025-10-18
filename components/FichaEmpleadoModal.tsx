@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
   User, 
-  DollarSign, 
+  Wallet, 
   Calendar, 
   CreditCard, 
   FileText,
@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { getFichaEmpleado } from '@/lib/descuentos-manager';
 import { db } from '@/lib/db';
+import { formatTimestampForDisplay } from '@/lib/date-utils';
 
 interface FichaEmpleadoModalProps {
   legajo: string;
@@ -143,7 +144,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <DollarSign className="h-5 w-5 text-red-600" />
+                  <Wallet className="h-5 w-5 text-red-600" />
                   <div>
                     <p className="text-sm font-medium text-gray-600">Total a Descontar</p>
                     <p className="text-2xl font-bold text-red-600">
@@ -229,7 +230,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
                       <p className="text-sm text-gray-600 mb-2">{descuento.descripcion}</p>
                       <div className="flex justify-between text-sm text-gray-500">
                         <span>Cuotas: {descuento.cuotaActual}/{descuento.cantidadCuotas}</span>
-                        <span>Inicio: {new Date(descuento.fechaInicio).toLocaleDateString()}</span>
+                        <span>Inicio: {descuento.fechaInicio ? formatTimestampForDisplay(descuento.fechaInicio) : 'N/A'}</span>
                       </div>
                     </div>
                   ))}
@@ -272,7 +273,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
                       <p className="text-sm text-gray-600 mb-2">{descuento.descripcion}</p>
                       <div className="flex justify-between text-sm text-gray-500">
                         <span>Cuotas: {descuento.cuotaActual}/{descuento.cantidadCuotas}</span>
-                        <span>Finalizado: {new Date(descuento.fechaFin || descuento.fechaModificacion).toLocaleDateString()}</span>
+                        <span>Finalizado: {(descuento.fechaFin || descuento.fechaModificacion) ? formatTimestampForDisplay(descuento.fechaFin || descuento.fechaModificacion) : 'N/A'}</span>
                       </div>
                     </div>
                   ))}

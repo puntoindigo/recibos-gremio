@@ -10,10 +10,16 @@ export interface SimpleProcessingResult {
   skipped?: boolean;
   reason?: string;
   needsEmpresaInput?: boolean; // Flag para indicar que necesita input manual de empresa
+  needsParserAdjustment?: boolean; // Flag para indicar que necesita ajustes del parser
+  parsedData?: Record<string, string>; // Datos parseados para mostrar en el modal de ajustes
 }
 
 // Función simplificada para procesar un solo archivo
-export async function processSingleFile(file: File, debug: boolean = false): Promise<SimpleProcessingResult> {
+export async function processSingleFile(
+  file: File, 
+  debug: boolean = false,
+  learnedRules?: { empresa?: string; periodo?: string }
+): Promise<SimpleProcessingResult> {
   try {
     if (debug) {
       console.log(`🔍 Procesando archivo: ${file.name}`);
@@ -61,6 +67,22 @@ export async function processSingleFile(file: File, debug: boolean = false): Pro
       console.log(`🔍 Parseando PDF: ${file.name}`);
     }
     const parsed = await parsePdfReceiptToRecord(file, debug);
+    
+    // Aplicar reglas aprendidas si están disponibles
+    if (learnedRules) {
+      if (learnedRules.empresa && (!parsed.data.EMPRESA || parsed.data.EMPRESA === 'DESCONOCIDA')) {
+        parsed.data.EMPRESA = learnedRules.empresa;
+        if (debug) {
+          console.log(`🧠 Aplicando empresa aprendida: ${learnedRules.empresa}`);
+        }
+      }
+      if (learnedRules.periodo && (!parsed.data.PERIODO || parsed.data.PERIODO === 'FALTANTE')) {
+        parsed.data.PERIODO = learnedRules.periodo;
+        if (debug) {
+          console.log(`🧠 Aplicando período aprendido: ${learnedRules.periodo}`);
+        }
+      }
+    }
     
     if (debug) {
       console.log(`📊 Resultado del parsing para ${file.name}:`, {
@@ -110,6 +132,30 @@ export async function processSingleFile(file: File, debug: boolean = false): Pro
       };
     }
 
+    // Verificar si faltan datos básicos y necesita ajustes del parser
+    const legajo = parsed.data.LEGAJO;
+    const nombre = parsed.data.NOMBRE;
+    const periodo = parsed.data.PERIODO;
+    
+    if (!legajo || !nombre || !periodo) {
+      if (debug) {
+        console.log(`⚠️ Datos incompletos en ${file.name}:`, {
+          legajo: legajo || 'FALTANTE',
+          nombre: nombre || 'FALTANTE', 
+          periodo: periodo || 'FALTANTE',
+          empresa: empresa
+        });
+      }
+      return {
+        success: true,
+        fileName: file.name,
+        skipped: true,
+        reason: 'Datos incompletos - necesita ajustes del parser',
+        needsParserAdjustment: true,
+        parsedData: parsed.data
+      };
+    }
+
     // Guardar en base de datos
     if (debug) {
       console.log(`💾 Guardando en base de datos: ${file.name}`);
@@ -143,7 +189,11 @@ export async function processSingleFile(file: File, debug: boolean = false): Pro
 }
 
 // Función para procesar múltiples archivos de forma simple
-export async function processFiles(files: FileList | File[], debug: boolean = false): Promise<SimpleProcessingResult[]> {
+export async function processFiles(
+  files: FileList | File[], 
+  debug: boolean = false,
+  learnedRules?: { empresa?: string; periodo?: string }
+): Promise<SimpleProcessingResult[]> {
   const results: SimpleProcessingResult[] = [];
   
   if (debug) {
@@ -151,7 +201,7 @@ export async function processFiles(files: FileList | File[], debug: boolean = fa
   }
   
   for (const file of files) {
-    const result = await processSingleFile(file, debug);
+    const result = await processSingleFile(file, debug, learnedRules);
     results.push(result);
   }
   
@@ -163,4 +213,85 @@ export async function processFiles(files: FileList | File[], debug: boolean = fa
   }
   
   return results;
+}
+
+// Función para procesar un archivo con datos ajustados manualmente
+export async function processSingleFileWithData(
+  file: File, 
+  adjustedData: Record<string, string>, 
+  debug: boolean = false
+): Promise<SimpleProcessingResult> {
+  try {
+    if (debug) {
+      console.log(`🔍 Procesando archivo con datos ajustados: ${file.name}`);
+    }
+
+    // Generar hash del archivo
+    const hash = await sha256OfFile(file);
+    if (!hash) {
+      return {
+        success: false,
+        fileName: file.name,
+        error: 'Error generando hash del archivo'
+      };
+    }
+
+    // Verificar duplicados
+    const existing = await repoDexie.findReceiptByHash(hash);
+    if (existing) {
+      if (debug) {
+        console.log(`⏭️ Archivo duplicado: ${file.name}`);
+      }
+      return {
+        success: true,
+        fileName: file.name,
+        skipped: true,
+        reason: 'Archivo duplicado'
+      };
+    }
+
+    // Validar datos ajustados
+    if (!adjustedData.LEGAJO || !adjustedData.NOMBRE || !adjustedData.PERIODO || !adjustedData.EMPRESA) {
+      return {
+        success: false,
+        fileName: file.name,
+        error: 'Datos ajustados incompletos'
+      };
+    }
+
+    // Guardar en base de datos con los datos ajustados
+    if (debug) {
+      console.log(`💾 Guardando archivo con datos ajustados: ${file.name}`);
+    }
+    
+    await repoDexie.addReceipt({
+      legajo: adjustedData.LEGAJO,
+      periodo: adjustedData.PERIODO,
+      nombre: adjustedData.NOMBRE,
+      cuil: adjustedData.CUIL || '',
+      data: adjustedData,
+      filename: file.name,
+      fileHash: hash
+    });
+
+    if (debug) {
+      console.log(`✅ Archivo guardado exitosamente con datos ajustados: ${file.name}`);
+    }
+
+    return { 
+      success: true, 
+      fileName: file.name 
+    };
+
+  } catch (error) {
+    if (debug) {
+      console.error(`❌ Error procesando archivo con datos ajustados ${file.name}:`, error);
+    }
+    
+    return {
+      success: false,
+      fileName: file.name,
+      error: error instanceof Error ? error.message : 'Error desconocido'
+    };
+  }
 }

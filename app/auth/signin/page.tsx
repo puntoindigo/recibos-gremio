@@ -1,7 +1,7 @@
 // app/auth/signin/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { signIn, getSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2 } from 'lucide-react';
 
 export default function SignInPage() {
@@ -16,7 +17,21 @@ export default function SignInPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [rememberPassword, setRememberPassword] = useState(false);
   const router = useRouter();
+
+  // Cargar credenciales guardadas al montar el componente
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('savedEmail');
+    const savedPassword = localStorage.getItem('savedPassword');
+    const savedRemember = localStorage.getItem('rememberPassword') === 'true';
+    
+    if (savedEmail && savedPassword && savedRemember) {
+      setEmail(savedEmail);
+      setPassword(savedPassword);
+      setRememberPassword(savedRemember);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +48,18 @@ export default function SignInPage() {
       if (result?.error) {
         setError('Credenciales inválidas');
       } else {
+        // Guardar credenciales si el checkbox está marcado
+        if (rememberPassword) {
+          localStorage.setItem('savedEmail', email);
+          localStorage.setItem('savedPassword', password);
+          localStorage.setItem('rememberPassword', 'true');
+        } else {
+          // Limpiar credenciales guardadas si no se quiere recordar
+          localStorage.removeItem('savedEmail');
+          localStorage.removeItem('savedPassword');
+          localStorage.removeItem('rememberPassword');
+        }
+
         // Verificar la sesión y redirigir
         const session = await getSession();
         if (session) {
@@ -75,6 +102,7 @@ export default function SignInPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
+                autoComplete="email"
               />
             </div>
             
@@ -88,7 +116,23 @@ export default function SignInPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
+                autoComplete="current-password"
               />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="remember"
+                checked={rememberPassword}
+                onCheckedChange={(checked) => setRememberPassword(checked as boolean)}
+                disabled={isLoading}
+              />
+              <Label 
+                htmlFor="remember" 
+                className="text-sm font-normal cursor-pointer"
+              >
+                Guardar contraseña
+              </Label>
             </div>
             
             <Button 

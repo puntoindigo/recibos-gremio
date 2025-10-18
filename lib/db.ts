@@ -170,6 +170,35 @@ export type ColumnConfigDB = {
   updatedAt: number;
 };
 
+/** Estado de subida de archivos. */
+export type UploadSessionDB = {
+  id?: number;
+  sessionId: string;                    // ID único de la sesión de subida
+  userId: string;                       // Usuario que inició la subida
+  status: 'active' | 'completed' | 'failed' | 'cancelled';
+  totalFiles: number;                   // Total de archivos a procesar
+  completedFiles: number;               // Archivos completados
+  failedFiles: number;                  // Archivos con error
+  skippedFiles: number;                 // Archivos omitidos
+  pendingFiles: number;                 // Archivos pendientes
+  currentFileIndex: number;            // Índice del archivo actual
+  files: UploadFileDB[];                // Lista de archivos
+  startedAt: number;                    // Timestamp de inicio
+  lastUpdatedAt: number;               // Timestamp de última actualización
+  completedAt?: number;                 // Timestamp de finalización
+  errorMessage?: string;                // Mensaje de error si falló
+};
+
+/** Archivo individual en una sesión de subida. */
+export type UploadFileDB = {
+  fileName: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+  startedAt?: number;
+  completedAt?: number;
+  errorMessage?: string;
+  processingResult?: any;               // Resultado del procesamiento
+};
+
 export class RecibosDB extends Dexie {
   receipts!: Table<ReceiptRowDB, number>;
   consolidated!: Table<ConsolidatedEntity, string>;
@@ -182,11 +211,12 @@ export class RecibosDB extends Dexie {
   descuentos!: Table<Descuento, string>;
   userActivities!: Table<UserActivity, string>;
   columnConfigs!: Table<ColumnConfigDB, number>;
+  uploadSessions!: Table<UploadSessionDB, number>;
 
   constructor() {
     super("recibosDB-v2");
     // Nota: *hashes => índice multiEntry para búsquedas por hash.
-    this.version(5).stores({
+    this.version(6).stores({
       receipts: "++id, key, legajo, periodo, cuilNorm, createdAt, *hashes",
       consolidated: "key, legajo, periodo, cuilNorm",
       control: "key",
@@ -198,6 +228,7 @@ export class RecibosDB extends Dexie {
       descuentos: "id, legajo, empresa, tipoDescuento, estado, fechaInicio, fechaCreacion, *tags",
       userActivities: "id, userId, action, resource, timestamp",
       columnConfigs: "++id, userId, tableType, [userId+tableType], createdAt, updatedAt",
+      uploadSessions: "++id, sessionId, userId, status, startedAt, lastUpdatedAt, [userId+status], files",
     });
   }
 }

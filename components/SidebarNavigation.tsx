@@ -12,7 +12,9 @@ import {
   LogOut, 
   Building2,
   Percent,
-  Bug
+  Bug,
+  BarChart3,
+  Database
 } from 'lucide-react';
 
 interface SidebarNavigationProps {
@@ -44,12 +46,22 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
 
   const menuItems = [
     { 
+      id: 'tablero', 
+      label: 'Tablero', 
+      icon: BarChart3, 
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-50',
+      activeBgColor: 'bg-indigo-100',
+      shortcut: 'T'
+    },
+    { 
       id: 'recibos', 
       label: 'Recibos', 
       icon: FileText, 
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
-      activeBgColor: 'bg-blue-100'
+      activeBgColor: 'bg-blue-100',
+      shortcut: 'R'
     },
     { 
       id: 'control', 
@@ -57,7 +69,8 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
       icon: Shield, 
       color: 'text-green-600',
       bgColor: 'bg-green-50',
-      activeBgColor: 'bg-green-100'
+      activeBgColor: 'bg-green-100',
+      shortcut: 'C'
     },
     { 
       id: 'export', 
@@ -65,7 +78,8 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
       icon: CreditCard, 
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
-      activeBgColor: 'bg-purple-100'
+      activeBgColor: 'bg-purple-100',
+      shortcut: 'E'
     },
     { 
       id: 'descuentos', 
@@ -74,7 +88,8 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
       color: 'text-orange-600',
       bgColor: 'bg-orange-50',
       activeBgColor: 'bg-orange-100',
-      permission: 'descuentos:view' 
+      permission: 'descuentos:view',
+      shortcut: 'D'
     },
     { 
       id: 'usuarios', 
@@ -83,7 +98,18 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
       color: 'text-red-600',
       bgColor: 'bg-red-50',
       activeBgColor: 'bg-red-100',
-      permission: 'usuarios:view' 
+      permission: 'usuarios:view',
+      shortcut: 'U'
+    },
+    { 
+      id: 'backup', 
+      label: 'Backup', 
+      icon: Database, 
+      color: 'text-teal-600',
+      bgColor: 'bg-teal-50',
+      activeBgColor: 'bg-teal-100',
+      permission: 'backup:create',
+      shortcut: 'B'
     },
   ];
 
@@ -133,9 +159,16 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
                 <span className="font-medium text-sm">
                   {item.label}
                 </span>
-                {isActive && (
-                  <div className="ml-auto w-2 h-2 bg-current rounded-full"></div>
-                )}
+                <div className="ml-auto flex items-center gap-2">
+                  {item.shortcut && (
+                    <kbd className="px-2 py-1 text-xs font-mono bg-gray-100 text-gray-600 rounded border">
+                      {item.shortcut}
+                    </kbd>
+                  )}
+                  {isActive && (
+                    <div className="w-2 h-2 bg-current rounded-full"></div>
+                  )}
+                </div>
               </button>
             );
           })}
