@@ -24,6 +24,10 @@ export function useEmpresasFromReceipts() {
           }
         });
         
+        // Debug: Log todas las empresas encontradas
+        console.log('🔍 Debug useEmpresasFromReceipts - Empresas encontradas:', Array.from(empresasSet));
+        console.log('🔍 Debug useEmpresasFromReceipts - Total registros:', allConsolidated.length);
+        
         // Convertir a array y ordenar
         const empresasArray = Array.from(empresasSet).sort();
         setEmpresas(empresasArray);

@@ -4,6 +4,7 @@
 import { useSession, signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useConfiguration } from '@/hooks/useConfiguration';
 import { 
   FileText, 
   Shield, 
@@ -14,7 +15,10 @@ import {
   Percent,
   Bug,
   BarChart3,
-  Database
+  Database,
+  BookOpen,
+  Settings,
+  CheckSquare
 } from 'lucide-react';
 
 interface SidebarNavigationProps {
@@ -25,6 +29,7 @@ interface SidebarNavigationProps {
 
 export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick }: SidebarNavigationProps) {
   const { data: session } = useSession();
+  const { config, getFilteredNavigationItems } = useConfiguration();
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl: '/auth/signin' });
@@ -44,10 +49,13 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
     }
   };
 
+  // Obtener elementos de menú filtrados por configuración
+  const filteredMenuItems = getFilteredNavigationItems();
+
   const menuItems = [
     { 
       id: 'tablero', 
-      label: 'Tablero', 
+      label: 'Dashboard', 
       icon: BarChart3, 
       color: 'text-indigo-600',
       bgColor: 'bg-indigo-50',
@@ -61,7 +69,8 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
       activeBgColor: 'bg-blue-100',
-      shortcut: 'R'
+      shortcut: 'R',
+      enabled: config.enableReceiptsSystem
     },
     { 
       id: 'control', 
@@ -70,7 +79,8 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
       color: 'text-green-600',
       bgColor: 'bg-green-50',
       activeBgColor: 'bg-green-100',
-      shortcut: 'C'
+      shortcut: 'C',
+      enabled: config.enableControlSystem
     },
     { 
       id: 'export', 
@@ -79,7 +89,8 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
       activeBgColor: 'bg-purple-100',
-      shortcut: 'E'
+      shortcut: 'E',
+      enabled: config.enableExportSystem
     },
     { 
       id: 'descuentos', 
@@ -89,7 +100,8 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
       bgColor: 'bg-orange-50',
       activeBgColor: 'bg-orange-100',
       permission: 'descuentos:view',
-      shortcut: 'D'
+      shortcut: 'D',
+      enabled: config.enableDiscountsSystem
     },
     { 
       id: 'usuarios', 
@@ -99,7 +111,8 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
       bgColor: 'bg-red-50',
       activeBgColor: 'bg-red-100',
       permission: 'usuarios:view',
-      shortcut: 'U'
+      shortcut: 'U',
+      enabled: config.enableUserManagement
     },
     { 
       id: 'backup', 
@@ -109,7 +122,37 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
       bgColor: 'bg-teal-50',
       activeBgColor: 'bg-teal-100',
       permission: 'backup:create',
-      shortcut: 'B'
+      shortcut: 'B',
+      enabled: config.enableBackupSystem
+    },
+    { 
+      id: 'pending-items', 
+      label: 'Items Pendientes', 
+      icon: CheckSquare, 
+      color: 'text-emerald-600',
+      bgColor: 'bg-emerald-50',
+      activeBgColor: 'bg-emerald-100',
+      shortcut: 'P',
+      enabled: config.enablePendingItems
+    },
+    { 
+      id: 'documentacion', 
+      label: 'Documentación', 
+      icon: BookOpen, 
+      color: 'text-cyan-600',
+      bgColor: 'bg-cyan-50',
+      activeBgColor: 'bg-cyan-100',
+      shortcut: 'O',
+      enabled: config.enableDocumentation
+    },
+    { 
+      id: 'configuracion', 
+      label: 'Configuración', 
+      icon: Settings, 
+      color: 'text-gray-600',
+      bgColor: 'bg-gray-50',
+      activeBgColor: 'bg-gray-100',
+      shortcut: 'S'
     },
   ];
 
@@ -123,31 +166,36 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
       <div className="fixed left-0 top-0 w-64 h-screen bg-white shadow-lg rounded-r-2xl border-r border-gray-200 flex flex-col z-50">
         {/* Header del sidebar */}
         <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <div className="bg-blue-600 rounded-xl p-3">
+          <button
+            onClick={() => onTabChange('tablero')}
+            className="w-full flex items-center space-x-3 text-left group"
+            title="Ir al Dashboard"
+          >
+            <div className="bg-blue-600 rounded-xl p-3 group-hover:scale-105 transition-transform">
               <Building2 className="h-8 w-8 text-white" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-gray-900">Sistema de Recibos</h1>
               <p className="text-xs text-gray-500">Gestión de nóminas</p>
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Navegación */}
         <nav className="flex-1 p-4 space-y-2">
-          {menuItems.map((item) => {
+          {filteredMenuItems.map((item, index) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             const hasPermission = !item.permission || canAccess(item.permission);
             
+            // No mostrar si no tiene permisos
             if (!hasPermission) return null;
 
             return (
               <button
-                key={item.id}
+                key={`${item.id}-${index}`}
                 onClick={() => handleMenuClick(item.id)}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                className={`w-full flex items-center justify-start text-left space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                   isActive 
                     ? `${item.activeBgColor} ${item.color} shadow-sm border-2 border-current` 
                     : `${item.bgColor} text-gray-600 hover:${item.activeBgColor} hover:${item.color} hover:shadow-sm`

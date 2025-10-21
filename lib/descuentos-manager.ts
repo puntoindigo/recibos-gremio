@@ -135,6 +135,13 @@ export async function getEstadisticasDescuentos(empresa?: string): Promise<{
   cancelados: number;
   montoTotal: number;
   montoActivos: number;
+  empleadosUnicos: number;
+  empresasUnicas: number;
+  descuentosPorEmpresa: Array<{
+    empresa: string;
+    cantidad: number;
+    monto: number;
+  }>;
 }> {
   let descuentos = await db.descuentos.toArray();
   if (empresa) {
@@ -148,11 +155,36 @@ export async function getEstadisticasDescuentos(empresa?: string): Promise<{
     finalizados: 0,
     cancelados: 0,
     montoTotal: 0,
-    montoActivos: 0
+    montoActivos: 0,
+    empleadosUnicos: 0,
+    empresasUnicas: 0,
+    descuentosPorEmpresa: [] as Array<{
+      empresa: string;
+      cantidad: number;
+      monto: number;
+    }>
   };
+  
+  // Contar empleados únicos
+  const empleadosUnicos = new Set(descuentos.map(d => d.legajo));
+  stats.empleadosUnicos = empleadosUnicos.size;
+  
+  // Contar empresas únicas
+  const empresasUnicas = new Set(descuentos.map(d => d.empresa));
+  stats.empresasUnicas = empresasUnicas.size;
+  
+  // Calcular estadísticas por empresa
+  const empresaStats: Record<string, { cantidad: number; monto: number }> = {};
   
   descuentos.forEach(descuento => {
     stats.montoTotal += descuento.monto;
+    
+    // Estadísticas por empresa
+    if (!empresaStats[descuento.empresa]) {
+      empresaStats[descuento.empresa] = { cantidad: 0, monto: 0 };
+    }
+    empresaStats[descuento.empresa].cantidad++;
+    empresaStats[descuento.empresa].monto += descuento.monto;
     
     switch (descuento.estado) {
       case 'ACTIVO':
@@ -170,6 +202,15 @@ export async function getEstadisticasDescuentos(empresa?: string): Promise<{
         break;
     }
   });
+  
+  // Convertir estadísticas por empresa a array
+  stats.descuentosPorEmpresa = Object.entries(empresaStats)
+    .map(([empresa, data]) => ({
+      empresa,
+      cantidad: data.cantidad,
+      monto: data.monto
+    }))
+    .sort((a, b) => b.cantidad - a.cantidad);
   
   return stats;
 }

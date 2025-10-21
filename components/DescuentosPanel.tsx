@@ -22,7 +22,9 @@ import {
   Wallet,
   Calendar,
   User,
-  X
+  X,
+  FileText,
+  Building2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
@@ -84,7 +86,9 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
   useEffect(() => {
     const handleOpenNewDescuento = () => {
       console.log('🎯 Evento openNewDescuento recibido, abriendo modal...');
+      console.log('📊 Estado actual del modal:', showModal);
       setShowModal(true);
+      console.log('✅ Modal de descuento activado');
     };
 
     console.log('👂 Agregando listener para openNewDescuento');
@@ -94,7 +98,7 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
       console.log('🧹 Removiendo listener para openNewDescuento');
       window.removeEventListener('openNewDescuento', handleOpenNewDescuento);
     };
-  }, []);
+  }, [showModal]);
 
   // Atajos de teclado
   useEffect(() => {
@@ -104,8 +108,8 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
         return;
       }
 
-      // N para Nuevo Descuento
-      if (event.key.toLowerCase() === 'n' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      // N o + para Nuevo Descuento
+      if ((event.key.toLowerCase() === 'n' || event.key === '+') && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
         if (canManage) {
           setShowModal(true);
@@ -137,6 +141,28 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Obtener valores predeterminados basados en los últimos 3 registros
+  const getDefaultValues = () => {
+    if (descuentos.length < 3) return { monto: 0, cuotas: 1 };
+    
+    const ultimos3 = descuentos
+      .sort((a, b) => b.fechaCreacion - a.fechaCreacion)
+      .slice(0, 3);
+    
+    // Verificar si los últimos 3 tienen el mismo monto
+    const montos = ultimos3.map(d => d.monto);
+    const montoComun = montos.every(m => m === montos[0]) ? montos[0] : 0;
+    
+    // Verificar si los últimos 3 tienen las mismas cuotas
+    const cuotas = ultimos3.map(d => d.cantidadCuotas);
+    const cuotasComunes = cuotas.every(c => c === cuotas[0]) ? cuotas[0] : 1;
+    
+    return {
+      monto: montoComun,
+      cuotas: cuotasComunes
+    };
   };
 
   const handleCreateDescuento = () => {
@@ -231,13 +257,13 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
     <div className="space-y-6">
       {/* Estadísticas */}
       {estadisticas && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center space-x-2">
                 <Wallet className="h-5 w-5 text-green-600" />
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total Descuentos</p>
+                  <p className="text-sm font-medium text-gray-600">Monto Total</p>
                   <p className="text-2xl font-bold text-green-600">
                     ${(estadisticas?.montoTotal || 0).toLocaleString()}
                   </p>
@@ -249,9 +275,9 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center space-x-2">
-                <User className="h-5 w-5 text-blue-600" />
+                <FileText className="h-5 w-5 text-blue-600" />
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Cantidad</p>
+                  <p className="text-sm font-medium text-gray-600">Cantidad Descuentos</p>
                   <p className="text-2xl font-bold text-blue-600">{estadisticas.total}</p>
                 </div>
               </div>
@@ -261,7 +287,7 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center space-x-2">
-                <Calendar className="h-5 w-5 text-orange-600" />
+                <User className="h-5 w-5 text-orange-600" />
                 <div>
                   <p className="text-sm font-medium text-gray-600">Empleados</p>
                   <p className="text-2xl font-bold text-orange-600">{estadisticas.empleadosUnicos || 0}</p>
@@ -269,7 +295,66 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2">
+                <Building2 className="h-5 w-5 text-purple-600" />
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Empresas</p>
+                  <p className="text-2xl font-bold text-purple-600">{estadisticas.empresasUnicas || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+      )}
+
+      {/* Desglose por empresa */}
+      {estadisticas?.descuentosPorEmpresa && estadisticas.descuentosPorEmpresa.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Descuentos por Empresa</CardTitle>
+            <CardDescription>
+              Distribución de descuentos por empresa
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {estadisticas.descuentosPorEmpresa.map((empresa, index) => (
+                <div 
+                  key={empresa.empresa} 
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                  onClick={() => {
+                    setEmpresaFiltroDescuentos(empresa.empresa);
+                    toast.success(`Filtro aplicado: ${empresa.empresa}`, {
+                      description: `${empresa.cantidad} descuentos encontrados`
+                    });
+                  }}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-semibold text-purple-600">{index + 1}</span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">{empresa.empresa}</p>
+                      <p className="text-sm text-gray-500">{empresa.cantidad} descuentos</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-gray-900">${empresa.monto.toLocaleString()}</p>
+                    <p className="text-sm text-gray-500">
+                      {estadisticas.montoTotal > 0 
+                        ? `${Math.round((empresa.monto / estadisticas.montoTotal) * 100)}%`
+                        : '0%'
+                      }
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Filtros y acciones */}
@@ -287,7 +372,7 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
                 <Plus className="h-4 w-4 mr-2" />
                 <span>Nuevo Descuento</span>
                 <kbd className="ml-2 px-1.5 py-0.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-md">
-                  N
+                  N / +
                 </kbd>
               </Button>
             )}
@@ -578,6 +663,7 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
           }}
           employees={employees}
           allDescuentos={descuentos}
+          empresaFiltro={empresaFiltroDescuentos !== 'TODOS' ? empresaFiltroDescuentos : undefined}
           onEmployeeCreated={(newEmployee) => {
             // Agregar el nuevo empleado a la lista local
             employees.push(newEmployee);

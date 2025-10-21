@@ -53,7 +53,11 @@ import Dashboard, { DashboardRef } from "@/components/Dashboard";
 import BackupPanel from "@/components/BackupPanel";
 import ProcessingProgress from "@/components/ProcessingProgress";
 import PersistentUploadProgress from "@/components/PersistentUploadProgress";
+import DocumentationPanel from "@/components/DocumentationPanel";
+import ConfigurationPanel from "@/components/ConfigurationPanel";
+import PendingItemsPage from "@/components/PendingItemsPage";
 import { UploadSessionManager } from "@/lib/upload-session-manager";
+import DebugSessions from "@/components/DebugSessions";
 
 type UploadItem = { 
   name: string; 
@@ -80,7 +84,7 @@ export default function Page() {
   
   // Función para obtener ayuda contextual según la sección activa
   const getContextualHelp = (tab: string) => {
-    const baseShortcuts = "Navegación: T=Tablero, R=Recibos, C=Control, D=Descuentos, U=Usuarios, B=Backup, E=Export";
+    const baseShortcuts = "Navegación: T=Tablero, R=Recibos, C=Control, D=Descuentos, U=Usuarios, B=Backup, O=Documentación, E=Export";
     const globalShortcuts = "Globales: F=Debug, H=Ayuda, M=Menú";
     
     switch (tab) {
@@ -96,6 +100,8 @@ export default function Page() {
         return `${baseShortcuts} | Usuarios: N=Nuevo usuario, L=Actualizar lista | ${globalShortcuts}`;
       case 'backup':
         return `${baseShortcuts} | Backup: L=Actualizar respaldos | ${globalShortcuts}`;
+      case 'documentacion':
+        return `${baseShortcuts} | Documentación: L=Actualizar lista | ${globalShortcuts}`;
       case 'export':
         return `${baseShortcuts} | Exportar: X=Exportar datos, L=Actualizar | ${globalShortcuts}`;
       default:
@@ -145,6 +151,10 @@ export default function Page() {
         case 'b':
           event.preventDefault();
           setActiveTab('backup');
+          break;
+        case 'o':
+          event.preventDefault();
+          setActiveTab('documentacion');
           break;
         case 'e':
           event.preventDefault();
@@ -486,6 +496,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       // Procesar archivos uno por uno para mostrar progreso en tiempo real
       const results: SimpleProcessingResult[] = [];
       
+      console.log(`🚀 Iniciando procesamiento de ${files.length} archivos...`);
+      
       for (let i = 0; i < files.length; i++) {
         if (shouldStopProcessing) {
           console.log('🛑 Procesamiento detenido por el usuario');
@@ -493,6 +505,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
         }
 
         const file = files[i];
+        
+        console.log(`📄 Procesando archivo ${i + 1}/${files.length}: ${file.name}`);
         
         // Actualizar el índice actual
         setLastProcessedIndex(i);
@@ -526,11 +540,10 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             );
           }
           
-          // Si necesita input de empresa, mostrar modal y parar
+          // Si necesita input de empresa, marcar como omitido y continuar
           if (result.needsEmpresaInput) {
-            setPendingFile(file);
-            setShowEmpresaModal(true);
-            return; // No continuar con el procesamiento hasta que se seleccione la empresa
+            console.log(`⚠️ Archivo ${file.name} necesita input de empresa, marcando como omitido y continuando...`);
+            // No detener el procesamiento, solo marcar como omitido
           }
           
         } catch (error) {
@@ -553,6 +566,25 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             return updated;
           });
         }
+      }
+      
+      // Log del resumen de procesamiento
+      console.log(`✅ Procesamiento completado: ${results.length} archivos procesados`);
+      const successful = results.filter(r => r.success && !r.skipped);
+      const skipped = results.filter(r => r.skipped);
+      const failed = results.filter(r => !r.success);
+      
+      console.log(`📈 Resumen detallado:`);
+      console.log(`  ✅ Exitosos: ${successful.length}`);
+      console.log(`  ⏭️ Omitidos: ${skipped.length}`);
+      console.log(`  ❌ Fallidos: ${failed.length}`);
+      
+      if (skipped.length > 0) {
+        console.log(`⚠️ Archivos omitidos:`, skipped.map(s => ({ name: s.fileName, reason: s.reason })));
+      }
+      
+      if (failed.length > 0) {
+        console.log(`❌ Archivos fallidos:`, failed.map(f => ({ name: f.fileName, error: f.error })));
       }
       
       // Verificar si algún archivo necesita ajustes del parser
@@ -1496,21 +1528,34 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             >
               Usuarios
             </Button>
+            <Button
+              variant={activeTab === "documentacion" ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setActiveTab("documentacion");
+                setIsMobileMenuOpen(false);
+              }}
+              className="text-xs"
+            >
+              Documentación
+            </Button>
           </div>
         </div>
       )}
 
       <main className="mx-auto max-w-6xl p-4 lg:p-6 lg:ml-64">
-        {/* Header contextual */}
-        <div className="mb-6">
+        {/* Header contextual - oculto en desktop */}
+        <div className="mb-6 lg:hidden">
           <h2 className="text-2xl font-semibold text-gray-900">
-            {activeTab === 'tablero' && 'Tablero'}
+            {activeTab === 'tablero' && 'Dashboard'}
             {activeTab === 'recibos' && 'Recibos'}
             {activeTab === 'control' && 'Control'}
             {activeTab === 'export' && 'Exportar'}
             {activeTab === 'descuentos' && 'Descuentos'}
             {activeTab === 'usuarios' && 'Usuarios'}
             {activeTab === 'backup' && 'Backup'}
+            {activeTab === 'documentacion' && 'Documentación'}
+            {activeTab === 'configuracion' && 'Configuración'}
           </h2>
           <p className="text-sm text-gray-500 mt-1">
             {activeTab === 'tablero' && 'Estadísticas y resumen del sistema'}
@@ -1520,6 +1565,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             {activeTab === 'descuentos' && 'Gestión de descuentos'}
             {activeTab === 'usuarios' && 'Administración de usuarios'}
             {activeTab === 'backup' && 'Respaldo de base de datos'}
+            {activeTab === 'documentacion' && 'Documentación del proyecto'}
+            {activeTab === 'configuracion' && 'Configuración del sistema y personalización'}
           </p>
         </div>
         {/* Progress Bar */}
@@ -1616,11 +1663,15 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
               }}
               onOpenNewDescuento={() => {
                 console.log('🔄 onOpenNewDescuento llamado desde Dashboard');
+                console.log('🎯 Navegando a pestaña descuentos...');
+                setActiveTab('descuentos');
                 // Activar modal de nuevo descuento después de navegar
                 setTimeout(() => {
                   console.log('📡 Disparando evento openNewDescuento...');
                   // Disparar evento personalizado para activar modal de descuento
-                  window.dispatchEvent(new CustomEvent('openNewDescuento'));
+                  const event = new CustomEvent('openNewDescuento');
+                  window.dispatchEvent(event);
+                  console.log('✅ Evento openNewDescuento disparado');
                 }, 100);
               }}
               onOpenNewEmployee={() => {
@@ -1633,10 +1684,13 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
               }}
               onOpenNewEmpresa={() => {
                 console.log('🏢 onOpenNewEmpresa llamado desde Dashboard');
+                console.log('🎯 Navegando a pestaña usuarios...');
+                setActiveTab('usuarios');
                 // Activar modal de nueva empresa después de navegar
                 setTimeout(() => {
                   console.log('🏢 Abriendo modal de empresa...');
                   setShowEmpresaModal(true);
+                  console.log('✅ Modal de empresa activado');
                 }, 100);
               }}
             />
@@ -1926,6 +1980,21 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
           <TabsContent value="backup" className="space-y-4">
             <BackupPanel />
           </TabsContent>
+
+          {/* Items Pendientes Tab */}
+          <TabsContent value="pending-items" className="space-y-4">
+            <PendingItemsPage />
+          </TabsContent>
+
+          {/* Documentación Tab */}
+          <TabsContent value="documentacion" className="space-y-4">
+            <DocumentationPanel />
+          </TabsContent>
+
+          {/* Configuración Tab */}
+          <TabsContent value="configuracion" className="space-y-4">
+            <ConfigurationPanel />
+          </TabsContent>
       </Tabs>
 
         {/* Debug Modal */}
@@ -2202,6 +2271,11 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Debug Sessions - TEMPORAL - OCULTO */}
+        {/* <div className="fixed bottom-4 right-4 z-50 max-w-md">
+          <DebugSessions />
+        </div> */}
       </main>
     </div>
     );

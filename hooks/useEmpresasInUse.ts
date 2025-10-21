@@ -42,6 +42,11 @@ export function useEmpresasInUse() {
           empresa.trim() !== ''
         ).sort();
 
+        // Debug: Log todas las empresas encontradas
+        console.log('🔍 Debug useEmpresasInUse - Empresas encontradas:', empresasValidas);
+        console.log('🔍 Debug useEmpresasInUse - Total registros consolidated:', consolidatedRecords.length);
+        console.log('🔍 Debug useEmpresasInUse - Total registros receipts:', receiptRecords.length);
+
         setEmpresas(empresasValidas);
       } catch (err) {
         console.error("Error fetching empresas in use:", err);

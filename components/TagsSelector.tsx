@@ -70,6 +70,13 @@ export const TagsSelector = forwardRef<HTMLInputElement, TagsSelectorProps>(
     }
   }, [inputValue, allExistingTags, tags, defaultTag]);
 
+  // Auto-agregar el defaultTag cuando se monta el componente si no hay tags
+  useEffect(() => {
+    if (defaultTag && tags.length === 0 && !tags.includes(defaultTag)) {
+      addTag(defaultTag);
+    }
+  }, [defaultTag, tags]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
   };

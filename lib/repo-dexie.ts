@@ -42,21 +42,44 @@ function mergeSummingCodes(
 }
 
 async function findReceiptByHash(hash: string) {
+  console.log('🔍 findReceiptByHash - Buscando hash:', hash.substring(0, 10) + '...');
+  
   // Validar que el hash sea un string válido
   if (!hash || typeof hash !== 'string' || hash.trim() === '') {
     console.warn('Hash inválido proporcionado a findReceiptByHash:', hash);
     return null;
   }
   
+  // Verificar cuántos registros hay en la base de datos
+  const totalReceipts = await db.receipts.count();
+  console.log('🔍 Total de recibos en la base de datos:', totalReceipts);
+  
+  if (totalReceipts === 0) {
+    console.log('✅ Base de datos vacía, no hay duplicados');
+    return null;
+  }
+  
   // Si existe índice multiEntry en `hashes`, esto es O(log n).
   // Si no, el filter hace un scan pero sigue siendo correcto.
   try {
-    return await db.receipts.where("hashes").equals(hash).first();
+    const result = await db.receipts.where("hashes").equals(hash).first();
+    console.log('🔍 Resultado de búsqueda por índice:', result ? 'ENCONTRADO' : 'NO ENCONTRADO');
+    if (result) {
+      console.log('🔍 Recibo encontrado:', {
+        legajo: result.legajo,
+        periodo: result.periodo,
+        filename: result.filename,
+        hashes: result.hashes
+      });
+    }
+    return result;
   } catch (error) {
     console.warn('Error en findReceiptByHash con índice, usando filter:', error);
-    return await db.receipts
+    const result = await db.receipts
       .filter((r) => Array.isArray(r.hashes) && r.hashes.includes(hash))
       .first();
+    console.log('🔍 Resultado de búsqueda por filter:', result ? 'ENCONTRADO' : 'NO ENCONTRADO');
+    return result;
   }
 }
 

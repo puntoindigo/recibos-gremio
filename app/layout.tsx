@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Gestor de Recibos",
-  description: "Procesa PDFs de recibos y exporta CSVs",
+  title: "Gestor :: Sistema de Recibos",
+  description: "Sistema integral de gestión de recibos con procesamiento PDF y exportación CSV",
 };
 
 export default function RootLayout({

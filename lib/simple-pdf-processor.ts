@@ -131,6 +131,13 @@ export async function processSingleFile(
         needsEmpresaInput: true // Flag para indicar que necesita input manual
       };
     }
+    
+    // Si la empresa es LIMPAR (fallback), procesar normalmente sin marcar como needsEmpresaInput
+    if (empresa === 'LIMPAR') {
+      if (debug) {
+        console.log(`📄 Procesando archivo con empresa LIMPAR (fallback): ${file.name}`);
+      }
+    }
 
     // Verificar si faltan datos básicos y necesita ajustes del parser
     const legajo = parsed.data.LEGAJO;

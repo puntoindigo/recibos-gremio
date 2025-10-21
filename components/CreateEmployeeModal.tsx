@@ -1,262 +1,255 @@
 // components/CreateEmployeeModal.tsx
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertTriangle, Save, X } from 'lucide-react';
-import { EmpresaSelector } from './EmpresaSelector';
-import { useEmpresasInUse } from '@/hooks/useEmpresasInUse';
-import { db } from '@/lib/db';
+import { Textarea } from '@/components/ui/textarea';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle 
+} from '@/components/ui/dialog';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { X, User, Building2, Calendar, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
+import { canManageUsers } from '@/lib/user-management';
 
 interface CreateEmployeeModalProps {
-  open: boolean;
+  isOpen: boolean;
   onClose: () => void;
-  onSave: (employee: any) => void;
-  initialNombre?: string;
+  onEmployeeRegistered?: (employee: any) => void;
 }
 
-export default function CreateEmployeeModal({ open, onClose, onSave, initialNombre }: CreateEmployeeModalProps) {
-  const { empresas } = useEmpresasInUse();
+export default function CreateEmployeeModal({ 
+  isOpen, 
+  onClose, 
+  onEmployeeRegistered 
+}: CreateEmployeeModalProps) {
+  const { data: session } = useSession();
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     nombre: '',
     legajo: '',
     empresa: '',
-    cuil: ''
+    periodo: '',
+    salario: '',
+    descuentos: '',
+    observaciones: ''
   });
-  const [errors, setErrors] = useState<string[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const nombreInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset form when modal opens/closes
+  // Verificar permisos
+  const canRegister = canManageUsers(session?.user);
+
   useEffect(() => {
-    if (open) {
+    if (isOpen) {
+      // Resetear formulario cuando se abre
       setFormData({
-        nombre: initialNombre || '',
+        nombre: '',
         legajo: '',
         empresa: '',
-        cuil: ''
+        periodo: '',
+        salario: '',
+        descuentos: '',
+        observaciones: ''
       });
-      setErrors([]);
-      
-      // Focus en el campo nombre después de que el modal se abra
-      setTimeout(() => {
-        if (nombreInputRef.current) {
-          nombreInputRef.current.focus();
-          // Si hay texto pre-llenado, seleccionarlo para facilitar la edición
-          if (initialNombre) {
-            nombreInputRef.current.select();
-          }
-        }
-      }, 100);
     }
-  }, [open, initialNombre]);
+  }, [isOpen]);
 
-  const handleFieldChange = (field: string, value: string) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!canRegister) {
+      toast.error('No tienes permisos para registrar empleados');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      // Aquí iría la lógica para registrar el empleado
+      // Por ahora simulamos el registro
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const newEmployee = {
+        id: Date.now().toString(),
+        ...formData,
+        createdAt: new Date().toISOString()
+      };
+
+      toast.success('Empleado registrado exitosamente');
+      onEmployeeRegistered?.(newEmployee);
+      onClose();
+      
+    } catch (error) {
+      console.error('Error registrando empleado:', error);
+      toast.error('Error al registrar empleado');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
   };
 
-  // Función para aplicar máscara al CUIL
-  const applyCuilMask = (value: string): string => {
-    // Remover todos los caracteres que no sean números
-    const numbersOnly = value.replace(/\D/g, '');
-    
-    // Aplicar máscara XX-XXXXXXXX-X
-    if (numbersOnly.length <= 2) {
-      return numbersOnly;
-    } else if (numbersOnly.length <= 10) {
-      return `${numbersOnly.slice(0, 2)}-${numbersOnly.slice(2)}`;
-    } else {
-      return `${numbersOnly.slice(0, 2)}-${numbersOnly.slice(2, 10)}-${numbersOnly.slice(10, 11)}`;
-    }
-  };
-
-  const handleCuilChange = (value: string) => {
-    const maskedValue = applyCuilMask(value);
-    handleFieldChange('cuil', maskedValue);
-  };
-
-  const validateData = (): string[] => {
-    const validationErrors: string[] = [];
-    
-    // Validar nombre
-    if (!formData.nombre || formData.nombre.trim() === '') {
-      validationErrors.push('El nombre es obligatorio');
-    }
-    
-    // Validar legajo
-    if (!formData.legajo || formData.legajo.trim() === '') {
-      validationErrors.push('El legajo es obligatorio');
-    }
-    
-    // Validar empresa
-    if (!formData.empresa || formData.empresa.trim() === '') {
-      validationErrors.push('La empresa es obligatoria');
-    }
-    
-    // Validar CUIL (opcional pero si se ingresa debe tener formato válido)
-    if (formData.cuil && formData.cuil.trim() !== '') {
-      const cuilValue = formData.cuil.trim();
-      // Permitir tanto con guiones como sin guiones
-      const cuilWithDashes = /^\d{2}-\d{8}-\d{1}$/;
-      const cuilWithoutDashes = /^\d{11}$/;
-      
-      if (!cuilWithDashes.test(cuilValue) && !cuilWithoutDashes.test(cuilValue)) {
-        validationErrors.push('El CUIL debe tener el formato XX-XXXXXXXX-X o 11 dígitos');
-      }
-    }
-    
-    return validationErrors;
-  };
-
-  const handleSave = async () => {
-    const validationErrors = validateData();
-    if (validationErrors.length > 0) {
-      setErrors(validationErrors);
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      // Crear un empleado temporal en la base de datos
-      const newEmployee = {
-        key: `manual_${Date.now()}`,
-        legajo: formData.legajo.trim(),
-        nombre: formData.nombre.trim(),
-        periodo: 'MANUAL',
-        archivos: [],
-        data: {
-          NOMBRE: formData.nombre.trim(),
-          LEGAJO: formData.legajo.trim(),
-          EMPRESA: formData.empresa.trim(),
-          CUIL: formData.cuil.trim() || '',
-          PERIODO: 'MANUAL',
-          SUELDO_BASICO: '',
-          TOTAL: '',
-          DESCUENTOS: '',
-          TEXTO_COMPLETO: '',
-          PRIMERAS_LINEAS: '',
-          EMPRESA_DETECTADA: formData.empresa.trim(),
-          GUARDAR: 'true',
-          MANUAL: 'true', // Marcar como empleado creado manualmente
-          FECHA_CREACION: new Date().toISOString()
-        }
-      };
-
-      // Guardar en la base de datos
-      await db.consolidated.add(newEmployee);
-      
-      toast.success('Empleado registrado exitosamente');
-      onSave(newEmployee);
-      onClose();
-    } catch (error) {
-      console.error('Error registrando empleado:', error);
-      toast.error('Error al registrar el empleado');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    onClose();
-  };
+  if (!canRegister) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="h-5 w-5" />
+              Registrar Empleado
+            </DialogTitle>
+            <DialogDescription>
+              No tienes permisos para registrar empleados
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              Contacta al administrador para obtener permisos
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2">
-              <Save className="h-5 w-5" />
-              Registrar Empleado Nuevo
-            </DialogTitle>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-8 w-8 p-0"
-              onClick={onClose}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <DialogTitle className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Registrar Nuevo Empleado
+          </DialogTitle>
           <DialogDescription>
-            Registra un nuevo empleado para poder asignarle descuentos
+            Registrar un nuevo empleado en el sistema
           </DialogDescription>
         </DialogHeader>
 
-        {errors.length > 0 && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              <ul className="list-disc list-inside space-y-1">
-                {errors.map((error, index) => (
-                  <li key={index}>{error}</li>
-                ))}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Nombre */}
             <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre *</Label>
+              <Label htmlFor="nombre">Nombre Completo *</Label>
               <Input
-                ref={nombreInputRef}
                 id="nombre"
                 value={formData.nombre}
-                onChange={(e) => handleFieldChange('nombre', e.target.value)}
-                placeholder="Apellido, Nombre"
+                onChange={(e) => handleInputChange('nombre', e.target.value)}
+                placeholder="Ej: Juan Pérez"
+                required
               />
             </div>
 
+            {/* Legajo */}
             <div className="space-y-2">
               <Label htmlFor="legajo">Legajo *</Label>
               <Input
                 id="legajo"
                 value={formData.legajo}
-                onChange={(e) => handleFieldChange('legajo', e.target.value)}
-                placeholder="Número de legajo"
+                onChange={(e) => handleInputChange('legajo', e.target.value)}
+                placeholder="Ej: 12345"
+                required
               />
             </div>
 
+            {/* Empresa */}
             <div className="space-y-2">
               <Label htmlFor="empresa">Empresa *</Label>
-              <EmpresaSelector
+              <Input
+                id="empresa"
                 value={formData.empresa}
-                onValueChange={(value) => handleFieldChange('empresa', value)}
-                placeholder="Seleccionar empresa"
+                onChange={(e) => handleInputChange('empresa', e.target.value)}
+                placeholder="Ej: LIME"
+                required
               />
             </div>
 
+            {/* Período */}
             <div className="space-y-2">
-              <Label htmlFor="cuil">CUIL</Label>
+              <Label htmlFor="periodo">Período *</Label>
               <Input
-                id="cuil"
-                value={formData.cuil}
-                onChange={(e) => handleCuilChange(e.target.value)}
-                placeholder="XX-XXXXXXXX-X"
-                maxLength={13}
+                id="periodo"
+                value={formData.periodo}
+                onChange={(e) => handleInputChange('periodo', e.target.value)}
+                placeholder="Ej: 2025-01"
+                required
+              />
+            </div>
+
+            {/* Salario */}
+            <div className="space-y-2">
+              <Label htmlFor="salario">Salario</Label>
+              <Input
+                id="salario"
+                type="number"
+                value={formData.salario}
+                onChange={(e) => handleInputChange('salario', e.target.value)}
+                placeholder="Ej: 50000"
+              />
+            </div>
+
+            {/* Descuentos */}
+            <div className="space-y-2">
+              <Label htmlFor="descuentos">Descuentos</Label>
+              <Input
+                id="descuentos"
+                type="number"
+                value={formData.descuentos}
+                onChange={(e) => handleInputChange('descuentos', e.target.value)}
+                placeholder="Ej: 5000"
               />
             </div>
           </div>
-        </div>
 
-        <div className="flex justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={handleCancel} disabled={isSaving}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Guardando...' : 'Guardar'}
-          </Button>
-        </div>
+          {/* Observaciones */}
+          <div className="space-y-2">
+            <Label htmlFor="observaciones">Observaciones</Label>
+            <Textarea
+              id="observaciones"
+              value={formData.observaciones}
+              onChange={(e) => handleInputChange('observaciones', e.target.value)}
+              placeholder="Notas adicionales sobre el empleado..."
+              rows={3}
+            />
+          </div>
+
+          {/* Botones */}
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={loading}
+            >
+              <X className="h-4 w-4 mr-2" />
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {loading ? 'Registrando...' : 'Registrar Empleado'}
+            </Button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   );

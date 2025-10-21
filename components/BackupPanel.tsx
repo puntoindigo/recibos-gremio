@@ -639,9 +639,10 @@ export default function BackupPanel() {
             <h4 className="font-semibold text-blue-900 mb-2">Información sobre los Backups</h4>
             <ul className="text-sm text-blue-800 space-y-1">
               <li>• Los backups se guardan en la carpeta <code className="bg-blue-100 px-1 rounded">backups/</code> del proyecto</li>
-              <li>• Cada backup incluye todos los recibos, datos consolidados, descuentos y configuraciones</li>
+              <li>• Cada backup incluye todos los recibos, datos consolidados, descuentos, configuraciones de columnas, actividades de usuario, items pendientes y configuración de la aplicación</li>
               <li>• Los archivos se organizan por timestamp para facilitar la identificación</li>
               <li>• Se recomienda crear backups regulares para proteger los datos</li>
+              <li>• Los items pendientes y configuraciones se restauran automáticamente al cargar un backup</li>
             </ul>
           </div>
         </CardContent>

@@ -4,15 +4,19 @@ import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, FileText, CreditCard, Building2, TrendingUp, Calendar, Plus, Shield, Download, Database, Upload } from 'lucide-react';
+import { Users, FileText, CreditCard, Building2, TrendingUp, Calendar, Plus } from 'lucide-react';
 import { db } from '@/lib/db';
+import { getEstadisticasDescuentos } from '@/lib/descuentos-manager';
 import type { ConsolidatedEntity } from '@/lib/repo';
 import UploadManagerModal from './UploadManagerModal';
+import CreateEmployeeModal from './CreateEmployeeModal';
 
 interface DashboardStats {
   totalEmployees: number;
   totalReceipts: number;
   totalDiscounts: number;
+  totalDiscountAmount: number;
+  employeesWithDiscounts: number;
   employeesByCompany: Array<{
     company: string;
     count: number;
@@ -46,12 +50,15 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
     totalEmployees: 0,
     totalReceipts: 0,
     totalDiscounts: 0,
+    totalDiscountAmount: 0,
+    employeesWithDiscounts: 0,
     employeesByCompany: [],
     receiptsByPeriod: [],
     recentActivity: []
   });
   const [loading, setLoading] = useState(true);
   const [showUploadManager, setShowUploadManager] = useState(false);
+  const [showCreateEmployee, setShowCreateEmployee] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -73,13 +80,11 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
       const totalEmployees = allConsolidated.length;
       const totalReceipts = allConsolidated.reduce((sum, item) => sum + (item.archivos?.length || 0), 0);
       
-      // Contar descuentos (asumiendo que hay un campo DESCUENTOS)
-      const totalDiscounts = allConsolidated.filter(item => 
-        item.data?.DESCUENTOS && 
-        item.data.DESCUENTOS !== 'NO DETECTADO' && 
-        item.data.DESCUENTOS !== '0' &&
-        parseFloat(item.data.DESCUENTOS.replace(/[^\d.-]/g, '')) > 0
-      ).length;
+      // Obtener estadísticas de descuentos desde la base de datos
+      const descuentosStats = await getEstadisticasDescuentos();
+      const totalDiscounts = descuentosStats.total;
+      const totalDiscountAmount = descuentosStats.montoTotal;
+      const employeesWithDiscounts = descuentosStats.empleadosUnicos;
 
       // Empleados por empresa
       const companyCounts: Record<string, number> = {};
@@ -98,8 +103,11 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
 
       // Recibos por período - contar por archivos individuales, no por empleados consolidados
       const periodCounts: Record<string, number> = {};
-      allConsolidated.forEach(item => {
-        const period = item.data?.PERIODO;
+      
+      allConsolidated.forEach((item) => {
+        // El período está en item.periodo, no en item.data.PERIODO
+        const period = item.periodo;
+        
         // Solo considerar como "Sin período" si realmente no hay período o es "NO DETECTADO" o "FALTANTE"
         const periodLabel = (!period || period === 'NO DETECTADO' || period === 'FALTANTE') 
           ? 'Sin período' 
@@ -128,6 +136,8 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
         totalEmployees,
         totalReceipts,
         totalDiscounts,
+        totalDiscountAmount,
+        employeesWithDiscounts,
         employeesByCompany,
         receiptsByPeriod,
         recentActivity
@@ -169,87 +179,6 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
         </Badge>
       </div>
 
-      {/* Acceso rápido a ABMs */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Acceso Rápido</h2>
-          <Badge variant="secondary" className="text-xs">
-            <Plus className="h-3 w-3 mr-1" />
-            Nuevos Registros
-          </Badge>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-auto p-3 flex flex-col items-center space-y-2 hover:bg-blue-50 hover:border-blue-300"
-            onClick={() => onNavigateToTab?.('recibos')}
-          >
-            <FileText className="h-5 w-5 text-blue-600" />
-            <span className="text-xs font-medium">Nuevo Recibo</span>
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-auto p-3 flex flex-col items-center space-y-2 hover:bg-green-50 hover:border-green-300"
-            onClick={() => onNavigateToTab?.('control')}
-          >
-            <Shield className="h-5 w-5 text-green-600" />
-            <span className="text-xs font-medium">Nuevo Control</span>
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-auto p-3 flex flex-col items-center space-y-2 hover:bg-purple-50 hover:border-purple-300"
-            onClick={() => onNavigateToTab?.('descuentos')}
-          >
-            <CreditCard className="h-5 w-5 text-purple-600" />
-            <span className="text-xs font-medium">Nuevo Descuento</span>
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-auto p-3 flex flex-col items-center space-y-2 hover:bg-orange-50 hover:border-orange-300"
-            onClick={() => onNavigateToTab?.('usuarios')}
-          >
-            <Users className="h-5 w-5 text-orange-600" />
-            <span className="text-xs font-medium">Nuevo Usuario</span>
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-auto p-3 flex flex-col items-center space-y-2 hover:bg-cyan-50 hover:border-cyan-300"
-            onClick={() => onNavigateToTab?.('export')}
-          >
-            <Download className="h-5 w-5 text-cyan-600" />
-            <span className="text-xs font-medium">Exportar Datos</span>
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-auto p-3 flex flex-col items-center space-y-2 hover:bg-red-50 hover:border-red-300"
-            onClick={() => onNavigateToTab?.('backup')}
-          >
-            <Database className="h-5 w-5 text-red-600" />
-            <span className="text-xs font-medium">Backup</span>
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-auto p-3 flex flex-col items-center space-y-2 hover:bg-indigo-50 hover:border-indigo-300"
-            onClick={() => setShowUploadManager(true)}
-          >
-            <Upload className="h-5 w-5 text-indigo-600" />
-            <span className="text-xs font-medium">Gestión Subidas</span>
-          </Button>
-        </div>
-      </div>
 
       {/* Estadísticas principales */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -269,8 +198,8 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
                 variant="ghost"
                 className="h-6 w-6 p-0 hover:bg-blue-100"
                 onClick={() => {
-                  onNavigateToTab?.('usuarios');
-                  onOpenNewEmployee?.();
+                  console.log('👤 Abriendo modal de crear empleado...');
+                  setShowCreateEmployee(true);
                 }}
               >
                 <Plus className="h-3 w-3 text-blue-600" />
@@ -304,13 +233,13 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Con Descuentos</CardTitle>
+            <CardTitle className="text-sm font-medium">Monto Total Descuentos</CardTitle>
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalDiscounts}</div>
+            <div className="text-2xl font-bold text-green-600">${(stats.totalDiscountAmount || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              Empleados con descuentos
+              {stats.totalDiscounts || 0} descuentos cargados
             </p>
             <div className="mt-3 flex justify-center">
               <Button
@@ -323,6 +252,29 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
                 }}
               >
                 <Plus className="h-3 w-3 text-purple-600" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Empleados con Descuentos</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{stats.employeesWithDiscounts || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              Empleados con descuentos activos
+            </p>
+            <div className="mt-3 flex justify-center">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0 hover:bg-orange-100"
+                onClick={() => onNavigateToTab?.('descuentos')}
+              >
+                <TrendingUp className="h-3 w-3 text-orange-600" />
               </Button>
             </div>
           </CardContent>
@@ -351,6 +303,40 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
                 <Plus className="h-3 w-3 text-orange-600" />
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Items Pendientes - Card destacada */}
+        <Card className="bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200 hover:shadow-lg transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-emerald-800">Items Pendientes</CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-emerald-600 border-emerald-300">
+                Nuevo
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-100"
+                onClick={() => onNavigateToTab?.('pending-items')}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-700">10</div>
+            <p className="text-xs text-emerald-600 mb-3">
+              Tareas pendientes de desarrollo
+            </p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full text-emerald-600 border-emerald-300 hover:bg-emerald-100"
+              onClick={() => onNavigateToTab?.('pending-items')}
+            >
+              Gestionar Items
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -470,6 +456,16 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
         isOpen={showUploadManager}
         onClose={() => setShowUploadManager(false)}
         onResumeSession={onResumeSession}
+      />
+
+      {/* Modal de Registrar Empleado */}
+      <CreateEmployeeModal
+        isOpen={showCreateEmployee}
+        onClose={() => setShowCreateEmployee(false)}
+        onEmployeeRegistered={(employee) => {
+          console.log('✅ Empleado registrado:', employee);
+          loadDashboardData(); // Refrescar datos
+        }}
       />
     </div>
   );

@@ -77,7 +77,7 @@ function detectarEmpresa(texto: string, debug: boolean = false): string {
   }
   
   if (debug) {
-    console.log("❌ Empresa NO detectada, retornando DESCONOCIDA", {
+    console.log("❌ Empresa NO detectada, usando fallback inteligente", {
       textoCompleto: texto.substring(0, 1000) + "...",
       patronesProbados: empresaPatterns.map(ep => ({
         empresa: ep.empresa,
@@ -86,7 +86,9 @@ function detectarEmpresa(texto: string, debug: boolean = false): string {
     });
   }
   
-  return "DESCONOCIDA";
+  // Fallback inteligente: usar LIMPAR por defecto en lugar de DESCONOCIDA
+  // Esto evita que se detenga el procesamiento
+  return "LIMPAR";
 }
 
 

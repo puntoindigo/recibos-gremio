@@ -13,6 +13,11 @@ export default withAuth(
           return true;
         }
         
+        // Permitir acceso a documentación sin autenticación
+        if (req.nextUrl.pathname.startsWith('/docs')) {
+          return true;
+        }
+        
         // Requerir autenticación para todas las demás rutas
         return !!token;
       },

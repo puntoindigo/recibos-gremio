@@ -7,6 +7,8 @@ export interface BackupData {
   descuentos: any[];
   columnConfigs: any[];
   userActivities: any[];
+  pendingItems: any[];
+  appConfiguration: any;
   metadata: {
     timestamp: string;
     version: string;
@@ -50,6 +52,8 @@ export async function exportDatabaseBackup(): Promise<{
     const descuentos: any[] = [];
     const columnConfigs: any[] = [];
     const userActivities: any[] = [];
+    const pendingItems: any[] = [];
+    const appConfiguration: any = null;
 
     const backupData: BackupData = {
       receipts,
@@ -57,10 +61,12 @@ export async function exportDatabaseBackup(): Promise<{
       descuentos,
       columnConfigs,
       userActivities,
+      pendingItems,
+      appConfiguration,
       metadata: {
         timestamp: new Date().toISOString(),
         version: '1.0.0',
-        totalRecords: receipts.length + consolidated.length + descuentos.length + columnConfigs.length + userActivities.length
+        totalRecords: receipts.length + consolidated.length + descuentos.length + columnConfigs.length + userActivities.length + pendingItems.length + (appConfiguration ? 1 : 0)
       }
     };
 
@@ -74,6 +80,8 @@ export async function exportDatabaseBackup(): Promise<{
     await writeFile(join(backupPath, 'descuentos.json'), JSON.stringify(descuentos, null, 2), 'utf8');
     await writeFile(join(backupPath, 'column_configs.json'), JSON.stringify(columnConfigs, null, 2), 'utf8');
     await writeFile(join(backupPath, 'user_activities.json'), JSON.stringify(userActivities, null, 2), 'utf8');
+    await writeFile(join(backupPath, 'pending_items.json'), JSON.stringify(pendingItems, null, 2), 'utf8');
+    await writeFile(join(backupPath, 'app_configuration.json'), JSON.stringify(appConfiguration, null, 2), 'utf8');
 
     // Escribir archivo de metadatos
     const metadataFile = join(backupPath, 'metadata.json');

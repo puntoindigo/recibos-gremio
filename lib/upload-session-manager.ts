@@ -21,6 +21,10 @@ export class UploadSessionManager {
     userId: string, 
     fileNames: string[]
   ): Promise<UploadSessionDB> {
+    console.log('🔧 UploadSessionManager.createSession - Iniciando...');
+    console.log('🔧 UserId:', userId);
+    console.log('🔧 FileNames:', fileNames.length);
+    
     const sessionId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const now = Date.now();
     
@@ -44,8 +48,49 @@ export class UploadSessionManager {
       lastUpdatedAt: now
     };
     
-    await db.uploadSessions.add(session);
-    return session;
+    console.log('🔧 Session object created:', {
+      sessionId: session.sessionId,
+      userId: session.userId,
+      totalFiles: session.totalFiles,
+      status: session.status
+    });
+    
+    try {
+      console.log('🔧 Attempting to save to database...');
+      console.log('🔧 Database object:', db);
+      console.log('🔧 UploadSessions table:', db.uploadSessions);
+      
+      // Verificar que la tabla existe
+      const tableExists = await db.uploadSessions.count();
+      console.log('🔧 Table count before save:', tableExists);
+      
+      const result = await db.uploadSessions.add(session);
+      console.log('✅ Session saved to database with ID:', result);
+      
+      // Verificar que se guardó correctamente
+      const savedSession = await db.uploadSessions.get(result);
+      console.log('🔍 Verification - saved session:', savedSession ? 'FOUND' : 'NOT FOUND');
+      
+      if (savedSession) {
+        console.log('🔍 Saved session details:', {
+          id: savedSession.id,
+          sessionId: savedSession.sessionId,
+          userId: savedSession.userId,
+          status: savedSession.status,
+          totalFiles: savedSession.totalFiles
+        });
+      }
+      
+      // Verificar el conteo después de guardar
+      const countAfter = await db.uploadSessions.count();
+      console.log('🔧 Table count after save:', countAfter);
+      
+      return session;
+    } catch (error) {
+      console.error('❌ Error saving session to database:', error);
+      console.error('❌ Error details:', error);
+      throw error;
+    }
   }
   
   /**
@@ -293,6 +338,9 @@ export class UploadSessionManager {
   static async getAllSessions(): Promise<UploadSessionDB[]> {
     try {
       console.log('🔍 Obteniendo todas las sesiones de la base de datos...');
+      console.log('🔍 Database object:', db);
+      console.log('🔍 UploadSessions table:', db.uploadSessions);
+      
       const allSessions = await db.uploadSessions.toArray();
       console.log('📊 Total de sesiones en la base de datos:', allSessions.length);
       console.log('📊 Detalles de todas las sesiones:', allSessions.map(s => ({
@@ -304,9 +352,15 @@ export class UploadSessionManager {
         pendingFiles: s.pendingFiles,
         startedAt: new Date(s.startedAt).toLocaleString()
       })));
+      
+      // Verificar si la tabla existe
+      const tableExists = await db.uploadSessions.count();
+      console.log('🔍 Table count:', tableExists);
+      
       return allSessions;
     } catch (error) {
       console.error('❌ Error getting all sessions:', error);
+      console.error('❌ Error details:', error);
       return [];
     }
   }

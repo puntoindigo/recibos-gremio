@@ -9,6 +9,8 @@ export interface BackupData {
   descuentos: any[];
   columnConfigs: any[];
   userActivities: any[];
+  pendingItems: any[];
+  appConfiguration: any;
   metadata: {
     timestamp: string;
     version: string;
@@ -26,12 +28,38 @@ export async function exportDatabaseBackupClient(): Promise<{
   error?: string;
 }> {
   try {
-    // Exportar todos los datos
+    // Exportar todos los datos de la base de datos
     const receipts = await db.receipts.toArray();
     const consolidated = await db.consolidated.toArray();
     const descuentos = await db.descuentos.toArray();
     const columnConfigs = await db.columnConfigs.toArray();
     const userActivities = await db.userActivities.toArray();
+
+    // Exportar items pendientes desde localStorage
+    let pendingItems: any[] = [];
+    try {
+      const savedItems = localStorage.getItem('pendingItems');
+      if (savedItems) {
+        pendingItems = JSON.parse(savedItems);
+      }
+    } catch (error) {
+      console.warn('Error cargando items pendientes del localStorage:', error);
+    }
+
+    // Exportar configuración de la aplicación desde localStorage
+    let appConfiguration: any = null;
+    try {
+      const savedConfig = localStorage.getItem('app-configuration');
+      if (savedConfig) {
+        appConfiguration = JSON.parse(savedConfig);
+      }
+    } catch (error) {
+      console.warn('Error cargando configuración del localStorage:', error);
+    }
+
+    const totalRecords = receipts.length + consolidated.length + descuentos.length + 
+                       columnConfigs.length + userActivities.length + pendingItems.length + 
+                       (appConfiguration ? 1 : 0);
 
     const backupData: BackupData = {
       receipts,
@@ -39,14 +67,18 @@ export async function exportDatabaseBackupClient(): Promise<{
       descuentos,
       columnConfigs,
       userActivities,
+      pendingItems,
+      appConfiguration,
       metadata: {
         timestamp: new Date().toISOString(),
         version: '1.0.0',
-        totalRecords: receipts.length + consolidated.length + descuentos.length + columnConfigs.length + userActivities.length
+        totalRecords
       }
     };
 
     console.log(`✅ Backup de datos preparado: ${backupData.metadata.totalRecords} registros`);
+    console.log(`📋 Items pendientes: ${pendingItems.length}`);
+    console.log(`⚙️ Configuración: ${appConfiguration ? 'Incluida' : 'No encontrada'}`);
 
     return {
       success: true,
@@ -119,7 +151,7 @@ export async function restoreDatabaseFromBackup(backupData: BackupData): Promise
     await db.columnConfigs.clear();
     await db.userActivities.clear();
     
-    // Restaurar datos
+    // Restaurar datos de la base de datos
     if (backupData.receipts && backupData.receipts.length > 0) {
       await db.receipts.bulkAdd(backupData.receipts);
     }
@@ -135,8 +167,28 @@ export async function restoreDatabaseFromBackup(backupData: BackupData): Promise
     if (backupData.userActivities && backupData.userActivities.length > 0) {
       await db.userActivities.bulkAdd(backupData.userActivities);
     }
+
+    // Restaurar items pendientes en localStorage
+    if (backupData.pendingItems && backupData.pendingItems.length > 0) {
+      try {
+        localStorage.setItem('pendingItems', JSON.stringify(backupData.pendingItems));
+        console.log(`✅ Items pendientes restaurados: ${backupData.pendingItems.length} items`);
+      } catch (error) {
+        console.warn('Error restaurando items pendientes:', error);
+      }
+    }
+
+    // Restaurar configuración de la aplicación en localStorage
+    if (backupData.appConfiguration) {
+      try {
+        localStorage.setItem('app-configuration', JSON.stringify(backupData.appConfiguration));
+        console.log('✅ Configuración de la aplicación restaurada');
+      } catch (error) {
+        console.warn('Error restaurando configuración:', error);
+      }
+    }
     
-    console.log('✅ Base de datos restaurada exitosamente');
+    console.log('✅ Base de datos y configuraciones restauradas exitosamente');
     return { success: true };
   } catch (error) {
     console.error('❌ Error restaurando base de datos:', error);
@@ -160,7 +212,7 @@ export async function clearAllDatabases(): Promise<{
   }
 
   try {
-    // Limpiar todas las tablas
+    // Limpiar todas las tablas de la base de datos
     await db.receipts.clear();
     await db.consolidated.clear();
     await db.descuentos.clear();
@@ -169,7 +221,23 @@ export async function clearAllDatabases(): Promise<{
     await db.savedControls.clear();
     await db.control.clear();
     
-    console.log('✅ Todas las bases de datos han sido vaciadas');
+    // Limpiar items pendientes del localStorage
+    try {
+      localStorage.removeItem('pendingItems');
+      console.log('✅ Items pendientes eliminados del localStorage');
+    } catch (error) {
+      console.warn('Error eliminando items pendientes del localStorage:', error);
+    }
+
+    // Limpiar configuración de la aplicación del localStorage
+    try {
+      localStorage.removeItem('app-configuration');
+      console.log('✅ Configuración de la aplicación eliminada del localStorage');
+    } catch (error) {
+      console.warn('Error eliminando configuración del localStorage:', error);
+    }
+    
+    console.log('✅ Todas las bases de datos y configuraciones han sido vaciadas');
     return { success: true };
   } catch (error) {
     console.error('❌ Error vaciando bases de datos:', error);

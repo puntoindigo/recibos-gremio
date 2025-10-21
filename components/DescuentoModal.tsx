@@ -1,7 +1,7 @@
 // components/DescuentoModal.tsx
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,16 +43,17 @@ interface DescuentoModalProps {
   employees: ConsolidatedEntity[];
   allDescuentos?: Descuento[]; // Para autocompletado de tags
   onEmployeeCreated?: (employee: ConsolidatedEntity) => void;
+  empresaFiltro?: string; // Empresa seleccionada en el filtro del listado
 }
 
 import { parseDateToTimestamp, formatTimestampToDateString, getCurrentDateString } from '@/lib/date-utils';
 
-export default function DescuentoModal({ descuento, onClose, onSave, employees, allDescuentos = [], onEmployeeCreated }: DescuentoModalProps) {
+export default function DescuentoModal({ descuento, onClose, onSave, employees, allDescuentos = [], onEmployeeCreated, empresaFiltro }: DescuentoModalProps) {
   const { data: session } = useSession();
   const [formData, setFormData] = useState({
     legajo: '',
     nombre: '',
-    empresa: '',
+    empresa: empresaFiltro || 'sin-empresa', // Usar empresaFiltro si está disponible, sino 'sin-empresa'
     monto: 0,
     cantidadCuotas: 1,
     descripcion: '',
@@ -60,7 +61,7 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
     motivo: '',
     tags: [] as string[],
     observaciones: '',
-    fechaInicio: getCurrentDateString() // Fecha actual en formato YYYY-MM-DD
+    fechaInicio: getCurrentDateString() // Se actualizará con la fecha del último descuento
   });
   const [isLoading, setIsLoading] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -103,12 +104,68 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
     return '';
   };
 
+  // Obtener la fecha del último descuento registrado
+  const getLastDescuentoDate = (): string => {
+    if (allDescuentos.length === 0) return getCurrentDateString();
+    
+    // Ordenar descuentos por fecha de creación descendente
+    const sortedDescuentos = [...allDescuentos].sort((a, b) => {
+      const fechaA = a.fechaCreacion || 0;
+      const fechaB = b.fechaCreacion || 0;
+      return fechaB - fechaA;
+    });
+    
+    // Retornar la fecha del descuento más reciente
+    const lastDescuento = sortedDescuentos[0];
+    if (lastDescuento && lastDescuento.fechaInicio) {
+      return formatTimestampToDateString(lastDescuento.fechaInicio);
+    }
+    
+    return getCurrentDateString();
+  };
+
+  // Obtener valores predeterminados basados en los últimos 3 registros
+  const getDefaultValues = useMemo(() => {
+    if (allDescuentos.length < 3) return { monto: 0, cuotas: 1 };
+    
+    const ultimos3 = allDescuentos
+      .sort((a, b) => b.fechaCreacion - a.fechaCreacion)
+      .slice(0, 3);
+    
+    // Verificar si los últimos 3 tienen el mismo monto
+    const montos = ultimos3.map(d => d.monto);
+    const montoComun = montos.every(m => m === montos[0]) ? montos[0] : 0;
+    
+    // Verificar si los últimos 3 tienen las mismas cuotas
+    const cuotas = ultimos3.map(d => d.cantidadCuotas);
+    const cuotasComunes = cuotas.every(c => c === cuotas[0]) ? cuotas[0] : 1;
+    
+    return {
+      monto: montoComun,
+      cuotas: cuotasComunes
+    };
+  }, [allDescuentos]);
+
   const lastUsedTag = getLastUsedTag();
+  const lastDescuentoDate = getLastDescuentoDate();
 
   // Sincronizar empleados locales con el prop
   useEffect(() => {
     setLocalEmployees(employees);
   }, [employees]);
+
+  // Actualizar fecha inicial y valores predeterminados con los del último descuento registrado
+  useEffect(() => {
+    if (allDescuentos.length > 0 && !descuento) { // Solo para nuevos descuentos, no para edición
+      setFormData(prev => ({
+        ...prev,
+        fechaInicio: lastDescuentoDate,
+        monto: getDefaultValues.monto,
+        cantidadCuotas: getDefaultValues.cuotas,
+        empresa: empresaFiltro || 'sin-empresa' // Asegurar que la empresa se mantenga
+      }));
+    }
+  }, [allDescuentos, lastDescuentoDate, getDefaultValues, descuento, empresaFiltro]);
 
   useEffect(() => {
     if (descuento) {
@@ -126,10 +183,10 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
         fechaInicio: descuento.fechaInicio ? formatTimestampToDateString(descuento.fechaInicio) : getCurrentDateString()
       });
     } else {
-      // Establecer empresa por defecto basada en la sesión
+      // Establecer empresa por defecto basada en la sesión o filtro
       setFormData(prev => ({
         ...prev,
-        empresa: session?.user?.empresaId || ''
+        empresa: empresaFiltro || session?.user?.empresaId || 'sin-empresa'
       }));
       
       // Focus automático en el campo de empleado cuando se abre el modal
@@ -137,7 +194,7 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
         employeeRef.current?.focus();
       }, 100);
     }
-  }, [descuento, session]);
+  }, [descuento, session, empresaFiltro]);
 
   // Atajo de teclado ESC para cancelar
   useEffect(() => {
@@ -270,12 +327,70 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Selector de Empresa - Ocupa el ancho total del modal */}
+          <div className="space-y-2">
+            <Label htmlFor="empresa">Empresa</Label>
+            <Select
+              value={formData.empresa}
+              onValueChange={(value) => {
+                setFormData(prev => ({ 
+                  ...prev, 
+                  empresa: value,
+                  legajo: '', // Limpiar empleado cuando cambia empresa
+                  nombre: ''
+                }));
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Seleccionar empresa..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sin-empresa">Sin empresa</SelectItem>
+                {Array.from(new Set(employees.map(emp => emp.data?.EMPRESA).filter(Boolean))).map(empresa => (
+                  <SelectItem key={empresa} value={empresa!}>
+                    {empresa}
+                  </SelectItem>
+                ))}
+                {/* Debug: Mostrar todas las empresas encontradas */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="p-2 text-xs text-gray-500 border-t">
+                    <div>Debug - Empresas encontradas: {JSON.stringify(Array.from(new Set(employees.map(emp => emp.data?.EMPRESA).filter(Boolean))))}</div>
+                    <div>Debug - Total empleados: {employees.length}</div>
+                    <div>Debug - Empleados con EMPRESA: {employees.filter(emp => emp.data?.EMPRESA).length}</div>
+                    <div>Debug - Empleados LIME: {employees.filter(emp => emp.data?.EMPRESA === 'LIME').length}</div>
+                    <div>Debug - Empleados ANTUNEZ: {employees.filter(emp => emp.nombre?.includes('ANTUNEZ')).length}</div>
+                    <div>Debug - Primeros 3 empleados: {JSON.stringify(employees.slice(0, 3).map(emp => ({ legajo: emp.legajo, nombre: emp.nombre, empresa: emp.data?.EMPRESA })))}</div>
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Empleado *</Label>
               <EmployeeSelector
                 ref={employeeRef}
-                employees={localEmployees}
+                employees={formData.empresa === 'sin-empresa' 
+                  ? localEmployees 
+                  : localEmployees.filter(emp => {
+                    const empresaEmpleado = emp.data?.EMPRESA;
+                    const empresaSeleccionada = formData.empresa;
+                    
+                    // Debug en desarrollo
+                    if (process.env.NODE_ENV === 'development' && empresaSeleccionada !== 'sin-empresa') {
+                      console.log('🔍 Debug filtro empleados:', {
+                        empresaSeleccionada,
+                        empresaEmpleado,
+                        coincide: empresaEmpleado === empresaSeleccionada,
+                        legajo: emp.legajo,
+                        nombre: emp.nombre
+                      });
+                    }
+                    
+                    return empresaEmpleado === empresaSeleccionada;
+                  })
+                }
                 value={formData.legajo || ''}
                 tabIndex={1}
                 onCreateEmployee={handleCreateEmployee}
@@ -302,12 +417,14 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
                       ...prev,
                       legajo: '',
                       nombre: '',
-                      empresa: '',
                       periodo: ''
                     }));
                   }
                 }}
-                placeholder="Seleccionar empleado..."
+                placeholder={formData.empresa === 'sin-empresa' 
+                  ? "Seleccionar empleado..." 
+                  : `Seleccionar empleado de ${formData.empresa}...`
+                }
               />
             </div>
 
@@ -465,7 +582,13 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
             <Button type="button" variant="outline" onClick={onClose} ref={cancelarRef} tabIndex={7}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isLoading} ref={crearRef} tabIndex={6}>
+            <Button 
+              type="submit" 
+              disabled={isLoading} 
+              ref={crearRef} 
+              tabIndex={6}
+              className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2 rounded-lg transition-colors duration-200 focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+            >
               {isLoading ? 'Guardando...' : (descuento ? 'Actualizar' : 'Registrar')}
             </Button>
           </div>

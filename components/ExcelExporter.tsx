@@ -3,6 +3,8 @@
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useState, useEffect } from 'react';
+import ConfirmModal from '@/components/ConfirmModal';
 import type { ConsolidatedEntity } from '@/lib/repo';
 
 interface ExcelExporterProps {
@@ -20,10 +22,19 @@ export default function ExcelExporter({
   visibleColumns = [],
   columnAliases = {}
 }: ExcelExporterProps) {
-  
+  const [showNoDataModal, setShowNoDataModal] = useState(false);
+  const [suppressNoData, setSuppressNoData] = useState<boolean>(false);
+
+  useEffect(() => {
+    const v = localStorage.getItem('alerts.suppressNoDataExport');
+    if (v) setSuppressNoData(v === 'true');
+  }, []);
+
   const exportToExcel = () => {
     if (!data || data.length === 0) {
-      alert('No hay datos para exportar');
+      if (!suppressNoData) {
+        setShowNoDataModal(true);
+      }
       return;
     }
 
@@ -104,13 +115,42 @@ export default function ExcelExporter({
   };
 
   return (
-    <Button 
-      onClick={exportToExcel}
-      variant="outline"
-      className="flex items-center gap-2"
-    >
-      <Download className="h-4 w-4" />
-      Exportar a Excel
-    </Button>
+    <>
+      <Button 
+        onClick={exportToExcel}
+        variant="outline"
+        className="flex items-center gap-2"
+      >
+        <Download className="h-4 w-4" />
+        Exportar a Excel
+      </Button>
+
+      <ConfirmModal
+        open={showNoDataModal}
+        onClose={() => setShowNoDataModal(false)}
+        onConfirm={() => setShowNoDataModal(false)}
+        title="No hay datos para exportar"
+        description={"No se encontraron registros para generar el archivo."}
+        confirmText="Aceptar"
+      />
+      {showNoDataModal && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center pointer-events-none">
+          <div className="pointer-events-auto bg-white/90 backdrop-blur-sm rounded-t-lg shadow-lg p-3 mb-20 text-sm flex items-center gap-2">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={suppressNoData}
+                onChange={(e) => {
+                  const v = e.target.checked;
+                  setSuppressNoData(v);
+                  localStorage.setItem('alerts.suppressNoDataExport', String(v));
+                }}
+              />
+              No volver a mostrar este mensaje
+            </label>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
