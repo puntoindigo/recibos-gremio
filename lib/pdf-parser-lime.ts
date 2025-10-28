@@ -301,6 +301,17 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     data["NRO. DE CUIL"] = cuilMatch[1];
   }
 
+  // Extraer conceptos básicos de LIME
+  const jornal = extraerConceptoLIME(rawText, "JORNAL") || extraerConceptoLIME(rawText, "JORNALES");
+  const horasExtras = extraerConceptoLIME(rawText, "HORAS EXTRAS") || extraerConceptoLIME(rawText, "H.EXTRA");
+  const antiguedad = extraerConceptoLIME(rawText, "ANTIGUEDAD");
+  const adicionales = extraerConceptoLIME(rawText, "ADICIONALES") || extraerConceptoLIME(rawText, "ADICIONAL");
+  const inasistencias = extraerConceptoLIME(rawText, "INASISTENCIAS") || extraerConceptoLIME(rawText, "INASISTENCIA");
+  const sueldoBasico = extraerConceptoLIME(rawText, "SUELDO BASICO") || extraerConceptoLIME(rawText, "SUELDO BÁSICO");
+  const sueldoBruto = extraerConceptoLIME(rawText, "SUELDO BRUTO");
+  const total = extraerConceptoLIME(rawText, "TOTAL") || extraerConceptoLIME(rawText, "TOTAL A COBRAR");
+  const descuentos = extraerConceptoLIME(rawText, "DESCUENTOS") || extraerConceptoLIME(rawText, "TOTAL DESCUENTOS");
+
   // Extraer conceptos específicos de LIME y mapearlos a códigos estándar
   const contribSolidaria = extraerConceptoLIME(rawText, "Contrib.Solidaria");
   const gastosSepelio = extraerConceptoLIME(rawText, "Gastos de sepelio");
@@ -312,6 +323,15 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
 
   // Debug: mostrar los valores extraídos antes de toDotDecimal
   if (debug) console.log("🔍 Debug LIME - Valores extraídos:", {
+    jornal,
+    horasExtras,
+    antiguedad,
+    adicionales,
+    inasistencias,
+    sueldoBasico,
+    sueldoBruto,
+    total,
+    descuentos,
     contribSolidaria,
     gastosSepelio,
     cuotaMutual,
@@ -319,6 +339,17 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     descMutual,
     item5310
   });
+
+  // Mapear conceptos básicos
+  data["JORNAL"] = toDotDecimal(jornal);
+  data["HORAS_EXTRAS"] = toDotDecimal(horasExtras);
+  data["ANTIGUEDAD"] = toDotDecimal(antiguedad);
+  data["ADICIONALES"] = toDotDecimal(adicionales);
+  data["INASISTENCIAS"] = toDotDecimal(inasistencias);
+  data["SUELDO_BASICO"] = toDotDecimal(sueldoBasico);
+  data["SUELDO_BRUTO"] = toDotDecimal(sueldoBruto);
+  data["TOTAL"] = toDotDecimal(total);
+  data["DESCUENTOS"] = toDotDecimal(descuentos);
 
   // Mapear a códigos estándar (usando los mismos que LIMPAR)
   data["20540"] = toDotDecimal(contribSolidaria); // CONTRIBUCION SOLIDARIA

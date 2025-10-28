@@ -8,19 +8,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Download, FileUp, Loader2, CheckCircle2, XCircle, Menu, X, Plus, User } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
+import { Download, FileUp, Loader2, CheckCircle2, XCircle, Menu, X, Plus, User, FileText, Bug, RefreshCw, Database, Wrench, ListTodo, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useConfiguration } from "@/contexts/ConfigurationContext";
+import { useCentralizedDataManager } from "@/hooks/useCentralizedDataManager";
 
 import { CODE_LABELS, CODE_KEYS, getPrincipalLabels } from "@/lib/code-labels";
 import { sha256OfFile } from "@/lib/hash";
-import { repoDexie } from '@/lib/repo-dexie';
-import { db } from '@/lib/db';
+// import { repoDexie } from '@/lib/repo-dexie'; // ELIMINADO
+// // import { db } from '@/lib/db'; // Removed - using centralized data manager // Removido - usar dataManager en su lugar
 import { processFiles, processSingleFile, processSingleFileWithData, type SimpleProcessingResult } from '@/lib/simple-pdf-processor';
 // import { parsePdfReceiptToRecord } from '@/lib/pdf-parser'; // Importación dinámica para evitar SSR
 import { useLearnedRules } from '@/hooks/useLearnedRules';
 import type { ConsolidatedEntity } from "@/lib/repo";
-import type { SavedControlDB, ControlRow } from "@/lib/db";
+import type { SavedControlDB, ControlRow } from "@/lib/data-manager-singleton";
 import { readOfficialXlsxUnified, type OfficialRow } from "@/lib/import-excel-unified";
 import TablaAgregada from "@/components/TablaAgregada/TablaAgregada";
 import ExcelExporter from "@/components/ExcelExporter";
@@ -46,8 +49,13 @@ import EmpresaModal from "@/components/EmpresaModal";
 import ParserAdjustmentModal from "@/components/ParserAdjustmentModal";
 import EditDataModal from "@/components/EditDataModal";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
+import { ConfirmModal } from "@/components/ConfirmModal";
+import PendingItemsManager from '@/components/PendingItemsManager';
+import { UploadLogModal } from "@/components/UploadLogModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { DescuentosPanel } from "@/components/DescuentosPanel";
+import { EmpleadosPanel } from "@/components/EmpleadosPanel";
+import { EmpresasPanel } from "@/components/EmpresasPanel";
 import SidebarNavigation from "@/components/SidebarNavigation";
 import Dashboard, { DashboardRef } from "@/components/Dashboard";
 import BackupPanel from "@/components/BackupPanel";
@@ -56,8 +64,9 @@ import PersistentUploadProgress from "@/components/PersistentUploadProgress";
 import DocumentationPanel from "@/components/DocumentationPanel";
 import ConfigurationPanel from "@/components/ConfigurationPanel";
 import PendingItemsPage from "@/components/PendingItemsPage";
-import { UploadSessionManager } from "@/lib/upload-session-manager";
+// import { UploadSessionManager } from "@/lib/upload-session-manager"; // ELIMINADO
 import DebugSessions from "@/components/DebugSessions";
+import OCRConfigModal from "@/components/OCRConfigModal";
 
 type UploadItem = { 
   name: string; 
@@ -76,8 +85,34 @@ const makeKey = (r: ConsolidatedEntity) => `${r.legajo}||${r.periodo}||${r.data?
 
 export default function Page() {
   const { data: session, status } = useSession();
+  const { config, saveConfiguration: updateConfig } = useConfiguration();
+  const { dataManager } = useCentralizedDataManager();
   const [activeTab, setActiveTab] = useState<string>("tablero");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showUploadLog, setShowUploadLog] = useState(false);
+  const [showTestTools, setShowTestTools] = useState(false);
+  const [showTestConfirm, setShowTestConfirm] = useState(false);
+  const [showPendingItems, setShowPendingItems] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  // Debug para el modal de confirmación
+  useEffect(() => {
+    console.log(`🔍 showDeleteConfirm cambió a:`, showDeleteConfirm);
+  }, [showDeleteConfirm]);
+  const [deleteConfirmData, setDeleteConfirmData] = useState<{
+    title: string;
+    message: string;
+    details: string;
+    onConfirm: () => void;
+  }>({
+    title: '',
+    message: '',
+    details: '',
+    onConfirm: () => {}
+  });
+  const [deleteProgress, setDeleteProgress] = useState(0);
+  const [deleteStatus, setDeleteStatus] = useState('');
+  const [deleteData, setDeleteData] = useState<any>(null);
   
   // Hook para reglas aprendidas
   const { learnRule, learnEmpresaRule, learnPeriodoRule, findApplicableRule } = useLearnedRules();
@@ -144,6 +179,10 @@ export default function Page() {
           event.preventDefault();
           setActiveTab('descuentos');
           break;
+        case 'e':
+          event.preventDefault();
+          setActiveTab('empleados');
+          break;
         case 'u':
           event.preventDefault();
           setActiveTab('usuarios');
@@ -156,9 +195,13 @@ export default function Page() {
           event.preventDefault();
           setActiveTab('documentacion');
           break;
-        case 'e':
+        case 'x':
           event.preventDefault();
           setActiveTab('export');
+          break;
+        case 'e':
+          event.preventDefault();
+          setActiveTab('empleados');
           break;
         
         // Acciones rápidas globales
@@ -184,14 +227,8 @@ export default function Page() {
         // Acciones contextuales por sección
         case 's':
           event.preventDefault();
-          // Guardar datos actuales
-          if (activeTab === 'control') {
-            toast.info("Usa Ctrl+S para guardar el control");
-          } else if (activeTab === 'descuentos') {
-            toast.info("Los descuentos se guardan automáticamente");
-          } else {
-            toast.info("Función de guardado no disponible en esta sección");
-          }
+          // Ir a configuración
+          setActiveTab('configuracion');
           break;
         case 'n':
           event.preventDefault();
@@ -259,7 +296,7 @@ export default function Page() {
   const [controlSummary, setControlSummary] = useState<ControlSummary | null>(null);
   
   // Estados de filtros
-  const [periodoFiltro, setPeriodoFiltro] = useState<string>("Todas");
+  const [periodoFiltro, setPeriodoFiltro] = useState<string>("Todos");
   const [empresaFiltro, setEmpresaFiltro] = useState<string>("Todas");
 const [nombreFiltro, setNombreFiltro] = useState<string>("");
 
@@ -275,7 +312,12 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
   const [hasPendingUploads, setHasPendingUploads] = useState<boolean>(false);
   
   // Estados para modal de empresa
-  const [showEmpresaModal, setShowEmpresaModal] = useState(false);
+  const [showEmpresaModal, setShowEmpresaModal] = useState<boolean>(false);
+
+  // Debug: verificar cuándo se cambia showEmpresaModal
+  useEffect(() => {
+    console.log('🔍 Debug page.tsx - showEmpresaModal cambió a:', showEmpresaModal);
+  }, [showEmpresaModal]);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   
   // Estados para drag & drop
@@ -285,6 +327,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
   const [showDescuentosInParserModal, setShowDescuentosInParserModal] = useState(false);
   const [shouldStopProcessing, setShouldStopProcessing] = useState<boolean>(false);
   const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
+  const [showOCRConfigModal, setShowOCRConfigModal] = useState(false);
   
   // Estados para modal de edición
   const [showEditModal, setShowEditModal] = useState(false);
@@ -311,17 +354,518 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
     return 'N/A';
   };
 
+  // Función para manejar eliminación con progreso
+  const handleDeleteWithProgress = async (deleteData: any) => {
+    setDeleteProgress(0);
+    setDeleteStatus('Iniciando eliminación...');
+    
+    try {
+      const { targetEmpresa, hasFilters, empresaConsolidatedCount, empresaReceiptsCount } = deleteData;
+      let empresaConsolidated = 0;
+      let empresaReceipts = 0;
+      
+      if (hasFilters) {
+        setDeleteStatus('Eliminando registros filtrados...');
+        const filtered = consolidated.filter(item => {
+          const empresa = item.data?.EMPRESA || 'N/A';
+          const periodo = item.periodo;
+          const nombre = item.nombre?.toLowerCase() || '';
+          
+          const matchEmpresa = empresaFiltro === 'Todas' || empresa === empresaFiltro;
+          const matchPeriodo = periodoFiltro === 'Todos' || periodo === periodoFiltro;
+          const matchNombre = nombreFiltro === '' || nombre.includes(nombreFiltro.toLowerCase());
+          
+          return matchEmpresa && matchPeriodo && matchNombre && empresa === targetEmpresa;
+        });
+        
+        setDeleteProgress(25);
+        setDeleteStatus('Eliminando recibos procesados...');
+        
+        for (const item of filtered) {
+          const key = makeKey(item);
+          await dataManager.deleteConsolidated(key);
+          empresaConsolidated++;
+        }
+        
+        setDeleteProgress(50);
+        setDeleteStatus('Eliminando archivos de recibos...');
+        
+        for (const item of filtered) {
+          const receipts = await dataManager.getReceiptsByLegajo(item.legajo);
+          
+          for (const receipt of receipts) {
+            await dataManager.deleteReceipt(receipt.id!);
+            empresaReceipts++;
+          }
+        }
+      } else {
+        setDeleteProgress(25);
+        setDeleteStatus('Eliminando todos los registros...');
+        
+        // Para Supabase necesitaríamos implementar deleteByFilter
+        // Por ahora mantenemos la lógica de IndexedDB
+        await dataManager.deleteConsolidatedByEmpresa(targetEmpresa);
+        empresaConsolidated = 0; // Reset counter
+        
+        setDeleteProgress(50);
+        setDeleteStatus('Eliminando archivos...');
+        
+        await dataManager.deleteReceiptsByEmpresa(targetEmpresa);
+        empresaReceipts = 0; // Reset counter
+      }
+      
+      setDeleteProgress(75);
+      setDeleteStatus('Recargando datos...');
+      
+      await loadData();
+      
+      setDeleteProgress(100);
+      setDeleteStatus('Eliminación completada');
+      
+      toast.success(`✅ Eliminados ${empresaConsolidated} recibos procesados y ${empresaReceipts} archivos de ${targetEmpresa}`);
+      
+      return {
+        success: true,
+        message: `Eliminados ${empresaConsolidated} recibos procesados y ${empresaReceipts} archivos de ${targetEmpresa}`,
+        consolidated: empresaConsolidated,
+        receipts: empresaReceipts
+      };
+    } catch (error) {
+      setDeleteStatus(`Error: ${error}`);
+      toast.error(`Error durante eliminación: ${error}`);
+      throw error;
+    } finally {
+      setTimeout(() => {
+        setShowDeleteConfirm(false);
+        setDeleteProgress(0);
+        setDeleteStatus('');
+        setDeleteData(null);
+      }, 2000);
+    }
+  };
+
+  // Función para manejar acciones de la DevToolbar
+
+  const handleDevAction = useCallback(async (action: string, data?: any) => {
+    
+    switch (action) {
+      case 'clean-sumar':
+      case 'clean-empresa':
+        try {
+          // Determinar la empresa objetivo
+          const targetEmpresa = empresaFiltro !== 'Todas' ? empresaFiltro : 'SUMAR';
+          
+          // Determinar si hay filtros activos
+          const hasFilters = empresaFiltro !== 'Todas' || (periodoFiltro !== 'Todos' && periodoFiltro !== 'Todas') || nombreFiltro !== '';
+          
+          // Contar registros antes de eliminar (respetando filtros si existen)
+          let empresaConsolidatedCount = 0;
+          let empresaReceiptsCount = 0;
+          
+          if (hasFilters) {
+            // Con filtros: eliminar solo lo filtrado de la empresa objetivo
+            const filtered = consolidated.filter(item => {
+              const empresa = item.data?.EMPRESA || 'N/A';
+              const periodo = item.periodo;
+              const nombre = item.nombre?.toLowerCase() || '';
+              
+              // Usar EXACTAMENTE la misma lógica que la UI (filteredData)
+              const matchEmpresa = empresaFiltro === 'Todas' || empresaFiltro === '' || empresa === empresaFiltro;
+              const matchPeriodo = periodoFiltro === 'Todos' || periodoFiltro === 'Todas' || periodoFiltro === '' || periodo === periodoFiltro;
+              const matchNombre = nombreFiltro === '' || nombre.includes(nombreFiltro.toLowerCase());
+              
+              return matchEmpresa && matchPeriodo && matchNombre && empresa === targetEmpresa;
+            });
+            
+            empresaConsolidatedCount = filtered.length;
+            empresaReceiptsCount = filtered.length; // Aproximado
+            
+          } else {
+            // Sin filtros: eliminar toda la empresa objetivo
+            const empresaItems = consolidated.filter(item => item.data?.EMPRESA === targetEmpresa);
+            empresaConsolidatedCount = empresaItems.length;
+            
+            const empresaReceipts = await dataManager.getReceiptsByEmpresa(targetEmpresa);
+            empresaReceiptsCount = empresaReceipts.length;
+            
+          }
+          
+          const totalRecords = empresaConsolidatedCount + empresaReceiptsCount;
+          
+          if (totalRecords === 0) {
+            setShowDeleteConfirm(true);
+            setDeleteConfirmData({
+              title: `Sin registros para eliminar`,
+              message: `No se encontraron registros de ${targetEmpresa} para eliminar`,
+              details: `No hay registros que coincidan con los filtros actuales.\n\nVerifica que:\n- La empresa seleccionada tenga registros\n- Los filtros no estén ocultando los datos\n- Los datos estén cargados correctamente`,
+              onConfirm: () => {
+                setShowDeleteConfirm(false);
+              }
+            });
+            return {
+              success: true,
+              message: `No se encontraron registros de ${targetEmpresa} para eliminar`,
+              consolidated: 0,
+              receipts: 0
+            };
+          }
+          
+          // Mostrar modal de confirmación
+          const filterInfo = hasFilters ? ` (con filtros actuales)` : '';
+          setShowDeleteConfirm(true);
+          
+          // Guardar datos para el modal
+          const confirmData = {
+            title: `Eliminar ${targetEmpresa}`,
+            message: `¿Estás seguro de que quieres eliminar ${totalRecords} registros de ${targetEmpresa}${filterInfo}?`,
+            details: `Esta acción eliminará:\n- ${empresaConsolidatedCount} recibos procesados\n- ${empresaReceiptsCount} archivos de recibos\n- Todos los datos asociados\n\nEsta acción no se puede deshacer.`,
+            onConfirm: async () => {
+              try {
+                // Proceder con la eliminación
+                let empresaConsolidated = 0;
+                let empresaReceipts = 0;
+                
+                if (hasFilters) {
+                  // Eliminar solo registros filtrados
+                  const filtered = consolidated.filter(item => {
+                    const empresa = item.data?.EMPRESA || 'N/A';
+                    const periodo = item.periodo;
+                    const nombre = item.nombre?.toLowerCase() || '';
+                    
+                    const matchEmpresa = empresaFiltro === 'Todas' || empresaFiltro === '' || empresa === empresaFiltro;
+                    const matchPeriodo = periodoFiltro === 'Todos' || periodoFiltro === 'Todas' || periodoFiltro === '' || periodo === periodoFiltro;
+                    const matchNombre = nombreFiltro === '' || nombre.includes(nombreFiltro.toLowerCase());
+                    
+                    return matchEmpresa && matchPeriodo && matchNombre && empresa === targetEmpresa;
+                  });
+                  
+                  for (const item of filtered) {
+                    const key = makeKey(item);
+                    await dataManager.deleteConsolidated(key);
+                    empresaConsolidated++;
+                  }
+                  
+                  // Eliminar receipts asociados
+                  for (const item of filtered) {
+                    const receipts = await dataManager.getReceiptsByFilename(item.archivos?.[0] || '');
+                    
+                    for (const receipt of receipts) {
+                      await dataManager.deleteReceipt(receipt.id!);
+                      empresaReceipts++;
+                    }
+                  }
+                } else {
+                  // Eliminar toda la empresa
+                  await dataManager.deleteConsolidatedByEmpresa(targetEmpresa);
+                  empresaConsolidated = 0; // Reset counter
+                  
+                  await dataManager.deleteReceiptsByEmpresa(targetEmpresa);
+                  empresaReceipts = 0; // Reset counter
+                }
+                
+                // Recargar datos
+                await loadData();
+                
+                toast.success(`Eliminados ${empresaConsolidated + empresaReceipts} registros de ${targetEmpresa}`);
+                setShowDeleteConfirm(false);
+                
+                return {
+                  success: true,
+                  message: `Eliminados ${empresaConsolidated + empresaReceipts} registros de ${targetEmpresa}`,
+                  consolidated: empresaConsolidated,
+                  receipts: empresaReceipts
+                };
+              } catch (error) {
+                toast.error(`Error eliminando registros: ${error}`);
+                setShowDeleteConfirm(false);
+                throw error;
+              }
+            }
+          };
+          
+          console.log(`🔍 Guardando datos del modal:`, confirmData);
+          setDeleteConfirmData(confirmData);
+          
+          return {
+            success: true,
+            message: 'Mostrando confirmación de eliminación',
+            pending: true
+          };
+        } catch (error) {
+          toast.error(`Error limpiando SUMAR: ${error}`);
+          throw new Error(`Error limpiando SUMAR: ${error}`);
+        }
+        
+      case 'clean-all':
+        try {
+          await dataManager.clearConsolidated();
+          await dataManager.clearReceipts();
+          // Recargar datos después de limpiar
+          const [consolidatedData, controlsData] = await Promise.all([
+            dataManager.getConsolidated(),
+            dataManager.getSavedControls()
+          ]);
+          setConsolidated(consolidatedData);
+          setSavedControls(controlsData);
+          toast.success('Base de datos limpiada completamente');
+          
+          return {
+            success: true,
+            message: 'Base de datos limpiada completamente'
+          };
+        } catch (error) {
+          toast.error(`Error limpiando todo: ${error}`);
+          throw new Error(`Error limpiando todo: ${error}`);
+        }
+        
+      case 'normalize-filenames':
+        try {
+          const { normalizeFileName } = await import('@/lib/simple-pdf-processor');
+          const allReceipts = await dataManager.getReceipts();
+          let normalized = 0;
+          
+          for (const receipt of allReceipts) {
+            const normalizedName = normalizeFileName(receipt.filename);
+            if (normalizedName !== receipt.filename) {
+              await dataManager.updateReceipt(receipt.id!, { filename: normalizedName });
+              normalized++;
+            }
+          }
+          
+          toast.success(`Normalizados ${normalized} nombres de archivos`);
+          
+          return {
+            success: true,
+            message: `Normalizados ${normalized} nombres de archivos`,
+            normalized
+          };
+        } catch (error) {
+          toast.error(`Error normalizando nombres: ${error}`);
+          throw new Error(`Error normalizando nombres: ${error}`);
+        }
+        
+      case 'refresh-data':
+        try {
+          // Recargar datos después de limpiar
+          const [consolidatedData, controlsData] = await Promise.all([
+            dataManager.getConsolidated(),
+            dataManager.getSavedControls()
+          ]);
+          setConsolidated(consolidatedData);
+          setSavedControls(controlsData);
+          toast.success('Datos refrescados');
+          
+          return {
+            success: true,
+            message: 'Datos refrescados',
+            count: consolidated.length
+          };
+        } catch (error) {
+          toast.error(`Error refrescando datos: ${error}`);
+          throw new Error(`Error refrescando datos: ${error}`);
+        }
+        
+      case 'export-debug':
+        try {
+          const debugInfo = {
+            consolidated: consolidated.length,
+            receipts: (await dataManager.countReceipts()),
+            timestamp: new Date().toISOString(),
+            url: typeof window !== 'undefined' ? window.location.href : 'N/A',
+            port: typeof window !== 'undefined' ? (window.location.port || '3000') : 'N/A'
+          };
+          
+          console.log('📊 Debug Info:', debugInfo);
+          toast.success('Información exportada a consola');
+          
+          return {
+            success: true,
+            message: 'Información de debug exportada',
+            debugInfo
+          };
+        } catch (error) {
+          toast.error(`Error exportando debug: ${error}`);
+          throw new Error(`Error exportando debug: ${error}`);
+        }
+        
+      case 'test-progress':
+        try {
+          const progress = Math.random() * 100;
+          toast.success(`Test de progreso: ${progress.toFixed(0)}%`);
+          
+          return {
+            success: true,
+            message: 'Test de progreso ejecutado',
+            progress
+          };
+        } catch (error) {
+          toast.error(`Error en test de progreso: ${error}`);
+          throw new Error(`Error en test de progreso: ${error}`);
+        }
+        
+      case 'check-files':
+        try {
+          const receipts = await dataManager.getReceipts();
+          const fileChecks = await Promise.all(
+            receipts.slice(0, 5).map(async (receipt) => {
+              try {
+                const response = await fetch(`/recibos/${encodeURIComponent(receipt.filename)}`, { method: 'HEAD' });
+                return {
+                  filename: receipt.filename,
+                  exists: response.ok,
+                  status: response.status
+                };
+              } catch {
+                return {
+                  filename: receipt.filename,
+                  exists: false,
+                  status: 'error'
+                };
+              }
+            })
+          );
+          
+          toast.success('Verificación completada - ver consola');
+          console.log('📂 File Checks:', fileChecks);
+          
+          return {
+            success: true,
+            message: 'Verificación de archivos completada',
+            fileChecks
+          };
+        } catch (error) {
+          toast.error(`Error verificando archivos: ${error}`);
+          throw new Error(`Error verificando archivos: ${error}`);
+        }
+        
+      case 'show-debug-panel':
+        try {
+          updateConfig({ showDebugPanel: true });
+          toast.success('Panel de debug activado');
+          
+          return {
+            success: true,
+            message: 'Panel de debug activado'
+          };
+        } catch (error) {
+          toast.error(`Error activando panel de debug: ${error}`);
+          throw new Error(`Error activando panel de debug: ${error}`);
+        }
+        
+      case 'show-debug-modal':
+        try {
+          const newState = !showDebugModal;
+          setShowDebugModal(newState);
+          
+          // Quitar foco del botón
+          if (typeof window !== 'undefined') {
+            (document.activeElement as HTMLElement)?.blur();
+          }
+          
+          return {
+            success: true,
+            message: newState ? 'Modal de debug abierto' : 'Modal de debug cerrado'
+          };
+        } catch (error) {
+          toast.error(`Error toggleando modal de debug: ${error}`);
+          throw new Error(`Error toggleando modal de debug: ${error}`);
+        }
+        
+      case 'show-help-modal':
+        try {
+          const newState = !showHelpModal;
+          setShowHelpModal(newState);
+          
+          // Quitar foco del botón
+          if (typeof window !== 'undefined') {
+            (document.activeElement as HTMLElement)?.blur();
+          }
+          
+          return {
+            success: true,
+            message: newState ? 'Modal de ayuda abierto' : 'Modal de ayuda cerrado'
+          };
+        } catch (error) {
+          toast.error(`Error toggleando modal de ayuda: ${error}`);
+          throw new Error(`Error toggleando modal de ayuda: ${error}`);
+        }
+        
+      case 'test-tools':
+        try {
+          setShowTestTools(true);
+          toast.success('Herramientas de test abiertas');
+          
+          return {
+            success: true,
+            message: 'Herramientas de test abiertas'
+          };
+        } catch (error) {
+          toast.error(`Error abriendo herramientas de test: ${error}`);
+          throw new Error(`Error abriendo herramientas de test: ${error}`);
+        }
+        
+      case 'show-upload-log':
+        try {
+          const newState = !showUploadLog;
+          setShowUploadLog(newState);
+          
+          // Quitar foco del botón
+          if (typeof window !== 'undefined') {
+            (document.activeElement as HTMLElement)?.blur();
+          }
+          
+          return {
+            success: true,
+            message: newState ? 'Log de subidas abierto' : 'Log de subidas cerrado'
+          };
+        } catch (error) {
+          toast.error(`Error toggleando log de subidas: ${error}`);
+          throw new Error(`Error toggleando log de subidas: ${error}`);
+        }
+        
+      case 'show-pending-items':
+        try {
+          setShowPendingItems(true);
+          toast.success('Items pendientes abierto');
+          
+          return {
+            success: true,
+            message: 'Items pendientes abierto'
+          };
+        } catch (error) {
+          toast.error(`Error abriendo items pendientes: ${error}`);
+          throw new Error(`Error abriendo items pendientes: ${error}`);
+        }
+        
+      default:
+        throw new Error(`Acción desconocida: ${action}`);
+    }
+  }, [consolidated, empresaFiltro, periodoFiltro, nombreFiltro, showDebugModal, showHelpModal, extractEmpresaFromArchivo, updateConfig, handleDeleteWithProgress]);
+
+  // Función loadInitialData eliminada - duplicada
+
+  // Recargar datos cuando cambie el tipo de storage - ELIMINADO (duplicado)
+
   // Cargar datos iniciales - SOLO UNA VEZ
   useEffect(() => {
     let isMounted = true; // Flag para evitar actualizaciones si el componente se desmonta
     
-    const loadInitialData = async () => {
+    const loadData = async () => {
       try {
         console.log("🔍 Cargando datos iniciales...");
         const [consolidatedData, controlsData] = await Promise.all([
-          db.consolidated.toArray(),
-          db.savedControls.toArray()
+          dataManager.getConsolidated(),
+          dataManager.getSavedControls()
         ]);
+        
+        console.log("🔍 loadData useEffect - consolidatedData recibido:", consolidatedData?.length, "items");
+        console.log("🔍 loadData useEffect - consolidatedData tipo:", typeof consolidatedData);
+        console.log("🔍 loadData useEffect - consolidatedData es array:", Array.isArray(consolidatedData));
+        console.log("🔍 loadData useEffect - Primeros 3 items:", consolidatedData?.slice(0, 3).map(item => ({
+          legajo: item.legajo,
+          empresa: item.data?.EMPRESA,
+          created_at: item.created_at
+        })));
         
         // Solo actualizar si el componente sigue montado
         if (isMounted) {
@@ -338,12 +882,12 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       }
     };
 
-    loadInitialData();
+    loadData();
     
     return () => {
       isMounted = false; // Cleanup
     };
-  }, []); // Array vacío - solo se ejecuta una vez
+  }, [config.enableSupabaseStorage]); // Dependencia en el storage type
 
   // Verificar subidas pendientes al cargar la app - SOLO UNA VEZ por usuario
   useEffect(() => {
@@ -358,7 +902,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       console.log("🔍 Verificando subidas pendientes para usuario:", session.user.id);
       
       try {
-        const activeSessions = await UploadSessionManager.getActiveSessions(session.user.id);
+        // const activeSessions = await UploadSessionManager.getActiveSessions(session.user.id); // ELIMINADO
+        const activeSessions = []; // TODO: Implementar con dataManager
         console.log("🔍 Sesiones activas encontradas:", activeSessions.length);
         
         // Solo actualizar si el componente sigue montado
@@ -412,11 +957,9 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
 
   const loadControlFromDexie = async () => {
     try {
-      const control = await db.savedControls
-        .where('empresa')
-        .equals(empresaFiltro || "")
-        .and(c => c.periodo === (periodoFiltro || ""))
-        .first();
+      const control = await dataManager.getSavedControlByFilterKey(
+        `${empresaFiltro || ""}||${periodoFiltro || ""}`
+      );
 
       if (control) {
         setCurrentControl(control.summaries);
@@ -444,7 +987,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
     if (session?.user?.id) {
       try {
         const fileNames = Array.from(files).map(f => f.name);
-        const uploadSession = await UploadSessionManager.createSession(session.user.id, fileNames);
+        // const uploadSession = await UploadSessionManager.createSession(session.user.id, fileNames); // ELIMINADO
+        const uploadSession = { id: 'temp-session', userId: session.user.id, fileNames }; // TODO: Implementar con dataManager
         sessionId = uploadSession.sessionId;
         setCurrentUploadSessionId(sessionId);
         setHasPendingUploads(true);
@@ -472,7 +1016,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       if (sessionId && !shouldStopProcessing) {
         try {
           console.log("🔄 Actualizando estado de sesión cada 3 segundos...");
-          const sessionState = await UploadSessionManager.getSessionState(sessionId);
+          // const sessionState = await UploadSessionManager.getSessionState(sessionId); // ELIMINADO
+          const sessionState = { status: 'completed', progress: 100 }; // TODO: Implementar con dataManager
           if (sessionState) {
             console.log("📊 Estado actual:", {
               totalFiles: sessionState.totalFiles,
@@ -493,77 +1038,86 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       const firstFile = files[0];
       const applicableRule = findApplicableRule(firstFile.name);
       
-      // Procesar archivos uno por uno para mostrar progreso en tiempo real
-      const results: SimpleProcessingResult[] = [];
-      
+      // Procesar archivos UNO POR UNO para actualizar progreso en tiempo real
       console.log(`🚀 Iniciando procesamiento de ${files.length} archivos...`);
+      
+      const results: SimpleProcessingResult[] = [];
       
       for (let i = 0; i < files.length; i++) {
         if (shouldStopProcessing) {
-          console.log('🛑 Procesamiento detenido por el usuario');
+          console.log('⏸️ Procesamiento detenido por el usuario');
           break;
         }
-
-        const file = files[i];
         
+        const file = files[i];
         console.log(`📄 Procesando archivo ${i + 1}/${files.length}: ${file.name}`);
         
-        // Actualizar el índice actual
-        setLastProcessedIndex(i);
+        // Procesar archivo individual
+        const result = await processSingleFile(file, dataManager, showDebug, applicableRule || undefined);
+        results.push(result);
         
-        try {
-          const result = await processSingleFile(file, showDebug, applicableRule || undefined);
-          results.push(result);
+        // Si el archivo se procesó exitosamente, enviarlo al servidor
+        if (result.success && result.parsedData && !result.skipped) {
+          const formData = new FormData();
+          formData.append('file', file);
+          if (result.parsedData.legajo) formData.append('legajo', result.parsedData.legajo);
+          if (result.parsedData.periodo) formData.append('periodo', result.parsedData.periodo);
+          if (result.parsedData.key) formData.append('key', result.parsedData.key);
           
-          // Actualizar el estado del archivo procesado
-          setProcessingFiles(prev => {
-            if (!prev) return null;
-            const updated = [...prev];
+          try {
+            const response = await fetch('/api/upload', { method: 'POST', body: formData });
+            
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+              
+              // Manejar archivos duplicados (409) como éxito pero omitido
+              if (response.status === 409 && errorData.duplicate) {
+                console.log(`⚠️ Archivo duplicado omitido: ${file.name}`, errorData);
+                result.skipped = true;
+                result.reason = `Archivo ya existe: ${errorData.existingFile}`;
+              } else {
+                // Otros errores se manejan como fallos
+                result.success = false;
+                result.error = `Error del servidor: ${response.status} - ${errorData.error || 'Error desconocido'}`;
+              }
+            }
+          } catch (error) {
+            console.error(`Error subiendo archivo ${file.name}:`, error);
+            result.success = false;
+            result.error = error instanceof Error ? error.message : 'Error desconocido';
+          }
+        }
+        
+        // Actualizar progreso en tiempo real
+        setProcessingFiles(prev => {
+          if (!prev) return null;
+          const updated = [...prev];
+          if (updated[i]) {
             updated[i] = {
               ...updated[i],
               status: result.success ? (result.skipped ? "skipped" : "ok") : "error",
               reason: result.skipped ? result.reason : result.error,
               processingResult: result
             };
-            return updated;
-          });
+          }
+          return updated;
+        });
+        
+        setLastProcessedIndex(i + 1);
+      }
 
-          // Actualizar estado en la base de datos
-          if (sessionId) {
-            const fileStatus = result.success ? (result.skipped ? "skipped" : "completed") : "failed";
-            await UploadSessionManager.updateFileStatus(
-              sessionId,
-              i,
-              fileStatus,
-              result.error || result.reason,
-              result
-            );
-          }
-          
-          // Si necesita input de empresa, marcar como omitido y continuar
-          if (result.needsEmpresaInput) {
-            console.log(`⚠️ Archivo ${file.name} necesita input de empresa, marcando como omitido y continuando...`);
-            // No detener el procesamiento, solo marcar como omitido
-          }
-          
-        } catch (error) {
-          console.error(`Error procesando archivo ${file.name}:`, error);
-          results.push({
-            success: false,
-            fileName: file.name,
-            error: error instanceof Error ? error.message : 'Error desconocido'
-          });
-          
-          // Actualizar el estado del archivo con error
-          setProcessingFiles(prev => {
-            if (!prev) return null;
-            const updated = [...prev];
-            updated[i] = {
-              ...updated[i],
-              status: "error",
-              reason: error instanceof Error ? error.message : 'Error desconocido'
-            };
-            return updated;
+      // Actualizar estado en la base de datos para todos los archivos
+      if (sessionId) {
+        for (let i = 0; i < results.length; i++) {
+          const result = results[i];
+          const fileStatus = result.success ? (result.skipped ? "skipped" : "completed") : "failed";
+          // await UploadSessionManager.updateFileStatus( // ELIMINADO
+          console.log('TODO: Implementar updateFileStatus con dataManager', {
+            sessionId,
+            i,
+            fileStatus,
+            error: result.error || result.reason,
+            result
           });
         }
       }
@@ -619,12 +1173,13 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       // Los estados ya se actualizaron durante el procesamiento
       
       // Recargar datos consolidados
-      const newConsolidated = await db.consolidated.toArray();
+      const newConsolidated = await dataManager.getConsolidated();
       setConsolidated(newConsolidated);
       
       // Finalizar sesión de subida
       if (sessionId) {
-        await UploadSessionManager.completeSession(sessionId);
+        // await UploadSessionManager.completeSession(sessionId); // ELIMINADO
+        console.log('TODO: Implementar completeSession con dataManager', sessionId);
         setCurrentUploadSessionId(null);
         setHasPendingUploads(false);
       }
@@ -648,7 +1203,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       if (sessionId) {
         try {
           // Marcar sesión como fallida pero mantenerla para retomar
-          await UploadSessionManager.updateSessionStatus(sessionId, 'failed', error instanceof Error ? error.message : 'Error desconocido');
+          // await UploadSessionManager.updateSessionStatus(sessionId, 'failed', error instanceof Error ? error.message : 'Error desconocido'); // ELIMINADO
+          console.log('TODO: Implementar updateSessionStatus con dataManager', sessionId, 'failed', error);
           console.log(`❌ Sesión marcada como fallida pero mantenida para retomar: ${sessionId}`);
         } catch (updateError) {
           console.error("Error actualizando sesión:", updateError);
@@ -777,7 +1333,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
         createdAt: Date.now()
       };
 
-      await db.savedControls.add(savedControl);
+      await dataManager.addSavedControl(savedControl);
       setSavedControls(prev => [...prev, savedControl]);
       setCurrentControl([]); // Por ahora vacío hasta implementar la lógica de comparación
       setControlSummary(summary);
@@ -808,10 +1364,10 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       }
 
       const filterKey = `${periodoFiltro}||${empresaFiltro}`;
-      await db.savedControls.where('filterKey').equals(filterKey).delete();
+      await dataManager.deleteSavedControl(filterKey);
       
       // Recargar controles
-      const newControls = await db.savedControls.toArray();
+      const newControls = await dataManager.getSavedControls();
       setSavedControls(newControls);
       
       setCurrentControl(null);
@@ -826,13 +1382,29 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
 
   // Datos filtrados
   const filteredData = useMemo(() => {
+    console.log("🔍 filteredData - consolidated:", consolidated?.length, "items");
+    console.log("🔍 filteredData - consolidated tipo:", typeof consolidated);
+    console.log("🔍 filteredData - consolidated es array:", Array.isArray(consolidated));
+    console.log("🔍 filteredData - Primeros 3 items:", consolidated?.slice(0, 3).map(item => ({
+      legajo: item.legajo,
+      empresa: item.data?.EMPRESA,
+      created_at: item.created_at
+    })));
     if (!consolidated || !Array.isArray(consolidated)) {
-      // console.log("🔍 filteredData - consolidated vacío o no es array:", consolidated);
+      console.log("🔍 filteredData - consolidated vacío o no es array:", consolidated);
       return [];
     }
     
+    console.log("🔍 Filtros aplicados:", { empresaFiltro, periodoFiltro, nombreFiltro });
+    
     const filtered = consolidated.filter(item => {
-      const matchesPeriodo = !periodoFiltro || periodoFiltro === "Todas" || item.periodo === periodoFiltro;
+      // Excluir empleados manuales (solo mostrar recibos reales)
+      const isManualEmployee = item.data?.MANUAL === 'true';
+      if (isManualEmployee) {
+        return false;
+      }
+      
+      const matchesPeriodo = !periodoFiltro || periodoFiltro === "Todos" || periodoFiltro === "Todas" || item.periodo === periodoFiltro;
       
       // Para empresa, verificar si coincide con la empresa detectada
       let matchesEmpresa = true;
@@ -874,37 +1446,120 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
     //   }))
     // });
     
+    console.log("🔍 Resultado del filtrado:", filtered.length, "items");
     return filtered;
   }, [consolidated, periodoFiltro, empresaFiltro, nombreFiltro]);
 
   // Eliminar registros visibles
   const handleDeleteVisible = useCallback(async () => {
     try {
-      // Obtener datos filtrados actuales
+      console.log(`🔍 Filtros actuales:`, { empresaFiltro, periodoFiltro, nombreFiltro });
+      console.log(`📊 Total de registros consolidados: ${consolidated.length}`);
+      
+      // Obtener datos filtrados actuales usando la misma lógica que la interfaz
       const currentFiltered = consolidated.filter(item => {
-        const matchesPeriodo = !periodoFiltro || periodoFiltro === "Todas" || item.periodo === periodoFiltro;
+        // Filtro por período
+        const matchesPeriodo = !periodoFiltro || periodoFiltro === "Todos" || periodoFiltro === "Todas" || item.periodo === periodoFiltro;
         
+        // Filtro por empresa
         let matchesEmpresa = true;
         if (empresaFiltro && empresaFiltro !== "Todas") {
           const itemEmpresa = item.data?.EMPRESA || extractEmpresaFromArchivo(item.archivos ? item.archivos.join(', ') : '');
           matchesEmpresa = itemEmpresa === empresaFiltro;
+          console.log(`🔍 Debug empresa: legajo=${item.legajo}, dataEMPRESA=${item.data?.EMPRESA}, archivos=${item.archivos?.join(', ')}, itemEmpresa=${itemEmpresa}, empresaFiltro=${empresaFiltro}, matches=${matchesEmpresa}`);
         }
         
+        // Filtro por nombre
         const matchesNombre = nombreFiltro === "" || 
           (item.nombre && item.nombre.toLowerCase().includes(nombreFiltro.toLowerCase())) ||
           (item.legajo && item.legajo.toLowerCase().includes(nombreFiltro.toLowerCase()));
         
-        return matchesPeriodo && matchesEmpresa && matchesNombre;
+        const matches = matchesPeriodo && matchesEmpresa && matchesNombre;
+        if (matches) {
+          console.log(`✅ Registro que coincide: legajo=${item.legajo}, empresa=${item.data?.EMPRESA}, key=${item.key}`);
+        }
+        
+        return matches;
       });
       
-      // Obtener las claves de los registros filtrados
-      const keysToDelete = currentFiltered.map(item => `${item.legajo}||${item.periodo}||${item.data?.EMPRESA || 'DESCONOCIDA'}`);
+      console.log(`📊 Registros filtrados encontrados: ${currentFiltered.length}`);
       
-      // Eliminar de la base de datos
-      await db.consolidated.where('legajo').anyOf(currentFiltered.map(item => item.legajo)).delete();
+      // Verificar que tenemos registros para eliminar
+      if (currentFiltered.length === 0) {
+        toast.warning('No hay registros visibles para eliminar con los filtros actuales');
+        return;
+      }
+      
+      // Confirmar eliminación con información detallada
+      const confirmMessage = `¿Estás seguro de que quieres eliminar ${currentFiltered.length} recibos visibles?\n\n` +
+        `Esta acción eliminará:\n` +
+        `- ${currentFiltered.length} recibos procesados\n` +
+        `- Archivos PDF asociados\n` +
+        `- Todos los datos de estos recibos\n\n` +
+        `Esta acción no se puede deshacer.`;
+      
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
+      
+      // Obtener las claves de los registros filtrados
+      const keysToDelete = currentFiltered.map(item => item.key);
+      
+      console.log(`🗑️ Eliminando ${keysToDelete.length} registros visibles:`, keysToDelete);
+      
+      // Eliminar de la base de datos usando las claves
+      for (const key of keysToDelete) {
+        // Buscar el registro para obtener información de archivos
+        const recordToDelete = currentFiltered.find(item => item.key === key);
+        
+        if (recordToDelete) {
+        // Eliminar archivos físicos si existen
+        if (recordToDelete.archivos && recordToDelete.archivos.length > 0) {
+          for (const filename of recordToDelete.archivos) {
+            // Solo intentar eliminar si el filename no está vacío
+            if (filename && filename.trim() !== '') {
+              try {
+                console.log(`🔍 Intentando eliminar archivo físico: "${filename}"`);
+                // Eliminar archivo físico del servidor
+                const deleteResponse = await fetch('/api/delete-file', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ filename }),
+                });
+                
+                if (deleteResponse.ok) {
+                  console.log(`🗑️ Archivo físico eliminado: ${filename}`);
+                } else {
+                  console.warn(`⚠️ No se pudo eliminar archivo físico: ${filename}`);
+                }
+              } catch (error) {
+                console.error(`Error eliminando archivo ${filename}:`, error);
+              }
+            } else {
+              console.log(`⚠️ Saltando archivo vacío o inválido: "${filename}"`);
+            }
+          }
+        } else {
+          console.log('ℹ️ No hay archivos físicos para eliminar');
+        }
+          
+          // Eliminar registros relacionados en receipts
+          const relatedReceipts = await dataManager.getReceiptsByLegajo(recordToDelete.legajo);
+          for (const receipt of relatedReceipts) {
+            await dataManager.deleteReceipt(receipt.id!);
+            console.log(`🗑️ Receipt eliminado: ${receipt.filename}`);
+          }
+        }
+        
+        // Eliminar el registro consolidado
+        await dataManager.deleteConsolidated(key);
+        console.log(`✅ Eliminado registro consolidado: ${key}`);
+      }
       
       // Recargar datos
-      const newConsolidated = await db.consolidated.toArray();
+      const newConsolidated = await dataManager.getConsolidated();
       setConsolidated(newConsolidated);
       
       toast.success(`${keysToDelete.length} registros eliminados correctamente`);
@@ -917,9 +1572,9 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
   // Función para verificar el estado de la base de datos
   const handleCheckDatabase = useCallback(async () => {
     try {
-      const allConsolidated = await db.consolidated.toArray();
-      const allControls = await db.savedControls.toArray();
-      const allReceipts = await db.receipts.toArray();
+      const allConsolidated = await dataManager.getConsolidated();
+      const allControls = await dataManager.getSavedControls();
+      const allReceipts = await dataManager.getReceipts();
       
       console.log("🔍 Estado actual de la base de datos:", {
         receipts: allReceipts.length,
@@ -949,19 +1604,44 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
   // Función para limpiar TODA la base de datos (para testing)
   const handleClearAllData = useCallback(async () => {
     try {
-      if (window.confirm('¿Estás seguro de que quieres eliminar TODOS los registros? Esta acción no se puede deshacer.')) {
+      // Contar registros antes de eliminar
+      const consolidatedCount = await dataManager.countConsolidated();
+      const receiptsCount = await dataManager.countReceipts();
+      const controlsCount = await dataManager.countSavedControls();
+      const sessionsCount = await dataManager.countUploadSessions();
+      
+      const totalRecords = consolidatedCount + receiptsCount + controlsCount + sessionsCount;
+      
+      if (totalRecords === 0) {
+        toast.info('No hay registros para eliminar');
+        return;
+      }
+      
+      const confirmed = window.confirm(
+        `¿Estás seguro de que quieres eliminar TODOS los datos?\n\n` +
+        `Esta acción eliminará:\n` +
+        `- ${consolidatedCount} recibos procesados\n` +
+        `- ${receiptsCount} archivos de recibos\n` +
+        `- ${controlsCount} controles guardados\n` +
+        `- ${sessionsCount} sesiones de subida\n` +
+        `- Todos los archivos PDF\n\n` +
+        `TOTAL: ${totalRecords} elementos\n\n` +
+        `Esta acción no se puede deshacer.`
+      );
+      
+      if (confirmed) {
         console.log("🧹 Limpiando base de datos...");
         
         // Limpiar todas las tablas
-        await db.receipts.clear();
-        await db.consolidated.clear();
-        await db.savedControls.clear();
+        await dataManager.clearReceipts();
+        await dataManager.clearConsolidated();
+        await dataManager.clearSavedControls();
         
         console.log("✅ Base de datos limpiada");
         
         // Recargar datos
-        const newConsolidated = await db.consolidated.toArray();
-        const newControls = await db.savedControls.toArray();
+        const newConsolidated = await dataManager.getConsolidated();
+        const newControls = await dataManager.getSavedControls();
         
         console.log("📊 Datos después de limpiar:", {
           consolidated: newConsolidated.length,
@@ -991,7 +1671,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
 
     try {
       console.log("🔍 Verificando manualmente subidas pendientes...");
-      const activeSessions = await UploadSessionManager.getActiveSessions(session.user.id);
+      // const activeSessions = await UploadSessionManager.getActiveSessions(session.user.id); // ELIMINADO
+      const activeSessions = []; // TODO: Implementar con dataManager
       
       if (activeSessions.length > 0) {
         console.log("📤 Subidas pendientes encontradas:", activeSessions.length);
@@ -1015,7 +1696,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
   const handleCheckAllSessions = useCallback(async () => {
     try {
       console.log("🔍 Verificando todas las sesiones en la base de datos...");
-      const allSessions = await UploadSessionManager.getAllSessions();
+      // const allSessions = await UploadSessionManager.getAllSessions(); // ELIMINADO
+      const allSessions = []; // TODO: Implementar con dataManager
       
       if (allSessions.length > 0) {
         console.log("📊 Total de sesiones encontradas:", allSessions.length);
@@ -1041,29 +1723,29 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       learnEmpresaRule(pendingFile.name, empresa);
       
       // Procesar el archivo con la empresa seleccionada
-      const result = await processSingleFile(pendingFile, showDebug);
+      const result = await processSingleFile(pendingFile, dataManager, showDebug);
       
       // Actualizar el resultado con la empresa seleccionada
       if (result.success && !result.skipped) {
         // Actualizar la base de datos con la empresa correcta
         const hash = await sha256OfFile(pendingFile);
         if (hash) {
-          const existing = await repoDexie.findReceiptByHash(hash);
-          if (existing) {
-            // Actualizar la empresa en el registro existente
-            await db.receipts.update(existing.id!, {
-              data: { ...existing.data, EMPRESA: empresa }
-            });
-            
-            // Actualizar también en consolidated si existe
-            const consolidatedItem = await db.consolidated.where('legajo').equals(existing.legajo).first();
-            if (consolidatedItem) {
-              const key = consolidatedItem.legajo + '||' + consolidatedItem.periodo + '||' + (consolidatedItem.data?.EMPRESA || 'DESCONOCIDA');
-              await db.consolidated.update(key, {
-                data: { ...consolidatedItem.data, EMPRESA: empresa }
-              });
-            }
-          }
+          // const existing = await repoDexie.findReceiptByHash(hash); // ELIMINADO - usar dataManager
+          // TODO: Implementar búsqueda por hash en dataManager
+          // if (existing) {
+          //   await dataManager.updateReceipt(existing.id!, {
+          //     data: { ...existing.data, EMPRESA: empresa }
+          //   });
+          //   
+          //   // Actualizar también en consolidated si existe
+          //   const consolidatedItem = await dataManager.getConsolidatedByLegajo(existing.legajo);
+          //   if (consolidatedItem) {
+          //     const key = consolidatedItem.legajo + '||' + consolidatedItem.periodo + '||' + (consolidatedItem.data?.EMPRESA || 'DESCONOCIDA');
+          //     await dataManager.updateConsolidated(key, {
+          //       data: { ...consolidatedItem.data, EMPRESA: empresa }
+          //     });
+          //   }
+          // }
         }
       }
       
@@ -1072,7 +1754,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       setPendingFile(null);
       
       // Recargar datos
-      const newConsolidated = await db.consolidated.toArray();
+      const newConsolidated = await dataManager.getConsolidated();
       setConsolidated(newConsolidated);
       
       toast.success(`Archivo procesado con empresa: ${empresa}`);
@@ -1100,7 +1782,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
     
     try {
       // Actualizar el registro en la base de datos
-      await db.consolidated.update(editingRow.key, {
+            await dataManager.updateConsolidated(editingRow.key, {
         nombre: updatedData.NOMBRE,
         legajo: updatedData.LEGAJO,
         periodo: updatedData.PERIODO,
@@ -1111,7 +1793,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       });
       
       // Recargar datos
-      const newConsolidated = await db.consolidated.toArray();
+      const newConsolidated = await dataManager.getConsolidated();
       setConsolidated(newConsolidated);
       
       toast.success("Datos actualizados correctamente");
@@ -1132,6 +1814,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
     setShowDeleteModal(true);
   }, []);
 
+
   const handleDeleteConfirm = useCallback(async () => {
     if (!deletingRow) return;
     
@@ -1140,27 +1823,97 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       // Eliminar archivos físicos asociados
       if (deletingRow.archivos && deletingRow.archivos.length > 0) {
         for (const filename of deletingRow.archivos) {
-          try {
-            // Buscar el registro en receipts por filename
-            const receiptRecord = await db.receipts.where('filename').equals(filename).first();
-            if (receiptRecord) {
-              // Eliminar el registro de receipts
-              await db.receipts.delete(receiptRecord.id!);
-              console.log(`🗑️ Archivo eliminado de receipts: ${filename}`);
+          // Solo intentar eliminar si el filename no está vacío
+          if (filename && filename.trim() !== '') {
+            try {
+              // Buscar el registro en receipts por filename
+              const receiptRecord = await dataManager.getReceiptsByFilename(filename);
+              if (receiptRecord) {
+                // Eliminar el registro de receipts
+                await dataManager.deleteReceipt(receiptRecord.id!);
+                console.log(`🗑️ Archivo eliminado de receipts: ${filename}`);
+              }
+              
+              // Eliminar archivo físico del servidor
+              console.log(`🔍 Intentando eliminar archivo físico: "${filename}"`);
+              const deleteResponse = await fetch('/api/delete-file', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ filename }),
+              });
+              
+              if (deleteResponse.ok) {
+                console.log(`🗑️ Archivo físico eliminado: ${filename}`);
+              } else {
+                console.warn(`⚠️ No se pudo eliminar archivo físico: ${filename}`);
+              }
+            } catch (error) {
+              console.error(`Error eliminando archivo ${filename}:`, error);
             }
-          } catch (error) {
-            console.error(`Error eliminando archivo ${filename}:`, error);
+          } else {
+            console.log(`⚠️ Saltando archivo vacío o inválido: "${filename}"`);
+          }
+        }
+      } else {
+        console.log('ℹ️ No hay archivos físicos para eliminar');
+      }
+      
+      // Eliminar el registro consolidado
+      console.log(`🗑️ Eliminando registro consolidado con key: ${deletingRow.key}`);
+      await dataManager.deleteConsolidated(deletingRow.key);
+      console.log(`✅ Registro consolidado eliminado exitosamente`);
+      
+      // IMPORTANTE: Limpiar todos los hashes relacionados para permitir re-subida
+      // Buscar todos los registros de receipts que puedan tener hashes relacionados
+      const allReceipts = await dataManager.getReceipts();
+      const hashesToClean: string[] = [];
+      
+      // Recopilar todos los hashes de los archivos eliminados
+      if (deletingRow.archivos) {
+        for (const filename of deletingRow.archivos) {
+          // Buscar registros que contengan este filename en sus hashes
+          const relatedReceipts = allReceipts.filter(r => 
+            r.filename === filename || 
+            (Array.isArray(r.hashes) && r.hashes.some(h => h.includes(filename)))
+          );
+          
+          relatedReceipts.forEach(receipt => {
+            if (Array.isArray(receipt.hashes)) {
+              hashesToClean.push(...receipt.hashes);
+            }
+          });
+        }
+      }
+      
+      // Eliminar registros de receipts que contengan los hashes relacionados
+      if (hashesToClean.length > 0) {
+        console.log(`🧹 Limpiando ${hashesToClean.length} hashes relacionados...`);
+        for (const hash of hashesToClean) {
+          const receiptsWithHash = await dataManager.getReceipts();
+          for (const receipt of receiptsWithHash) {
+            await dataManager.deleteReceipt(receipt.id!);
+            console.log(`🗑️ Hash eliminado: ${hash.substring(0, 10)}...`);
           }
         }
       }
       
-      // Eliminar el registro consolidado
-      await db.consolidated.delete(deletingRow.key);
       toast.success('Registro y archivos eliminados exitosamente');
       setShowDeleteModal(false);
       setDeletingRow(null);
-      // Recargar datos
-      loadData();
+      
+      // Recargar datos con logs detallados
+      console.log(`🔄 Recargando datos después de eliminar registro...`);
+      await loadData();
+      console.log(`✅ Datos recargados exitosamente`);
+      
+      // Forzar una recarga adicional para asegurar sincronización
+      setTimeout(async () => {
+        console.log(`🔄 Recarga adicional para sincronización...`);
+        await loadData();
+        console.log(`✅ Recarga adicional completada`);
+      }, 1000);
     } catch (error) {
       console.error('Error eliminando registro:', error);
       toast.error('Error al eliminar el registro');
@@ -1185,7 +1938,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       }
       
       // Procesar el archivo con los datos ajustados
-      const result = await processSingleFileWithData(pendingParserData.file, adjustedData, showDebug);
+      const result = await processSingleFileWithData(pendingParserData.file, adjustedData, dataManager, showDebug);
       
       if (result.success && !result.skipped) {
         toast.success(`Archivo procesado con ajustes: ${pendingParserData.file.name}`);
@@ -1194,7 +1947,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       }
       
       // Recargar datos consolidados
-      const newConsolidated = await db.consolidated.toArray();
+      const newConsolidated = await dataManager.getConsolidated();
       setConsolidated(newConsolidated);
       
     } catch (error) {
@@ -1216,16 +1969,253 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
   // Función para recargar datos
   const loadData = useCallback(async () => {
     try {
+      console.log("🔍 loadData - Iniciando carga de datos...");
       const [consolidatedData, controlsData] = await Promise.all([
-        db.consolidated.toArray(),
-        db.savedControls.toArray()
+        dataManager.getConsolidated(),
+        dataManager.getSavedControls()
       ]);
+      console.log("🔍 loadData - consolidatedData recibido:", consolidatedData?.length, "items");
+      console.log("🔍 loadData - consolidatedData tipo:", typeof consolidatedData);
+      console.log("🔍 loadData - consolidatedData es array:", Array.isArray(consolidatedData));
+      console.log("🔍 loadData - Primeros 3 items:", consolidatedData?.slice(0, 3).map(item => ({
+        legajo: item.legajo,
+        empresa: item.data?.EMPRESA,
+        created_at: item.created_at
+      })));
+      console.log("🔍 loadData - Keys de los registros:", consolidatedData?.map(item => item.key));
       setConsolidated(consolidatedData);
       setSavedControls(controlsData);
+      
+      // Limpiar filtros si los elementos seleccionados no existen
+      const empresas = Array.from(new Set(consolidatedData.map(item => item.data?.EMPRESA).filter(Boolean)));
+      const periodos = Array.from(new Set(consolidatedData.map(item => item.periodo).filter(Boolean)));
+      
+      // Verificar y limpiar filtro de empresa
+      if (empresaFiltro !== 'Todas' && !empresas.includes(empresaFiltro)) {
+        console.log(`🔍 Empresa "${empresaFiltro}" no existe en datos actuales, limpiando filtro`);
+        console.log(`🔍 Empresas disponibles:`, empresas);
+        setEmpresaFiltro('Todas');
+      }
+      
+      // Verificar y limpiar filtro de periodo
+      if (periodoFiltro !== 'Todos' && periodoFiltro !== 'Todas' && !periodos.includes(periodoFiltro)) {
+        console.log(`🔍 Periodo "${periodoFiltro}" no existe en datos actuales, limpiando filtro`);
+        console.log(`🔍 Periodos disponibles:`, periodos);
+        setPeriodoFiltro('Todos');
+      }
     } catch (error) {
       console.error("Error recargando datos:", error);
     }
-  }, []);
+  }, []); // Removido las dependencias para evitar bucles infinitos
+
+  // Verificar filtros cuando cambien los datos
+  useEffect(() => {
+    if (consolidated.length === 0) return; // No hacer nada si no hay datos
+    
+    const empresas = Array.from(new Set(consolidated.map(item => item.data?.EMPRESA).filter(Boolean)));
+    const periodos = Array.from(new Set(consolidated.map(item => item.periodo).filter(Boolean)));
+    
+    // Verificar y limpiar filtro de empresa
+    if (empresaFiltro !== 'Todas' && !empresas.includes(empresaFiltro)) {
+      console.log(`🔍 Empresa "${empresaFiltro}" no existe en datos actuales, limpiando filtro`);
+      console.log(`🔍 Empresas disponibles:`, empresas);
+      setEmpresaFiltro('Todas');
+    }
+    
+    // Verificar y limpiar filtro de periodo
+    if (periodoFiltro !== 'Todos' && periodoFiltro !== 'Todas' && !periodos.includes(periodoFiltro)) {
+      console.log(`🔍 Periodo "${periodoFiltro}" no existe en datos actuales, limpiando filtro`);
+      console.log(`🔍 Periodos disponibles:`, periodos);
+      setPeriodoFiltro('Todos');
+    }
+  }, [consolidated, empresaFiltro, periodoFiltro]);
+
+  // Función para limpiar hashes huérfanos (recibos eliminados pero hashes que quedaron)
+  const cleanOrphanedHashes = useCallback(async () => {
+    try {
+      console.log('🧹 Iniciando limpieza de hashes huérfanos...');
+      
+      // Obtener todos los registros de receipts
+      const allReceipts = await dataManager.getReceipts();
+      console.log(`📊 Total de registros en receipts: ${allReceipts.length}`);
+      
+      // Obtener todas las claves de consolidated
+      const allConsolidated = await dataManager.getConsolidated();
+      const consolidatedKeys = new Set(allConsolidated.map(c => c.key));
+      console.log(`📊 Total de registros en consolidated: ${allConsolidated.length}`);
+      
+      // Encontrar registros de receipts que no tienen correspondencia en consolidated
+      const orphanedReceipts = allReceipts.filter(receipt => {
+        const receiptKey = `${receipt.legajo}||${receipt.periodo}`;
+        return !consolidatedKeys.has(receiptKey);
+      });
+      
+      console.log(`🔍 Registros huérfanos encontrados: ${orphanedReceipts.length}`);
+      
+      if (orphanedReceipts.length > 0) {
+        // Eliminar registros huérfanos
+        for (const orphan of orphanedReceipts) {
+          await dataManager.deleteReceipt(orphan.id!);
+          console.log(`🗑️ Eliminado registro huérfano: ${orphan.filename} (${orphan.legajo} - ${orphan.periodo})`);
+        }
+        
+        toast.success(`Limpieza completada: ${orphanedReceipts.length} registros huérfanos eliminados`);
+      } else {
+        toast.info('No se encontraron registros huérfanos');
+      }
+      
+      // Recargar datos
+      loadData();
+      
+    } catch (error) {
+      console.error('Error en limpieza de hashes huérfanos:', error);
+      toast.error('Error durante la limpieza');
+    }
+  }, [loadData]);
+
+  // Función para depurar archivos físicos huérfanos
+  const cleanOrphanedFiles = useCallback(async () => {
+    try {
+      console.log('🧹 Iniciando limpieza de archivos físicos huérfanos...');
+      
+      // Obtener todos los archivos referenciados en la base de datos
+      const allReceipts = await dataManager.getReceipts();
+      const referencedFiles = new Set<string>();
+      
+      // Recopilar todos los archivos referenciados
+      for (const receipt of allReceipts) {
+        if (receipt.filename) {
+          referencedFiles.add(receipt.filename);
+        }
+      }
+      
+      console.log(`📊 Archivos referenciados en BD: ${referencedFiles.size}`);
+      
+      // Obtener lista de archivos desde el servidor
+      const response = await fetch('/api/cleanup-files', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log(`📁 Archivos PDF en servidor: ${result.totalFiles}`);
+        
+        // Por ahora solo mostrar información, no eliminar archivos
+        toast.success(`Encontrados ${result.totalFiles} archivos PDF en servidor. Función de limpieza en desarrollo.`);
+      } else {
+        console.error('Error en limpieza de archivos:', result.error);
+        toast.error('Error durante la limpieza de archivos');
+      }
+      
+      // Recargar datos
+      loadData();
+      
+    } catch (error) {
+      console.error('Error en limpieza de archivos físicos:', error);
+      toast.error('Error durante la limpieza de archivos');
+    }
+  }, [loadData]);
+
+  // Función para normalizar nombres de archivos (aplicable a todos los parsers)
+  const normalizeFileNames = useCallback(async () => {
+    try {
+      console.log('🔧 Iniciando normalización de nombres de archivos...');
+      
+      // Buscar todos los registros con nombres que contengan paréntesis
+      const receipts = await dataManager.getReceipts();
+      const consolidated = await dataManager.getConsolidated();
+      
+      // Filtrar archivos con paréntesis en el nombre
+      const receiptsWithParentheses = receipts.filter(r => 
+        r.filename && r.filename.includes('(') && r.filename.includes(')')
+      );
+      
+      const consolidatedWithParentheses = consolidated.filter(c => 
+        c.archivos && c.archivos.some(archivo => archivo.includes('(') && archivo.includes(')'))
+      );
+      
+      console.log(`📁 Archivos con paréntesis en receipts: ${receiptsWithParentheses.length}`);
+      console.log(`📊 Registros con paréntesis en consolidated: ${consolidatedWithParentheses.length}`);
+      
+      let correctedReceipts = 0;
+      let correctedConsolidated = 0;
+      
+      // Normalizar receipts
+      for (const receipt of receiptsWithParentheses) {
+        const originalName = receipt.filename;
+        const normalizedName = originalName.replace(/\([^)]*\)/g, '').trim();
+        
+        if (originalName !== normalizedName) {
+          await dataManager.addReceipt({
+            ...receipt,
+            filename: normalizedName
+          });
+          console.log(`✅ Normalizado receipts ID ${receipt.id}: "${originalName}" → "${normalizedName}"`);
+          correctedReceipts++;
+        }
+      }
+      
+      // Normalizar consolidated
+      for (const consolidated of consolidatedWithParentheses) {
+        if (consolidated.archivos && consolidated.archivos.length > 0) {
+          const normalizedArchivos = consolidated.archivos.map(archivo => {
+            return archivo.replace(/\([^)]*\)/g, '').trim();
+          });
+          
+          // Verificar si hay cambios
+          const hasChanges = normalizedArchivos.some((normalized, index) => 
+            normalized !== consolidated.archivos[index]
+          );
+          
+          if (hasChanges) {
+            await dataManager.addConsolidated({
+              ...consolidated,
+              archivos: normalizedArchivos
+            });
+            console.log(`✅ Normalizado consolidated Key ${consolidated.key}: archivos actualizados`);
+            correctedConsolidated++;
+          }
+        }
+      }
+      
+      if (correctedReceipts + correctedConsolidated > 0) {
+        toast.success(`Nombres normalizados: ${correctedReceipts + correctedConsolidated} archivos`);
+        loadData();
+      } else {
+        toast.info('No se encontraron nombres que necesiten normalización');
+      }
+      
+      return {
+        correctedReceipts,
+        correctedConsolidated,
+        total: correctedReceipts + correctedConsolidated
+      };
+      
+    } catch (error) {
+      console.error('❌ Error normalizando nombres:', error);
+      toast.error('Error durante la normalización de nombres');
+      return null;
+    }
+  }, [loadData]);
+
+
+  // Exponer funciones globalmente para uso desde consola
+  useEffect(() => {
+    (window as any).cleanOrphanedHashes = cleanOrphanedHashes;
+    (window as any).cleanOrphanedFiles = cleanOrphanedFiles;
+    (window as any).normalizeFileNames = normalizeFileNames;
+    // (window as any).db = db; // Removido - usar dataManager en su lugar
+    
+    return () => {
+      delete (window as any).cleanOrphanedHashes;
+      delete (window as any).cleanOrphanedFiles;
+      delete (window as any).normalizeFileNames;
+      // delete (window as any).db; // Removido
+    };
+  }, [cleanOrphanedHashes, cleanOrphanedFiles, normalizeFileNames]);
 
   // Funciones para manejar descuentos en el modal del parser
   const handleDescuentosInParserConfirm = useCallback(async (descuentos: Record<string, string>) => {
@@ -1236,7 +2226,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       console.log('Descuentos confirmados:', descuentos);
       
       // Continuar con el procesamiento normal
-      const result = await processSingleFileWithData(pendingParserData.file, pendingParserData.data, showDebug);
+      const result = await processSingleFileWithData(pendingParserData.file, pendingParserData.data, dataManager, showDebug);
       
       if (result.success) {
         toast.success(`Archivo procesado: ${pendingParserData.file.name}`);
@@ -1377,6 +2367,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       // Solo actualizar si no se han cargado datos aún
       if (consolidated.length === 0) {
         console.log("🔄 Cargando datos para tablero...");
+        console.log("🔍 useEffect - consolidated.length:", consolidated.length);
         loadData();
       }
       // Actualizar Dashboard si está disponible
@@ -1543,7 +2534,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
         </div>
       )}
 
-      <main className="mx-auto max-w-6xl p-4 lg:p-6 lg:ml-64">
+      <main className="mx-auto max-w-7xl 2xl:max-w-full p-4 lg:p-6 lg:ml-64">
         {/* Header contextual - oculto en desktop */}
         <div className="mb-6 lg:hidden">
           <h2 className="text-2xl font-semibold text-gray-900">
@@ -1635,15 +2626,6 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
           />
         )}
 
-        {/* Debug info para verificar estado */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="fixed bottom-4 right-4 bg-black text-white p-2 text-xs rounded z-50">
-            <div>hasPendingUploads: {hasPendingUploads ? 'true' : 'false'}</div>
-            <div>currentUploadSessionId: {currentUploadSessionId || 'null'}</div>
-            <div>processingFiles: {processingFiles ? 'true' : 'false'}</div>
-            <div>Show Progress: {hasPendingUploads && currentUploadSessionId && !processingFiles ? 'YES' : 'NO'}</div>
-          </div>
-        )}
 
         {/* Tabs Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -1665,14 +2647,14 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
                 console.log('🔄 onOpenNewDescuento llamado desde Dashboard');
                 console.log('🎯 Navegando a pestaña descuentos...');
                 setActiveTab('descuentos');
-                // Activar modal de nuevo descuento después de navegar
+                // Disparar evento para abrir modal de descuento
                 setTimeout(() => {
                   console.log('📡 Disparando evento openNewDescuento...');
-                  // Disparar evento personalizado para activar modal de descuento
                   const event = new CustomEvent('openNewDescuento');
                   window.dispatchEvent(event);
                   console.log('✅ Evento openNewDescuento disparado');
-                }, 100);
+                  console.log('🔍 Verificando si hay otros eventos activos...');
+                }, 200);
               }}
               onOpenNewEmployee={() => {
                 console.log('👤 onOpenNewEmployee llamado desde Dashboard');
@@ -1692,6 +2674,16 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
                   setShowEmpresaModal(true);
                   console.log('✅ Modal de empresa activado');
                 }, 100);
+              }}
+              onFilterByPeriod={(period: string) => {
+                console.log('📅 onFilterByPeriod llamado desde Dashboard:', period);
+                setPeriodoFiltro(period);
+                setActiveTab('recibos');
+              }}
+              onFilterByCompany={(company: string) => {
+                console.log('🏢 onFilterByCompany llamado desde Dashboard:', company);
+                setEmpresaFiltro(company);
+                setActiveTab('recibos');
               }}
             />
           </TabsContent>
@@ -1732,7 +2724,16 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
                     >
                       <FileUp className="h-4 w-4 mr-2" />
                       {isDragOver ? 'Suelta los PDFs aquí' : 'Subir PDFs'}
-                  </Button>
+                    </Button>
+                    
+                    <Button
+                      onClick={() => setShowOCRConfigModal(true)}
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      Configurar OCR
+                    </Button>
                 </div>
               </div>
             </CardHeader>
@@ -1873,7 +2874,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
                 </CardDescription>
             </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   <Button
                     onClick={() => {
                       const csv = buildAggregatedCsv(filteredData, [...BASE_COLS]);
@@ -1915,6 +2916,16 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
           {/* Descuentos Tab */}
           <TabsContent value="descuentos" className="space-y-4">
             <DescuentosPanel empresaFiltro={empresaFiltro} employees={consolidated} />
+          </TabsContent>
+
+          {/* Empleados Tab */}
+          <TabsContent value="empleados" className="space-y-4">
+            <EmpleadosPanel empresaFiltro={empresaFiltro} />
+          </TabsContent>
+
+          {/* Empresas Tab */}
+          <TabsContent value="empresas" className="space-y-4">
+            <EmpresasPanel empresaFiltro={empresaFiltro} />
           </TabsContent>
 
           {/* Usuarios Tab */}
@@ -2055,12 +3066,13 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
           />
         
         {/* Modal de Empresa Manual */}
-        <EmpresaModal
-          isOpen={showEmpresaModal}
-          onClose={handleEmpresaCancel}
-          onConfirm={handleEmpresaConfirm}
-          fileName={pendingFile?.name || ''}
-        />
+        {showEmpresaModal && (
+          <EmpresaModal
+            open={showEmpresaModal}
+            onClose={handleEmpresaCancel}
+            onSave={() => handleEmpresaConfirm('')}
+          />
+        )}
         
         <ParserAdjustmentModal
           open={showParserAdjustmentModal}
@@ -2117,7 +3129,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
               {/* Navegación */}
               <div>
                 <h3 className="text-lg font-semibold mb-3 text-gray-800">Navegación entre Secciones</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                   <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
                     <kbd className="px-2 py-1 bg-gray-200 rounded text-sm font-mono">T</kbd>
                     <span>Tablero</span>
@@ -2152,7 +3164,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
               {/* Acciones Globales */}
               <div>
                 <h3 className="text-lg font-semibold mb-3 text-gray-800">Acciones Globales</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   <div className="flex justify-between items-center p-2 bg-blue-50 rounded">
                     <kbd className="px-2 py-1 bg-blue-200 rounded text-sm font-mono">F</kbd>
                     <span>Debug (abrir panel de debug)</span>
@@ -2269,13 +3281,211 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
                 </p>
               </div>
             </div>
+            
+            <DialogFooter>
+              <Button onClick={() => setShowHelpModal(false)}>
+                Cerrar
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Modal de Configuración OCR */}
+        <OCRConfigModal
+          open={showOCRConfigModal}
+          onClose={() => setShowOCRConfigModal(false)}
+        />
+
+        {/* Panel de Debug */}
+        {config.showDebugPanel && (
+          <Card className="mt-8 bg-yellow-50 border-yellow-200">
+            <CardHeader>
+              <CardTitle className="text-lg text-yellow-800 flex items-center gap-2">
+                <Bug className="h-5 w-5" /> Panel de Debug
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-yellow-700 space-y-2">
+              <p><strong>Puerto de la Aplicación:</strong> {typeof window !== 'undefined' ? (window.location.port || '3000') : 'N/A'}</p>
+              <p><strong>URL Completa:</strong> {typeof window !== 'undefined' ? window.location.href : 'N/A'}</p>
+              <p><strong>Registros Consolidados:</strong> {consolidated.length}</p>
+              <p><strong>Sesión de Subida Activa:</strong> {hasPendingUploads ? 'SÍ' : 'NO'}</p>
+              {hasPendingUploads && (
+                <p><strong>ID de Sesión:</strong> {currentUploadSessionId || 'N/A'}</p>
+              )}
+              <div className="flex flex-wrap gap-2 mt-4">
+                <Button onClick={() => (window as any).cleanOrphanedHashes?.()} variant="outline" size="sm">
+                  <Database className="h-4 w-4 mr-2" /> Limpiar Hashes Huérfanos
+                </Button>
+                <Button onClick={() => (window as any).cleanOrphanedFiles?.()} variant="outline" size="sm">
+                  <FileText className="h-4 w-4 mr-2" /> Limpiar Archivos Físicos Huérfanos
+                </Button>
+                <Button onClick={() => updateConfig({ showDebugPanel: false })} variant="secondary" size="sm">
+                  <Bug className="h-4 w-4 mr-2" /> Desactivar Debug
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Debug Sessions - TEMPORAL - OCULTO */}
         {/* <div className="fixed bottom-4 right-4 z-50 max-w-md">
           <DebugSessions />
         </div> */}
+        
+        
+        {/* Upload Log Modal */}
+        <UploadLogModal
+          open={showUploadLog}
+          onClose={() => setShowUploadLog(false)}
+        />
+        
+        {/* Pending Items Modal */}
+        <Dialog open={showPendingItems} onOpenChange={setShowPendingItems}>
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader className="flex-shrink-0 border-b pb-4">
+              <DialogTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ListTodo className="h-5 w-5 text-blue-600" />
+                  Items Pendientes
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowPendingItems(false)}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </DialogTitle>
+              <DialogDescription>
+                Gestión de tareas y pruebas pendientes
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="flex-1 overflow-y-auto">
+              <PendingItemsManager />
+            </div>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Delete Confirmation Modal */}
+        <Dialog open={showDeleteConfirm} onOpenChange={(open) => {
+          console.log(`🔍 Modal de confirmación cambió a:`, open);
+          setShowDeleteConfirm(open);
+        }}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-red-600" />
+                {deleteConfirmData.title}
+              </DialogTitle>
+              <DialogDescription>
+                {deleteConfirmData.message}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="bg-red-50 p-4 rounded-lg">
+                <div className="whitespace-pre-line text-sm text-red-600">
+                  {deleteConfirmData.details}
+                </div>
+              </div>
+            </div>
+            
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                variant="destructive"
+                onClick={deleteConfirmData.onConfirm}
+              >
+                Confirmar Eliminación
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Test Tools Modal */}
+        <Dialog open={showTestTools} onOpenChange={setShowTestTools}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Wrench className="h-5 w-5 text-blue-600" />
+                Herramientas de Test
+              </DialogTitle>
+              <DialogDescription>
+                Herramientas temporales para desarrollo
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Test de Confirmación</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    onClick={() => {
+                      setShowTestConfirm(true);
+                    }}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Probar Modal de Confirmación
+                  </Button>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Test de Upload</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    onClick={() => {
+                      // Simular test de upload
+                      toast.success('Test de upload ejecutado');
+                    }}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Simular Proceso de Subida
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+            
+            <DialogFooter>
+              <Button onClick={() => setShowTestTools(false)}>
+                Cerrar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Test Confirm Modal */}
+        <ConfirmModal
+          open={showTestConfirm}
+          onClose={() => setShowTestConfirm(false)}
+          onConfirm={() => {
+            toast.success('Confirmación de test ejecutada');
+            setShowTestConfirm(false);
+          }}
+          title="Test de Confirmación"
+          description="Este es un modal de confirmación de prueba para verificar que funciona correctamente."
+          confirmText="Ejecutar Test"
+          cancelText="Cancelar"
+          variant="destructive"
+          details={[
+            'Se ejecutará una acción de prueba',
+            'Se mostrará un mensaje de confirmación',
+            'Se registrará la acción en el log'
+          ]}
+        />
       </main>
     </div>
     );

@@ -42,11 +42,11 @@ import {
   Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import ConfirmModal from './ConfirmModal';
+import { ConfirmModal } from './ConfirmModal';
 import { cleanText } from '@/lib/text-cleaner';
 import { getPriorityColor } from '@/lib/priority-utils';
 import { getStatusIcon, getStatusColor, getStatusText } from '@/lib/status-utils';
-import TechDropdown from './ui/tech-dropdown';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useResizable } from '@/hooks/useResizable';
 
 interface PendingItem {
@@ -163,6 +163,13 @@ function SortableCard({
       {/* Herramientas que aparecen en hover - esquina superior derecha */}
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex space-x-1">
         <button 
+          onClick={(e) => onEditItem(item)}
+          className="p-1.5 text-gray-600 hover:text-blue-600 transition-colors bg-white/80 hover:bg-blue-100 rounded-md shadow-sm"
+          title="Editar item"
+        >
+          <Edit3 className="h-4 w-4" />
+        </button>
+        <button 
           onClick={(e) => onDelete?.(item.id, e)}
           className="p-1.5 text-gray-600 hover:text-red-600 transition-colors bg-white/80 hover:bg-red-100 rounded-md shadow-sm"
           title="Eliminar item"
@@ -212,12 +219,7 @@ function SortableCard({
         </div>
       </div>
 
-      {/* Número identificador - esquina inferior derecha */}
-      <div className="absolute bottom-2 right-2">
-        <div className="bg-white/90 text-gray-600 text-xs font-medium px-1.5 py-0.5 rounded-full shadow-sm">
-          #{item.id}
-        </div>
-      </div>
+      {/* ID oculto - era muy largo */}
 
       {/* Contenido principal */}
       <div className="p-4 text-gray-800 h-full flex flex-col" onDoubleClick={() => onEdit?.(item)}>
@@ -242,22 +244,40 @@ function SortableCard({
         <div className="flex items-center justify-between mt-auto">
           {/* Prioridad con dropdown */}
           <div className="flex-1 mr-2">
-            <TechDropdown
-              value={item.priority}
-              options={priorityOptions}
-              onChange={(value) => onPriorityChange?.(item.id, value)}
-              className="text-xs"
-            />
+            <Select value={item.priority} onValueChange={(value) => onPriorityChange?.(item.id, value)}>
+              <SelectTrigger className="text-xs h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {priorityOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <div className="flex items-center gap-2">
+                      <span>{option.icon}</span>
+                      <span>{option.label}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           
           {/* Estado con dropdown */}
           <div className="flex-1">
-            <TechDropdown
-              value={item.status}
-              options={statusOptions}
-              onChange={(value) => onStatusChange?.(item.id, value)}
-              className="text-xs"
-            />
+            <Select value={item.status} onValueChange={(value) => onStatusChange?.(item.id, value)}>
+              <SelectTrigger className="text-xs h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <div className="flex items-center gap-2">
+                      <span>{option.icon}</span>
+                      <span>{option.label}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
@@ -279,9 +299,10 @@ function SortableCard({
 interface PendingItemsCardsViewProps {
   items: PendingItem[];
   onItemsChange: (items: PendingItem[]) => void;
-  onToggleStatus: (itemId: string) => void;
+  onToggleStatus: (itemId: string, status: 'pending' | 'open' | 'in-progress' | 'verifying' | 'completed') => void;
   onExecute?: (item: PendingItem) => void;
   onDeleteItem: (id: string) => void;
+  onEditItem: (item: PendingItem) => void;
   postItMode?: boolean;
   onTogglePostItMode?: () => void;
 }
@@ -292,6 +313,7 @@ export default function PendingItemsCardsView({
   onToggleStatus,
   onExecute,
   onDeleteItem,
+  onEditItem,
   postItMode = false,
   onTogglePostItMode
 }: PendingItemsCardsViewProps) {
@@ -400,10 +422,7 @@ export default function PendingItemsCardsView({
   };
 
   const handleStatusChange = (itemId: string, newStatus: string) => {
-    const updatedItems = items.map(item => 
-      item.id === itemId ? { ...item, status: newStatus as 'pending' | 'in-progress' | 'completed' } : item
-    );
-    onItemsChange(updatedItems);
+    onToggleStatus(itemId, newStatus as 'pending' | 'open' | 'in-progress' | 'verifying' | 'completed');
     toast.success('Estado actualizado');
   };
 
@@ -420,9 +439,11 @@ export default function PendingItemsCardsView({
 
   // Opciones para dropdowns
   const statusOptions = [
-    { value: 'pending', label: 'PENDIENTE', icon: getStatusIcon('pending'), color: 'bg-yellow-100 text-yellow-800' },
-    { value: 'in-progress', label: 'ACTIVA', icon: getStatusIcon('in-progress'), color: 'bg-blue-100 text-blue-800' },
-    { value: 'completed', label: 'FINALIZADA', icon: getStatusIcon('completed'), color: 'bg-green-100 text-green-800' }
+    { value: 'pending', label: 'PENDIENTE', icon: getStatusIcon('pending'), color: 'bg-gray-100 text-gray-800' },
+    { value: 'open', label: 'ABIERTO', icon: getStatusIcon('open'), color: 'bg-blue-100 text-blue-800' },
+    { value: 'in-progress', label: 'EN PROGRESO', icon: getStatusIcon('in-progress'), color: 'bg-yellow-100 text-yellow-800' },
+    { value: 'verifying', label: 'VERIFICANDO', icon: getStatusIcon('verifying'), color: 'bg-purple-100 text-purple-800' },
+    { value: 'completed', label: 'COMPLETADO', icon: getStatusIcon('completed'), color: 'bg-green-100 text-green-800' }
   ];
 
   const priorityOptions = [
@@ -433,25 +454,12 @@ export default function PendingItemsCardsView({
 
   return (
     <div className="space-y-4">
-      {/* Header con toggle de modo */}
-      {onTogglePostItMode && (
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700">
-              {postItMode ? 'Modo Post-it' : 'Modo Formulario'}
-            </span>
-            <button
-              onClick={onTogglePostItMode}
-              className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-            >
-              {postItMode ? 'Cambiar a Formulario' : 'Cambiar a Post-it'}
-            </button>
-          </div>
-          <div className="text-sm text-gray-500">
-            {completedCount}/{totalCount} completados
-          </div>
+      {/* Header con contador */}
+      <div className="flex items-center justify-end mb-4">
+        <div className="text-sm text-gray-500">
+          {completedCount}/{totalCount} completados
         </div>
-      )}
+      </div>
 
       {/* Grid de cards */}
       <DndContext
@@ -468,7 +476,6 @@ export default function PendingItemsCardsView({
             {items.map((item) => (
               <div
                 key={item.id}
-                onClick={() => onToggleStatus(item.id)}
                 className="cursor-pointer"
               >
                 <SortableCard 

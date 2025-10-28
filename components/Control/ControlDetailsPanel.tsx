@@ -6,10 +6,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { SavedControlDB } from "@/lib/db";
+import type { SavedControlDB } from "@/lib/data-manager-singleton";
 import type { ControlSummary } from "@/lib/control-types";
 import type { ControlOk as ControlOkRow } from "@/lib/export-control";
-import type { ConsolidatedEntity } from "@/lib/db";
+import type { ConsolidatedEntity } from "@/lib/data-manager-singleton";
 
 type Props = {
   control: SavedControlDB | null;

@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertTriangle, Save, X } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Save, X, FileText, Eye, EyeOff, Settings } from 'lucide-react';
 import { EmpresaSelector } from './EmpresaSelector';
-import { ColumnConfigManager } from '@/lib/column-config-manager';
+// import { ColumnConfigManager } from '@/lib/column-config-manager'; // ELIMINADO
 import { useSession } from 'next-auth/react';
 
 interface EditDataModalProps {
@@ -19,6 +19,7 @@ interface EditDataModalProps {
   originalData: Record<string, string>;
   fileName: string;
   pdfText?: string;
+  pdfUrl?: string; // URL del PDF para visualización
 }
 
 export default function EditDataModal({ 
@@ -27,12 +28,17 @@ export default function EditDataModal({
   onSave, 
   originalData, 
   fileName,
-  pdfText 
+  pdfText,
+  pdfUrl 
 }: EditDataModalProps) {
   const [editedData, setEditedData] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<string[]>([]);
   const [showPdfText, setShowPdfText] = useState(false);
+  const [showPdf, setShowPdf] = useState(false);
   const [columnAliases, setColumnAliases] = useState<Record<string, string>>({});
+  const [showColumnConfig, setShowColumnConfig] = useState(false);
+  const [selectedColumn, setSelectedColumn] = useState<string>('');
+  const [tempAlias, setTempAlias] = useState<string>('');
   const { data: session } = useSession();
 
   // Cargar alias de columnas cuando se abre el modal
@@ -41,7 +47,7 @@ export default function EditDataModal({
       if (session?.user?.id) {
         try {
           const config = await ColumnConfigManager.getConfig(session.user.id, 'recibos');
-          setColumnAliases(config.columnAliases || {});
+          setColumnAliases(config?.columnAliases || {});
         } catch (error) {
           console.error('Error cargando alias de columnas:', error);
         }
@@ -93,8 +99,9 @@ export default function EditDataModal({
       // Excluir campos de texto y metadatos
       const excludeFields = [
         'NOMBRE', 'LEGAJO', 'PERIODO', 'EMPRESA', 'CUIL', 'SUELDO_BASICO', 
-        'TOTAL', 'DESCUENTOS', 'ARCHIVO', 'TEXTO_COMPLETO', 'PRIMERAS_LINEAS',
-        'VALIDATION_ERRORS', 'NRO. DE CUIL'
+        'JORNAL', 'SUELDO_BRUTO', 'TOTAL', 'DESCUENTOS', 'ARCHIVO', 
+        'TEXTO_COMPLETO', 'PRIMERAS_LINEAS', 'VALIDATION_ERRORS', 
+        'NRO. DE CUIL', 'CUIL_NORM'
       ];
       
       if (excludeFields.includes(key)) return false;
@@ -107,6 +114,51 @@ export default function EditDataModal({
   // Función para obtener el nombre a mostrar de una columna (alias o nombre original)
   const getColumnDisplayName = (columnKey: string): string => {
     return columnAliases[columnKey] || columnKey;
+  };
+
+  // Función para abrir el modal de configuración de columna
+  const handleConfigureColumn = (columnKey: string) => {
+    setSelectedColumn(columnKey);
+    setTempAlias(columnAliases[columnKey] || columnKey);
+    setShowColumnConfig(true);
+  };
+
+  // Función para guardar el alias de la columna
+  const handleSaveColumnAlias = async () => {
+    if (!selectedColumn) return;
+
+    const newAliases = {
+      ...columnAliases,
+      [selectedColumn]: tempAlias.trim() || selectedColumn
+    };
+
+    setColumnAliases(newAliases);
+
+    // Guardar en la base de datos
+    if (session?.user?.id) {
+      try {
+        const config = await ColumnConfigManager.getConfig(session.user.id, 'recibos');
+        await ColumnConfigManager.saveConfig(
+          session.user.id,
+          'recibos',
+          config?.visibleColumns || [],
+          newAliases
+        );
+      } catch (error) {
+        console.error('Error guardando alias de columna:', error);
+      }
+    }
+
+    setShowColumnConfig(false);
+    setSelectedColumn('');
+    setTempAlias('');
+  };
+
+  // Función para cancelar la configuración
+  const handleCancelColumnConfig = () => {
+    setShowColumnConfig(false);
+    setSelectedColumn('');
+    setTempAlias('');
   };
 
   const validateData = (): string[] => {
@@ -201,6 +253,7 @@ export default function EditDataModal({
           </DialogDescription>
         </DialogHeader>
 
+        <div className="space-y-4 modal-content-fix">
         {errors.length > 0 && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -217,7 +270,20 @@ export default function EditDataModal({
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="nombre" className="cursor-pointer hover:text-blue-600 transition-colors">
+                  {getColumnDisplayName('NOMBRE')} *
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleConfigureColumn('NOMBRE')}
+                  className="h-6 w-6 p-0"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+              </div>
               <Input
                 id="nombre"
                 value={editedData.NOMBRE || ''}
@@ -229,7 +295,20 @@ export default function EditDataModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="legajo">Legajo *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="legajo" className="cursor-pointer hover:text-blue-600 transition-colors">
+                  {getColumnDisplayName('LEGAJO')} *
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleConfigureColumn('LEGAJO')}
+                  className="h-6 w-6 p-0"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+              </div>
               <Input
                 id="legajo"
                 value={editedData.LEGAJO || ''}
@@ -241,7 +320,20 @@ export default function EditDataModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="periodo">Período *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="periodo" className="cursor-pointer hover:text-blue-600 transition-colors">
+                  {getColumnDisplayName('PERIODO')} *
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleConfigureColumn('PERIODO')}
+                  className="h-6 w-6 p-0"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+              </div>
               <Input
                 id="periodo"
                 value={editedData.PERIODO || ''}
@@ -253,7 +345,20 @@ export default function EditDataModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="empresa">Empresa *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="empresa" className="cursor-pointer hover:text-blue-600 transition-colors">
+                  {getColumnDisplayName('EMPRESA')} *
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleConfigureColumn('EMPRESA')}
+                  className="h-6 w-6 p-0"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+              </div>
               <EmpresaSelector
                 value={editedData.EMPRESA || ''}
                 onValueChange={(value) => handleFieldChange('EMPRESA', value)}
@@ -262,7 +367,20 @@ export default function EditDataModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="cuil">CUIL</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="cuil" className="cursor-pointer hover:text-blue-600 transition-colors">
+                  {getColumnDisplayName('CUIL')}
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleConfigureColumn('CUIL')}
+                  className="h-6 w-6 p-0"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+              </div>
               <Input
                 id="cuil"
                 value={editedData.CUIL || ''}
@@ -274,7 +392,20 @@ export default function EditDataModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="sueldo">Sueldo Básico</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="sueldo" className="cursor-pointer hover:text-blue-600 transition-colors">
+                  {getColumnDisplayName('SUELDO_BASICO')}
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleConfigureColumn('SUELDO_BASICO')}
+                  className="h-6 w-6 p-0"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+              </div>
               <Input
                 id="sueldo"
                 value={editedData.SUELDO_BASICO || ''}
@@ -286,7 +417,70 @@ export default function EditDataModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="total">Total</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="jornal" className="cursor-pointer hover:text-blue-600 transition-colors">
+                  {getColumnDisplayName('JORNAL')}
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleConfigureColumn('JORNAL')}
+                  className="h-6 w-6 p-0"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+              </div>
+              <Input
+                id="jornal"
+                value={editedData.JORNAL || ''}
+                onChange={(e) => handleFieldChange('JORNAL', e.target.value)}
+                onFocus={() => handleFieldFocus('JORNAL')}
+                onBlur={() => handleFieldBlur('JORNAL')}
+                placeholder="Monto del jornal"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="sueldoBruto" className="cursor-pointer hover:text-blue-600 transition-colors">
+                  {getColumnDisplayName('SUELDO_BRUTO')}
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleConfigureColumn('SUELDO_BRUTO')}
+                  className="h-6 w-6 p-0"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+              </div>
+              <Input
+                id="sueldoBruto"
+                value={editedData.SUELDO_BRUTO || ''}
+                onChange={(e) => handleFieldChange('SUELDO_BRUTO', e.target.value)}
+                onFocus={() => handleFieldFocus('SUELDO_BRUTO')}
+                onBlur={() => handleFieldBlur('SUELDO_BRUTO')}
+                placeholder="Sueldo bruto total"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="total" className="cursor-pointer hover:text-blue-600 transition-colors">
+                  {getColumnDisplayName('TOTAL')}
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleConfigureColumn('TOTAL')}
+                  className="h-6 w-6 p-0"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+              </div>
               <Input
                 id="total"
                 value={editedData.TOTAL || ''}
@@ -298,7 +492,20 @@ export default function EditDataModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="descuentos">Descuentos</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="descuentos" className="cursor-pointer hover:text-blue-600 transition-colors">
+                  {getColumnDisplayName('DESCUENTOS')}
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleConfigureColumn('DESCUENTOS')}
+                  className="h-6 w-6 p-0"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+              </div>
               <Input
                 id="descuentos"
                 value={editedData.DESCUENTOS || ''}
@@ -320,10 +527,21 @@ export default function EditDataModal({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {numericColumns.map((columnKey) => (
                     <div key={columnKey} className="space-y-2">
-                      <Label htmlFor={columnKey}>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor={columnKey} className="cursor-pointer hover:text-blue-600 transition-colors">
                         {getColumnDisplayName(columnKey)}
                         <span className="text-xs text-gray-500 ml-2">({columnKey})</span>
                       </Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleConfigureColumn(columnKey)}
+                          className="h-6 w-6 p-0"
+                        >
+                          <Settings className="h-3 w-3" />
+                        </Button>
+                      </div>
                       <Input
                         id={columnKey}
                         value={editedData[columnKey] || ''}
@@ -369,6 +587,38 @@ export default function EditDataModal({
           </div>
         )}
 
+        {/* Visualización del PDF si está disponible */}
+        {pdfUrl && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Visualización del PDF
+              </Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPdf(!showPdf)}
+              >
+                {showPdf ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+                {showPdf ? 'Ocultar' : 'Mostrar'} PDF
+              </Button>
+            </div>
+            {showPdf && (
+              <div className="border rounded-md overflow-hidden">
+                <iframe
+                  src={pdfUrl}
+                  className="w-full h-96"
+                  title={`PDF: ${fileName}`}
+                  style={{ minHeight: '400px' }}
+                   />
+                 </div>
+               )}
+          </div>
+        )}
+        </div>
+
         <div className="flex justify-end gap-2 pt-4">
           <Button variant="outline" onClick={handleCancel}>
             <X className="h-4 w-4 mr-2" />
@@ -380,6 +630,61 @@ export default function EditDataModal({
           </Button>
         </div>
       </DialogContent>
+
+      {/* Modal de configuración de columna */}
+      <Dialog open={showColumnConfig} onOpenChange={setShowColumnConfig}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Configurar Columna
+            </DialogTitle>
+            <DialogDescription>
+              Cambia el nombre que se muestra para esta columna
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="column-key">Código de Columna</Label>
+              <Input
+                id="column-key"
+                value={selectedColumn}
+                disabled
+                className="bg-gray-50"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="column-alias">Nombre a Mostrar</Label>
+              <Input
+                id="column-alias"
+                value={tempAlias}
+                onChange={(e) => setTempAlias(e.target.value)}
+                placeholder={`Nombre para ${selectedColumn}`}
+                autoFocus
+              />
+              <p className="text-xs text-gray-500">
+                Este nombre aparecerá en lugar del código de columna
+              </p>
+            </div>
+          </div>
+
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t -mx-6 px-6 flex-shrink-0">
+            <Button variant="outline" onClick={handleCancelColumnConfig}>
+              <X className="h-4 w-4 mr-2" />
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveColumnAlias}>
+              <Save className="h-4 w-4 mr-2" />
+              Guardar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

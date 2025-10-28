@@ -21,14 +21,14 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { exportDatabaseBackupClient, downloadBackupFile, formatFileSize, restoreDatabaseFromBackup, clearAllDatabases } from '@/lib/backup-client';
+// import { exportDatabaseBackupClient, downloadBackupFile, formatFileSize, restoreDatabaseFromBackup, clearAllDatabases } from '@/lib/backup-client'; // ELIMINADO
 import { ConfirmBackupModal } from './ConfirmBackupModal';
 import { ClearDatabaseModal } from './ClearDatabaseModal';
 import { BackupDetailsModal } from './BackupDetailsModal';
 import { BackupMetricsTooltip } from './BackupMetricsTooltip';
 import { BackupMetricsButton } from './BackupMetricsButton';
 import { buildAggregatedCsv } from '@/lib/export-aggregated';
-import { db } from '@/lib/db';
+import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { NotificationSystem, useNotifications } from './NotificationSystem';
 
 interface BackupInfo {
@@ -38,6 +38,7 @@ interface BackupInfo {
 }
 
 export default function BackupPanel() {
+  const { dataManager } = useCentralizedDataManager();
   const [backups, setBackups] = useState<BackupInfo[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -339,7 +340,7 @@ export default function BackupPanel() {
   // Funciones de exportación
   const loadConsolidatedData = async () => {
     try {
-      const data = await db.consolidated.toArray();
+      const data = await dataManager.getConsolidated();
       setConsolidatedData(data);
     } catch (error) {
       console.error('Error cargando datos consolidados:', error);
@@ -598,7 +599,7 @@ export default function BackupPanel() {
                         </div>
                         <div className="flex items-center gap-1">
                           <HardDrive className="h-3 w-3" />
-                          {formatFileSize(backup.size)}
+                          {backup.size ? `${(backup.size / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
                         </div>
                       </div>
                       

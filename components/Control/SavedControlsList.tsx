@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { SavedControlDB } from "@/lib/db";
-import { repoDexie } from "@/lib/repo-dexie";
+import type { SavedControlDB } from "@/lib/data-manager-singleton";
+// import { repoDexie } from "@/lib/repo-dexie"; // ELIMINADO
 import { exportControlErrors } from "@/lib/export-control";
 import { toast } from "sonner";
 

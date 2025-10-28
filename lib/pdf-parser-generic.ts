@@ -601,6 +601,36 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
           data["ANTIGUEDAD"] = antiguedadMatch[1].replace(/[^\d.,]/g, '');
         }
         
+        // Buscar jornal
+        const jornalMatch = rawText.match(/JORNAL.*?(\d+[.,]\d+)/i);
+        if (jornalMatch) {
+          data["JORNAL"] = jornalMatch[1].replace(/[^\d.,]/g, '');
+        }
+        
+        // Buscar horas extras
+        const horasExtrasMatch = rawText.match(/HORAS\s+EXTRAS.*?(\d+[.,]\d+)/i);
+        if (horasExtrasMatch) {
+          data["HORAS_EXTRAS"] = horasExtrasMatch[1].replace(/[^\d.,]/g, '');
+        }
+        
+        // Buscar adicionales
+        const adicionalesMatch = rawText.match(/ADICIONAL.*?(\d+[.,]\d+)/i);
+        if (adicionalesMatch) {
+          data["ADICIONALES"] = adicionalesMatch[1].replace(/[^\d.,]/g, '');
+        }
+        
+        // Buscar inasistencias
+        const inasistenciasMatch = rawText.match(/INASISTENCIA.*?(\d+[.,]\d+)/i);
+        if (inasistenciasMatch) {
+          data["INASISTENCIAS"] = inasistenciasMatch[1].replace(/[^\d.,]/g, '');
+        }
+        
+        // Buscar sueldo bruto
+        const sueldoBrutoMatch = rawText.match(/SUELDO\s+BRUTO.*?(\d+[.,]\d+)/i);
+        if (sueldoBrutoMatch) {
+          data["SUELDO_BRUTO"] = sueldoBrutoMatch[1].replace(/[^\d.,]/g, '');
+        }
+        
         // Debug: mostrar datos detectados
         if (debug) {
           console.log("🎯 ESTRATEGIA AMBIENTAL DETECTADA:");

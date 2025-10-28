@@ -9,7 +9,8 @@ import { Edit, Trash2 } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 import { usePagination } from '@/hooks/usePagination';
 import ColumnConfigWithPreview from '@/components/ColumnConfigWithPreview';
-import { ColumnConfigManager } from '@/lib/column-config-manager';
+// import { ColumnConfigManager } from '@/lib/column-config-manager'; // ELIMINADO
+import PdfViewerModal from '@/components/PdfViewerModal';
 import type { ConsolidatedEntity } from '@/lib/repo';
 
 type Props = {
@@ -42,6 +43,23 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
   const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
   const [columnAliases, setColumnAliases] = useState<Record<string, string>>({});
   const [configLoaded, setConfigLoaded] = useState(false);
+  
+  // Estados para el modal de PDF
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [selectedPdfUrl, setSelectedPdfUrl] = useState<string>('');
+  const [selectedReceiptData, setSelectedReceiptData] = useState<{
+    legajo: string;
+    nombre: string;
+    periodo: string;
+    empresa?: string;
+    archivo: string;
+  } | null>(null);
+
+  // Columnas fijas que siempre se muestran
+  const fixedColumns = ['PERIODO'];
+  if (showEmpresa) {
+    fixedColumns.push('EMPRESA');
+  }
 
   // Cargar configuración de columnas al montar el componente
   useEffect(() => {
@@ -49,7 +67,8 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
       if (!session?.user?.id) return;
       
       try {
-        const config = await ColumnConfigManager.getConfig(session.user.id, 'recibos');
+        // const config = await ColumnConfigManager.getConfig(session.user.id, 'recibos'); // ELIMINADO
+        const config = null; // TODO: Implementar con dataManager
         if (config) {
           // Filtrar columnas problemáticas de la configuración guardada
           const cleanVisibleColumns = config.visibleColumns.filter(col => 
@@ -63,8 +82,15 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
             !col.includes('_SISTEMA')
           );
           
-          setVisibleColumns(cleanVisibleColumns);
+          // Combinar columnas fijas con las configurables guardadas
+          const allVisibleColumns = [...fixedColumns, ...cleanVisibleColumns];
+          setVisibleColumns(allVisibleColumns);
           setColumnAliases(config.columnAliases);
+        } else {
+          // Si no hay configuración guardada, inicializar con columnas fijas + todas las configurables
+          const allVisibleColumns = [...fixedColumns, ...configurableColumns];
+          setVisibleColumns(allVisibleColumns);
+          setColumnAliases({});
         }
       } catch (error) {
         console.error('Error loading column config:', error);
@@ -111,6 +137,7 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
           if (key !== 'TEXTO_COMPLETO' && 
               key !== 'PRIMERAS_LINEAS' && 
               key !== 'CUIL' && 
+              key !== 'CUIL_NORM' && // Columna interna - no mostrar
               key !== 'NOMBRE' && 
               key !== 'NRO. DE CUIL' &&
               key !== 'LEGAJO' && // Evitar duplicado con la columna fija
@@ -132,13 +159,20 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
     return Array.from(columns).sort();
   }, [enriched, showEmpresa]);
 
+  // Columnas configurables (excluyendo las fijas)
+  const configurableColumns = allColumns.filter(col => !fixedColumns.includes(col));
+  
   // Inicializar columnas visibles si no están configuradas
   const displayColumns = useMemo(() => {
-    if (visibleColumns.length === 0 && !configLoaded) {
-      return allColumns; // Mostrar todas por defecto solo mientras se carga la configuración
+    // Si aún no se ha cargado la configuración, mostrar todas las columnas configurables
+    if (!configLoaded) {
+      return [...fixedColumns, ...configurableColumns];
     }
-    return visibleColumns.length > 0 ? visibleColumns : allColumns;
-  }, [visibleColumns, allColumns, configLoaded]);
+    
+    // Combinar columnas fijas con las configurables seleccionadas
+    const selectedConfigurableColumns = visibleColumns.filter(col => !fixedColumns.includes(col));
+    return [...fixedColumns, ...selectedConfigurableColumns];
+  }, [visibleColumns, configurableColumns, configLoaded, fixedColumns]);
 
   const handleColumnsChange = async (newVisibleColumns: string[], newAliases: Record<string, string>) => {
     // Filtrar columnas problemáticas antes de guardar
@@ -153,19 +187,23 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
       !col.includes('_SISTEMA')
     );
     
-    setVisibleColumns(cleanVisibleColumns);
-    setColumnAliases(newAliases);
-    onColumnsChange?.(cleanVisibleColumns, newAliases);
+    // Combinar columnas fijas con las configurables seleccionadas
+    const allVisibleColumns = [...fixedColumns, ...cleanVisibleColumns];
     
-    // Guardar configuración en la base de datos
+    setVisibleColumns(allVisibleColumns);
+    setColumnAliases(newAliases);
+    onColumnsChange?.(allVisibleColumns, newAliases);
+    
+    // Guardar configuración en la base de datos (solo las configurables)
     if (session?.user?.id) {
       try {
-        await ColumnConfigManager.saveConfig(
-          session.user.id, 
-          'recibos', 
-          cleanVisibleColumns, 
-          newAliases
-        );
+        // await ColumnConfigManager.saveConfig( // ELIMINADO
+        console.log('TODO: Implementar saveConfig con dataManager', {
+          userId: session.user.id, 
+          tableType: 'recibos', 
+          visibleColumns: cleanVisibleColumns, 
+          aliases: newAliases
+        });
       } catch (error) {
         console.error('Error saving column config:', error);
       }
@@ -176,13 +214,82 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
   const handleResetColumns = async () => {
     if (session?.user?.id) {
       try {
-        await ColumnConfigManager.deleteConfig(session.user.id, 'recibos');
+        // await ColumnConfigManager.deleteConfig(session.user.id, 'recibos'); // ELIMINADO
+        console.log('TODO: Implementar deleteConfig con dataManager', session.user.id, 'recibos');
         setVisibleColumns([]);
         setColumnAliases({});
         onColumnsChange?.([], {});
       } catch (error) {
         console.error('Error resetting column config:', error);
       }
+    }
+  };
+
+  const handleFileClick = async (filename: string, e: React.MouseEvent<HTMLAnchorElement>, rowData?: any) => {
+    e.preventDefault();
+    
+    try {
+      // Limpiar el nombre del archivo (quitar espacios extra)
+      const cleanFilename = filename.trim();
+      
+      // Intentar cargar el archivo para verificar si existe
+      const response = await fetch(`/recibos/${encodeURIComponent(cleanFilename)}`, { method: 'HEAD' });
+      
+      if (response.ok) {
+        // El archivo existe, abrir en modal
+        const pdfUrl = `/recibos/${encodeURIComponent(cleanFilename)}`;
+        setSelectedPdfUrl(pdfUrl);
+        
+        // Preparar datos del recibo para el modal
+        if (rowData) {
+          setSelectedReceiptData({
+            legajo: rowData.legajo || '',
+            nombre: rowData.nombre || '',
+            periodo: rowData.periodo || '',
+            empresa: rowData.data?.EMPRESA || extractEmpresaFromArchivo(rowData.archivo),
+            archivo: cleanFilename
+          });
+        }
+        
+        setShowPdfModal(true);
+        console.log(`✅ Archivo encontrado y abierto en modal: ${cleanFilename}`);
+      } else {
+        // El archivo no existe, mostrar mensaje con sugerencias
+        const suggestions = await getFileSuggestions(cleanFilename);
+        alert(`El archivo "${cleanFilename}" no se encuentra en el servidor.\n\nEsto puede deberse a:\n- El archivo fue eliminado\n- El nombre cambió\n- Error en la base de datos\n\n${suggestions}`);
+        console.warn(`❌ Archivo no encontrado: ${cleanFilename} (Status: ${response.status})`);
+      }
+    } catch (error) {
+      console.error('Error verificando archivo:', error);
+      alert(`Error al verificar el archivo "${filename}". Por favor, intente más tarde.`);
+    }
+  };
+
+  const handleClosePdfModal = () => {
+    setShowPdfModal(false);
+    setSelectedPdfUrl('');
+    setSelectedReceiptData(null);
+  };
+
+  const handleNavigateToReceipt = () => {
+    // Esta función se puede usar para navegar de vuelta a la lista
+    // Por ahora solo cerramos el modal
+    handleClosePdfModal();
+  };
+
+  const getFileSuggestions = async (filename: string): Promise<string> => {
+    try {
+      // Buscar archivos similares en el servidor
+      const response = await fetch('/api/cleanup-files', { method: 'POST' });
+      const result = await response.json();
+      
+      if (result.success && result.totalFiles > 0) {
+        return `Se encontraron ${result.totalFiles} archivos PDF en el servidor. Es posible que el nombre del archivo haya cambiado.`;
+      } else {
+        return 'No se encontraron archivos PDF en el servidor.';
+      }
+    } catch (error) {
+      return 'No se pudo verificar los archivos del servidor.';
     }
   };
 
@@ -223,15 +330,16 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
             Reset
           </Button>
           <ColumnConfigWithPreview
-            columns={allColumns}
+            columns={configurableColumns}
             onColumnsChange={handleColumnsChange}
-            initialVisible={visibleColumns}
+            initialVisible={visibleColumns.filter(col => !fixedColumns.includes(col))}
             initialAliases={columnAliases}
+            fixedColumns={fixedColumns}
           />
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <Table>
+      <div className="overflow-x-auto max-w-full">
+        <Table className="min-w-full">
           <TableHeader>
             <TableRow>
               <TableHead>Legajo</TableHead>
@@ -259,7 +367,48 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
                   <TableCell>{row.data?.EMPRESA || extractEmpresaFromArchivo(row.archivo)}</TableCell>
                 )}
                 {displayColumns.includes('ARCHIVO') && (
-                  <TableCell className="text-sm text-gray-500">{row.archivo}</TableCell>
+                  <TableCell className="text-sm text-gray-500">
+                    {row.archivo && (
+                      <div className="space-y-1">
+                        {row.archivo.includes(',') ? (
+                          // Múltiples archivos
+                          <div className="space-y-0.5">
+                            {row.archivo.split(',').map((filename, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 w-4">#{index + 1}</span>
+                                <a 
+                                  href={`/recibos/${encodeURIComponent(filename.trim())}`} 
+                                  onClick={(e) => handleFileClick(filename.trim(), e, row)}
+                                  className="text-gray-600 hover:text-gray-800 underline cursor-pointer text-xs flex-1 transition-colors"
+                                  title="Verificar y abrir PDF del recibo"
+                                >
+                                  {filename.trim()}
+                                </a>
+                                <span className="text-xs text-gray-400" title="Hacer clic para verificar si el archivo existe">
+                                  📄
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          // Un solo archivo
+                          <div className="flex items-center gap-2">
+                            <a 
+                              href={`/recibos/${encodeURIComponent(row.archivo)}`} 
+                              onClick={(e) => handleFileClick(row.archivo, e, row)}
+                              className="text-gray-600 hover:text-gray-800 underline cursor-pointer transition-colors"
+                              title="Verificar y abrir PDF del recibo"
+                            >
+                              {row.archivo}
+                            </a>
+                            <span className="text-xs text-gray-400" title="Hacer clic para verificar si el archivo existe">
+                              📄
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </TableCell>
                 )}
                 {displayColumns.filter(col => !['PERIODO', 'EMPRESA', 'ARCHIVO'].includes(col)).map(column => (
                   <TableCell key={column} className="text-right">
@@ -313,6 +462,15 @@ export default function TablaAgregada({ data, showEmpresa = false, onColumnsChan
         itemsPerPage={itemsPerPage}
         onPageChange={setCurrentPage}
         onItemsPerPageChange={setItemsPerPage}
+      />
+
+      {/* Modal de visualización de PDF */}
+      <PdfViewerModal
+        open={showPdfModal}
+        onClose={handleClosePdfModal}
+        pdfUrl={selectedPdfUrl}
+        receiptData={selectedReceiptData}
+        onNavigateToReceipt={handleNavigateToReceipt}
       />
     </div>
   );

@@ -1,9 +1,24 @@
 // lib/descuentos-manager.ts
-import { db, Descuento, generateDescuentoId, calculateMontoCuota, calculateCuotasRestantes } from './db';
+// import { Descuento, generateDescuentoId, calculateMontoCuota, calculateCuotasRestantes } from './db'; // REMOVIDO - IndexedDB roto
+import { Descuento } from './data-manager-singleton';
 import { logUserActivity } from './user-management';
+import type { DataManager } from './data-manager-singleton';
+
+// Funciones helper movidas desde db.ts
+export function generateDescuentoId(): string {
+  return `descuento-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+export function calculateMontoCuota(monto: number, cantidadCuotas: number): number {
+  return Math.round((monto / cantidadCuotas) * 100) / 100;
+}
+
+export function calculateCuotasRestantes(cuotaActual: number, cantidadCuotas: number): number {
+  return Math.max(0, cantidadCuotas - cuotaActual);
+}
 
 // Gestión de descuentos
-export async function createDescuento(descuentoData: Omit<Descuento, 'id' | 'montoCuota' | 'fechaCreacion'>): Promise<Descuento> {
+export async function createDescuento(dataManager: DataManager, descuentoData: Omit<Descuento, 'id' | 'montoCuota' | 'fechaCreacion'>): Promise<Descuento> {
   const montoCuota = calculateMontoCuota(descuentoData.monto, descuentoData.cantidadCuotas);
   
   const descuento: Descuento = {
@@ -13,7 +28,7 @@ export async function createDescuento(descuentoData: Omit<Descuento, 'id' | 'mon
     ...descuentoData
   };
   
-  await db.descuentos.add(descuento);
+  await dataManager.addDescuento(descuento);
   await logUserActivity(descuentoData.creadoPor, 'descuento:create', 'descuento', descuento.id, { 
     legajo: descuentoData.legajo,
     monto: descuentoData.monto,
@@ -22,12 +37,13 @@ export async function createDescuento(descuentoData: Omit<Descuento, 'id' | 'mon
   return descuento;
 }
 
-export async function getDescuentoById(id: string): Promise<Descuento | undefined> {
-  return await db.descuentos.get(id);
+export async function getDescuentoById(dataManager: DataManager, id: string): Promise<Descuento | undefined> {
+  const descuentos = await dataManager.getDescuentos();
+  return descuentos.find(d => d.id === id);
 }
 
-export async function updateDescuento(id: string, updates: Partial<Descuento>, modificadoPor: string): Promise<void> {
-  const descuento = await db.descuentos.get(id);
+export async function updateDescuento(dataManager: DataManager, id: string, updates: Partial<Descuento>, modificadoPor: string): Promise<void> {
+  const descuento = await getDescuentoById(dataManager, id);
   if (!descuento) throw new Error('Descuento no encontrado');
   
   // Recalcular monto de cuota si cambió el monto o cantidad de cuotas
@@ -38,7 +54,7 @@ export async function updateDescuento(id: string, updates: Partial<Descuento>, m
     montoCuota = calculateMontoCuota(monto, cuotas);
   }
   
-  await db.descuentos.update(id, { 
+  await dataManager.updateDescuento(id, { 
     ...updates, 
     montoCuota,
     modificadoPor,
@@ -48,78 +64,74 @@ export async function updateDescuento(id: string, updates: Partial<Descuento>, m
   await logUserActivity(modificadoPor, 'descuento:update', 'descuento', id, { updates });
 }
 
-export async function deleteDescuento(id: string, deletedBy: string): Promise<void> {
-  await db.descuentos.delete(id);
+export async function deleteDescuento(dataManager: DataManager, id: string, deletedBy: string): Promise<void> {
+  await dataManager.deleteDescuento(id);
   await logUserActivity(deletedBy, 'descuento:delete', 'descuento', id, { action: 'descuento_deleted' });
 }
 
 // Búsquedas y filtros
-export async function getDescuentosByLegajo(legajo: string): Promise<Descuento[]> {
-  return await db.descuentos.where('legajo').equals(legajo).toArray();
+export async function getDescuentosByLegajo(dataManager: DataManager, legajo: string): Promise<Descuento[]> {
+  const descuentos = await dataManager.getDescuentos();
+  return descuentos.filter(d => d.legajo === legajo);
 }
 
-export async function getDescuentosByEmpresa(empresa: string): Promise<Descuento[]> {
-  return await db.descuentos.where('empresa').equals(empresa).toArray();
+export async function getDescuentosByEmpresa(dataManager: DataManager, empresa: string): Promise<Descuento[]> {
+  const descuentos = await dataManager.getDescuentos();
+  return descuentos.filter(d => d.empresa === empresa);
 }
 
-export async function getDescuentosActivos(empresa?: string): Promise<Descuento[]> {
-  let query = db.descuentos.where('estado').equals('ACTIVO');
-  if (empresa) {
-    query = query.and(descuento => descuento.empresa === empresa);
-  }
-  return await query.toArray();
+export async function getDescuentosActivos(dataManager: DataManager, empresa?: string): Promise<Descuento[]> {
+  const descuentos = await dataManager.getDescuentos();
+  return descuentos.filter(d => {
+    if (d.estado !== 'ACTIVO') return false;
+    if (empresa && d.empresa !== empresa) return false;
+    return true;
+  });
 }
 
-export async function getDescuentosByTipo(tipo: Descuento['tipoDescuento'], empresa?: string): Promise<Descuento[]> {
-  let query = db.descuentos.where('tipoDescuento').equals(tipo);
-  if (empresa) {
-    query = query.and(descuento => descuento.empresa === empresa);
-  }
-  return await query.toArray();
+export async function getDescuentosByTipo(dataManager: DataManager, tipo: Descuento['tipoDescuento'], empresa?: string): Promise<Descuento[]> {
+  const descuentos = await dataManager.getDescuentos();
+  return descuentos.filter(d => {
+    if (d.tipoDescuento !== tipo) return false;
+    if (empresa && d.empresa !== empresa) return false;
+    return true;
+  });
 }
 
-export async function getDescuentosByTags(tags: string[], empresa?: string): Promise<Descuento[]> {
-  let query = db.descuentos;
-  if (empresa) {
-    query = query.where('empresa').equals(empresa);
-  }
-  
-  const allDescuentos = await query.toArray();
-  return allDescuentos.filter(descuento => 
-    tags.some(tag => descuento.tags.includes(tag))
-  );
+export async function getDescuentosByTags(dataManager: DataManager, tags: string[], empresa?: string): Promise<Descuento[]> {
+  const descuentos = await dataManager.getDescuentos();
+  return descuentos.filter(d => {
+    if (empresa && d.empresa !== empresa) return false;
+    return tags.some(tag => d.tags.includes(tag));
+  });
 }
 
-export async function searchDescuentosByNombre(nombre: string, empresa?: string): Promise<Descuento[]> {
-  let query = db.descuentos;
-  if (empresa) {
-    query = query.where('empresa').equals(empresa);
-  }
-  
-  const allDescuentos = await query.toArray();
-  return allDescuentos.filter(descuento => 
-    descuento.nombre.toLowerCase().includes(nombre.toLowerCase())
-  );
+export async function searchDescuentosByNombre(dataManager: DataManager, nombre: string, empresa?: string): Promise<Descuento[]> {
+  const descuentos = await dataManager.getDescuentos();
+  return descuentos.filter(d => {
+    if (empresa && d.empresa !== empresa) return false;
+    return d.nombre.toLowerCase().includes(nombre.toLowerCase());
+  });
 }
 
 // Cálculos y estadísticas
-export async function getTotalDescuentosByLegajo(legajo: string): Promise<number> {
-  const descuentos = await getDescuentosByLegajo(legajo);
+export async function getTotalDescuentosByLegajo(dataManager: DataManager, legajo: string): Promise<number> {
+  const descuentos = await getDescuentosByLegajo(dataManager, legajo);
   return descuentos
     .filter(d => d.estado === 'ACTIVO')
     .reduce((total, d) => total + d.monto, 0);
 }
 
-export async function getTotalDescuentosByEmpresa(empresa: string): Promise<number> {
-  const descuentos = await getDescuentosByEmpresa(empresa);
+export async function getTotalDescuentosByEmpresa(dataManager: DataManager, empresa: string): Promise<number> {
+  const descuentos = await getDescuentosByEmpresa(dataManager, empresa);
   return descuentos
     .filter(d => d.estado === 'ACTIVO')
     .reduce((total, d) => total + d.monto, 0);
 }
 
-export async function getDescuentosProximosAVencer(dias: number = 30): Promise<Descuento[]> {
+export async function getDescuentosProximosAVencer(dataManager: DataManager, dias: number = 30): Promise<Descuento[]> {
   const fechaLimite = Date.now() + (dias * 24 * 60 * 60 * 1000);
-  const descuentos = await db.descuentos.where('estado').equals('ACTIVO').toArray();
+  const descuentos = await dataManager.getDescuentos();
   
   return descuentos.filter(descuento => {
     if (!descuento.fechaFin) return false;
@@ -127,7 +139,7 @@ export async function getDescuentosProximosAVencer(dias: number = 30): Promise<D
   });
 }
 
-export async function getEstadisticasDescuentos(empresa?: string): Promise<{
+export async function getEstadisticasDescuentos(dataManager: DataManager, empresa?: string): Promise<{
   total: number;
   activos: number;
   suspendidos: number;
@@ -143,7 +155,7 @@ export async function getEstadisticasDescuentos(empresa?: string): Promise<{
     monto: number;
   }>;
 }> {
-  let descuentos = await db.descuentos.toArray();
+  let descuentos = await dataManager.getDescuentos();
   if (empresa) {
     descuentos = descuentos.filter(d => d.empresa === empresa);
   }

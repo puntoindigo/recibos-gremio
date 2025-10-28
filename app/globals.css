@@ -2,6 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Solución global para el padding superior de los modales */
+@layer components {
+  .modal-content-fix {
+    padding-top: 1.5rem;
+  }
+}
+
+/* Animaciones para el menú */
+@keyframes fadeInSlide {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutLeft {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 /* Variables CSS originales de shadcn/ui */
 @layer base {
   :root {

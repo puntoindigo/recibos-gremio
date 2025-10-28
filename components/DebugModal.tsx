@@ -21,7 +21,7 @@ import {
   Play
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { db } from '@/lib/db';
+import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { useUploadResume } from '@/hooks/useUploadResume';
 
 interface DebugModalProps {
@@ -71,6 +71,7 @@ export default function DebugModal({
   processingFiles,
   lastProcessedIndex
 }: DebugModalProps) {
+  const { dataManager } = useCentralizedDataManager();
   const [isResizing, setIsResizing] = useState(false);
   const [modalSize, setModalSize] = useState({ width: 800, height: 600 });
   const [uploadSessions, setUploadSessions] = useState<any[]>([]);
@@ -131,24 +132,61 @@ export default function DebugModal({
   }, [isOpen]);
 
   const handleDeleteVisible = async () => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar todos los registros visibles?')) {
-      try {
-        await onDeleteVisible();
-        toast.success('Registros eliminados correctamente');
-      } catch (error) {
-        toast.error('Error eliminando registros');
+    try {
+      // Obtener información de los registros visibles antes de eliminar
+      const consolidatedCount = await dataManager.countConsolidated();
+      const receiptsCount = await dataManager.countReceipts();
+      
+      if (consolidatedCount === 0 && receiptsCount === 0) {
+        toast.info('No hay registros para eliminar');
+        return;
       }
+      
+      const confirmed = window.confirm(
+        `¿Estás seguro de que quieres eliminar todos los recibos visibles?\n\n` +
+        `Esta acción eliminará:\n` +
+        `- ${consolidatedCount} recibos procesados\n` +
+        `- ${receiptsCount} archivos de recibos\n` +
+        `- Todos los archivos PDF asociados\n\n` +
+        `Esta acción no se puede deshacer.`
+      );
+      
+      if (confirmed) {
+        await onDeleteVisible();
+        toast.success(`✅ Eliminados ${consolidatedCount + receiptsCount} registros correctamente`);
+      }
+    } catch (error) {
+      toast.error('Error eliminando registros');
+      console.error('Error eliminando registros:', error);
     }
   };
 
   const handleDeleteControl = async () => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar el control actual?')) {
-      try {
-        await onDeleteControl();
-        toast.success('Control eliminado correctamente');
-      } catch (error) {
-        toast.error('Error eliminando control');
+    try {
+      // Obtener información del control actual
+      const controlsCount = await dataManager.countSavedControls();
+      
+      if (controlsCount === 0) {
+        toast.info('No hay controles para eliminar');
+        return;
       }
+      
+      const confirmed = window.confirm(
+        `¿Estás seguro de que quieres eliminar el control actual?\n\n` +
+        `Esta acción eliminará:\n` +
+        `- ${controlsCount} controles guardados\n` +
+        `- Datos de resumen asociados\n` +
+        `- Historial de controles\n\n` +
+        `Esta acción no se puede deshacer.`
+      );
+      
+      if (confirmed) {
+        await onDeleteControl();
+        toast.success(`✅ Control eliminado correctamente`);
+      }
+    } catch (error) {
+      toast.error('Error eliminando control');
+      console.error('Error eliminando control:', error);
     }
   };
 
@@ -187,8 +225,9 @@ export default function DebugModal({
   const loadUploadSessions = async () => {
     setLoadingSessions(true);
     try {
-      const { UploadSessionManager } = await import('@/lib/upload-session-manager');
-      const sessions = await UploadSessionManager.getAllSessions();
+      // const { UploadSessionManager } = await import('@/lib/upload-session-manager'); // ELIMINADO
+      // const sessions = await UploadSessionManager.getAllSessions(); // ELIMINADO
+      const sessions = []; // TODO: Implementar con dataManager
       
       // Ordenar por fecha de inicio (más recientes primero)
       const sortedSessions = sessions.sort((a, b) => b.startedAt - a.startedAt);
@@ -238,7 +277,7 @@ export default function DebugModal({
     
     try {
       // 1. Obtener todas las sesiones
-      const allSessions = await db.uploadSessions.toArray();
+      const allSessions = await dataManager.getUploadSessions();
       console.log('📊 Total de sesiones en la base de datos:', allSessions.length);
       
       // 2. Analizar cada sesión
@@ -350,7 +389,7 @@ export default function DebugModal({
       console.log(`   Error: ${mockSession.errorMessage}`);
       
       // Insertar la sesión en la base de datos
-      await db.uploadSessions.add(mockSession);
+      await dataManager.addUploadSession(mockSession);
       console.log('✅ Sesión simulada creada en la base de datos');
       
       // Recargar la lista de sesiones
@@ -538,10 +577,27 @@ export default function DebugModal({
                       variant="outline"
                       size="sm"
                       onClick={async () => {
-                        if (window.confirm('¿Estás seguro de que quieres eliminar todas las sesiones de subida?')) {
+                        // Contar sesiones antes de eliminar
+                        const sessionCount = await dataManager.countUploadSessions();
+                        if (sessionCount === 0) {
+                          toast.info('No hay sesiones de subida para eliminar');
+                          return;
+                        }
+                        
+                        const confirmed = window.confirm(
+                          `¿Estás seguro de que quieres eliminar ${sessionCount} sesiones de subida?\n\n` +
+                          `Esta acción eliminará:\n` +
+                          `- ${sessionCount} sesiones de subida\n` +
+                          `- Todos los datos de progreso asociados\n` +
+                          `- Historial de subidas\n\n` +
+                          `Esta acción no se puede deshacer.`
+                        );
+                        
+                        if (confirmed) {
                           try {
-                            await db.uploadSessions.clear();
-                            console.log('🧹 Sesiones de subida eliminadas');
+                            await dataManager.clearUploadSessions();
+                            console.log(`🧹 ${sessionCount} sesiones de subida eliminadas`);
+                            toast.success(`✅ Eliminadas ${sessionCount} sesiones de subida`);
                             loadUploadSessions();
                             // Notificar al componente padre para recargar datos
                             onClearUploadSessions?.();

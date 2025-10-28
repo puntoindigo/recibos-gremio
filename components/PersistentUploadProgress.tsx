@@ -18,7 +18,7 @@ import {
   Play,
   RotateCcw
 } from 'lucide-react';
-import { UploadSessionManager, type UploadSessionState } from '@/lib/upload-session-manager';
+// import { UploadSessionManager, type UploadSessionState } from '@/lib/upload-session-manager'; // ELIMINADO
 import { useUploadResume } from '@/hooks/useUploadResume';
 import type { SimpleProcessingResult } from '@/lib/simple-pdf-processor';
 

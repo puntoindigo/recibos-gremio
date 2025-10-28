@@ -39,8 +39,12 @@ function extraerConceptoSUMAR(texto: string, concepto: string): string {
       if (argentineValues && argentineValues.length > 0) {
         // Para CUOTA GREMIAL y SEG. SEPELIO, tomar el segundo valor
         // Para CUOTA APORT., tomar el primer valor
+        // Para 5.3.10, tomar el tercer valor (valor monetario, no días)
         if (concepto.includes("CUOTA GREMIAL") || concepto.includes("SEG. SEPELIO")) {
           return argentineValues.length > 1 ? argentineValues[1] : argentineValues[0];
+        } else if (concepto.includes("5.3.10") || concepto.includes("5310")) {
+          // Para 5.3.10, tomar el tercer valor (valor monetario, no días)
+          return argentineValues.length > 2 ? argentineValues[2] : (argentineValues.length > 1 ? argentineValues[1] : argentineValues[0]);
         } else {
           return argentineValues[0];
         }
@@ -304,6 +308,17 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     // NO sobrescribir LEGAJO - mantener el legajo original para split en cascada
   }
 
+  // Extraer conceptos básicos de SUMAR
+  const jornal = extraerConceptoSUMAR(rawText, "JORNAL") || extraerConceptoSUMAR(rawText, "JORNALES");
+  const horasExtras = extraerConceptoSUMAR(rawText, "HORAS EXTRAS") || extraerConceptoSUMAR(rawText, "H.EXTRA");
+  const antiguedad = extraerConceptoSUMAR(rawText, "ANTIGUEDAD");
+  const adicionales = extraerConceptoSUMAR(rawText, "ADICIONALES") || extraerConceptoSUMAR(rawText, "ADICIONAL");
+  const inasistencias = extraerConceptoSUMAR(rawText, "INASISTENCIAS") || extraerConceptoSUMAR(rawText, "INASISTENCIA");
+  const sueldoBasico = extraerConceptoSUMAR(rawText, "SUELDO BASICO") || extraerConceptoSUMAR(rawText, "SUELDO BÁSICO");
+  const sueldoBruto = extraerConceptoSUMAR(rawText, "SUELDO BRUTO");
+  const total = extraerConceptoSUMAR(rawText, "TOTAL") || extraerConceptoSUMAR(rawText, "TOTAL A COBRAR");
+  const descuentos = extraerConceptoSUMAR(rawText, "DESCUENTOS") || extraerConceptoSUMAR(rawText, "TOTAL DESCUENTOS");
+
   // Extraer conceptos específicos de SUMAR y mapearlos a códigos estándar
   const cuotaGremial = extraerConceptoSUMAR(rawText, "CUOTA GREMIAL");
   const segSepelio = extraerConceptoSUMAR(rawText, "SEG. SEPELIO");
@@ -312,10 +327,20 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   const descMutual = extraerConceptoSUMAR(rawText, "DESCUENTO MUTUAL");
   const item5310 = extraerConceptoSUMAR(rawText, "CODIGO 5.3.10") || 
                    extraerConceptoSUMAR(rawText, "5.3.10") ||
-                   extraerConceptoSUMAR(rawText, "ITEM 5.3.10");
+                   extraerConceptoSUMAR(rawText, "ITEM 5.3.10") ||
+                   extraerConceptoSUMAR(rawText, "5310");
 
   // Debug: mostrar los valores extraídos antes de toDotDecimal
   if (debug) console.log("🔍 Debug SUMAR - Valores extraídos:", {
+    jornal,
+    horasExtras,
+    antiguedad,
+    adicionales,
+    inasistencias,
+    sueldoBasico,
+    sueldoBruto,
+    total,
+    descuentos,
     cuotaGremial,
     segSepelio,
     cuotaAport,
@@ -323,6 +348,17 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     descMutual,
     item5310
   });
+
+  // Mapear conceptos básicos
+  data["JORNAL"] = toDotDecimal(jornal);
+  data["HORAS_EXTRAS"] = toDotDecimal(horasExtras);
+  data["ANTIGUEDAD"] = toDotDecimal(antiguedad);
+  data["ADICIONALES"] = toDotDecimal(adicionales);
+  data["INASISTENCIAS"] = toDotDecimal(inasistencias);
+  data["SUELDO_BASICO"] = toDotDecimal(sueldoBasico);
+  data["SUELDO_BRUTO"] = toDotDecimal(sueldoBruto);
+  data["TOTAL"] = toDotDecimal(total);
+  data["DESCUENTOS"] = toDotDecimal(descuentos);
 
   // Mapear a códigos estándar (corregido según la especificación)
   data["20540"] = toDotDecimal(cuotaGremial);  // CONTRIBUCION SOLIDARIA (CUOTA GREMIAL)

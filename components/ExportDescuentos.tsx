@@ -5,7 +5,7 @@ import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import * as XLSX from 'xlsx';
 import { formatTimestampForDisplay } from '@/lib/date-utils';
-import type { Descuento } from '@/lib/db';
+import type { Descuento } from '@/lib/data-manager-singleton';
 
 interface ExportDescuentosProps {
   descuentos: Descuento[];

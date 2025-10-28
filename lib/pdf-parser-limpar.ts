@@ -614,6 +614,28 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     }
   }
 
+  // Extraer conceptos básicos de LIMPAR
+  const jornal = extraerConceptoLimpar(rawText, "JORNAL", debug) || extraerConceptoLimpar(rawText, "JORNALES", debug);
+  const horasExtras = extraerConceptoLimpar(rawText, "HORAS EXTRAS", debug) || extraerConceptoLimpar(rawText, "H.EXTRA", debug);
+  const antiguedad = extraerConceptoLimpar(rawText, "ANTIGUEDAD", debug);
+  const adicionales = extraerConceptoLimpar(rawText, "ADICIONALES", debug) || extraerConceptoLimpar(rawText, "ADICIONAL", debug);
+  const inasistencias = extraerConceptoLimpar(rawText, "INASISTENCIAS", debug) || extraerConceptoLimpar(rawText, "INASISTENCIA", debug);
+  const sueldoBasico = extraerConceptoLimpar(rawText, "SUELDO BASICO", debug) || extraerConceptoLimpar(rawText, "SUELDO BÁSICO", debug);
+  const sueldoBruto = extraerConceptoLimpar(rawText, "SUELDO BRUTO", debug);
+  const total = extraerConceptoLimpar(rawText, "TOTAL", debug) || extraerConceptoLimpar(rawText, "TOTAL A COBRAR", debug);
+  const descuentos = extraerConceptoLimpar(rawText, "DESCUENTOS", debug) || extraerConceptoLimpar(rawText, "TOTAL DESCUENTOS", debug);
+
+  // Mapear conceptos básicos
+  if (jornal && jornal !== "0.00") data["JORNAL"] = toDotDecimal(jornal);
+  if (horasExtras && horasExtras !== "0.00") data["HORAS_EXTRAS"] = toDotDecimal(horasExtras);
+  if (antiguedad && antiguedad !== "0.00") data["ANTIGUEDAD"] = toDotDecimal(antiguedad);
+  if (adicionales && adicionales !== "0.00") data["ADICIONALES"] = toDotDecimal(adicionales);
+  if (inasistencias && inasistencias !== "0.00") data["INASISTENCIAS"] = toDotDecimal(inasistencias);
+  if (sueldoBasico && sueldoBasico !== "0.00") data["SUELDO_BASICO"] = toDotDecimal(sueldoBasico);
+  if (sueldoBruto && sueldoBruto !== "0.00") data["SUELDO_BRUTO"] = toDotDecimal(sueldoBruto);
+  if (total && total !== "0.00") data["TOTAL"] = toDotDecimal(total);
+  if (descuentos && descuentos !== "0.00") data["DESCUENTOS"] = toDotDecimal(descuentos);
+
   // Configurar empresa
   data["EMPRESA"] = "LIMPAR";
 

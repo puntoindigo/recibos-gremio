@@ -4,9 +4,12 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useEmpresasFromReceipts } from '@/hooks/useEmpresasFromReceipts';
+import { usePagination } from '@/hooks/usePagination';
+import { shouldShowPagination, applyPaginationRule } from '@/lib/pagination-utils';
 import TagsFilter from './TagsFilter';
 import ExportDescuentos from './ExportDescuentos';
 import DescuentosColumnSelector from './DescuentosColumnSelector';
+import Pagination from './Pagination';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,25 +30,25 @@ import {
   Building2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { 
-  getDescuentosByEmpresa, 
-  getDescuentosActivos,
   getEstadisticasDescuentos,
-  deleteDescuento,
   Descuento
 } from '@/lib/descuentos-manager';
 import { formatTimestampForDisplay } from '@/lib/date-utils';
 import { canManageDescuentos } from '@/lib/user-management';
 import DescuentoModal from './DescuentoModal';
 import FichaEmpleadoModal from './FichaEmpleadoModal';
-import ConfirmModal from './ConfirmModal';
+// import ConfirmModal from './ConfirmModal';
 
 interface DescuentosPanelProps {
   empresaFiltro: string;
   employees: any[]; // ConsolidatedEntity[]
+  onCreateDescuento?: () => void; // Callback para crear descuento desde fuera
 }
 
-export default function DescuentosPanel({ empresaFiltro, employees }: DescuentosPanelProps) {
+export default function DescuentosPanel({ empresaFiltro, employees, onCreateDescuento }: DescuentosPanelProps) {
+  const { dataManager } = useCentralizedDataManager();
   const { data: session } = useSession();
   const { empresas: empresasFromReceipts, isLoading: empresasLoading } = useEmpresasFromReceipts();
   const [descuentos, setDescuentos] = useState<Descuento[]>([]);
@@ -87,6 +90,7 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
     const handleOpenNewDescuento = () => {
       console.log('🎯 Evento openNewDescuento recibido, abriendo modal...');
       console.log('📊 Estado actual del modal:', showModal);
+      console.log('🔍 Componente DescuentosPanel - Abriendo modal de descuento');
       setShowModal(true);
       console.log('✅ Modal de descuento activado');
     };
@@ -128,13 +132,13 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
     try {
       // Cargar descuentos de la base de datos
       const descuentosData = empresaFiltroDescuentos && empresaFiltroDescuentos !== 'TODOS' 
-        ? await getDescuentosByEmpresa(empresaFiltroDescuentos)
-        : await getDescuentosActivos();
+        ? await dataManager.getDescuentosByLegajo(empresaFiltroDescuentos)
+        : await dataManager.getDescuentos();
       
       setDescuentos(descuentosData);
       
       // Cargar estadísticas
-      const stats = await getEstadisticasDescuentos(empresaFiltroDescuentos && empresaFiltroDescuentos !== 'TODOS' ? empresaFiltroDescuentos : undefined);
+      const stats = await getEstadisticasDescuentos(dataManager, empresaFiltroDescuentos && empresaFiltroDescuentos !== 'TODOS' ? empresaFiltroDescuentos : undefined);
       setEstadisticas(stats);
     } catch (error) {
       console.error('Error cargando descuentos:', error);
@@ -168,6 +172,10 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
   const handleCreateDescuento = () => {
     setSelectedDescuento(null);
     setShowModal(true);
+    // Llamar al callback si existe
+    if (onCreateDescuento) {
+      onCreateDescuento();
+    }
   };
 
   const handleEditDescuento = (descuento: Descuento) => {
@@ -184,11 +192,11 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
     if (!descuentoToDelete) return;
     
     try {
-      await deleteDescuento(descuentoToDelete.id, session?.user?.id || '');
+      await dataManager.deleteDescuento(descuentoToDelete.id);
       setDescuentos(prev => prev.filter(d => d.id !== descuentoToDelete.id));
       toast.success('Descuento eliminado correctamente');
       // Recargar estadísticas
-      const stats = await getEstadisticasDescuentos(empresaFiltro && empresaFiltro !== 'Todas' ? empresaFiltro : undefined);
+      const stats = await getEstadisticasDescuentos(dataManager, empresaFiltro && empresaFiltro !== 'Todas' ? empresaFiltro : undefined);
       setEstadisticas(stats);
     } catch (error) {
       console.error('Error eliminando descuento:', error);
@@ -221,6 +229,16 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
       // Ordenar por fecha de creación descendente (más recientes primero)
       return (b.fechaCreacion || 0) - (a.fechaCreacion || 0);
     });
+
+  // Paginación - solo si hay 25+ registros
+  const showPagination = shouldShowPagination(filteredDescuentos.length);
+  const pagination = usePagination({
+    data: filteredDescuentos,
+    initialItemsPerPage: 25
+  });
+
+  // Usar datos paginados si hay 25+ registros, sino mostrar todos
+  const displayDescuentos = applyPaginationRule(filteredDescuentos, pagination);
 
   const getEstadoBadgeColor = (estado: string) => {
     switch (estado) {
@@ -314,10 +332,30 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
       {estadisticas?.descuentosPorEmpresa && estadisticas.descuentosPorEmpresa.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Descuentos por Empresa</CardTitle>
-            <CardDescription>
-              Distribución de descuentos por empresa
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">Descuentos por Empresa</CardTitle>
+                <CardDescription>
+                  Distribución de descuentos por empresa
+                </CardDescription>
+              </div>
+              {empresaFiltroDescuentos && empresaFiltroDescuentos !== "TODOS" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setEmpresaFiltroDescuentos("TODOS");
+                    toast.success("Filtro removido", {
+                      description: "Mostrando descuentos de todas las empresas"
+                    });
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <X className="h-4 w-4" />
+                  Ver Todas
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -368,7 +406,7 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
               </CardDescription>
             </div>
             {canManage && (
-              <Button onClick={handleCreateDescuento}>
+              <Button onClick={handleCreateDescuento} data-testid="new-descuento-button">
                 <Plus className="h-4 w-4 mr-2" />
                 <span>Nuevo Descuento</span>
                 <kbd className="ml-2 px-1.5 py-0.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-md">
@@ -523,7 +561,7 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredDescuentos.map((descuento) => (
+                {displayDescuentos.map((descuento) => (
                   <tr key={descuento.id} className="hover:bg-gray-50">
                     {visibleColumns.includes('legajo') && (
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -647,6 +685,18 @@ export default function DescuentosPanel({ empresaFiltro, employees }: Descuentos
           </div>
         </CardContent>
       </Card>
+
+      {/* Paginación - solo si hay 25+ registros */}
+      {showPagination && (
+        <Pagination
+          currentPage={pagination.currentPage}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.totalItems}
+          itemsPerPage={pagination.itemsPerPage}
+          onPageChange={pagination.setCurrentPage}
+          onItemsPerPageChange={pagination.setItemsPerPage}
+        />
+      )}
 
       {/* Modales */}
       {showModal && (

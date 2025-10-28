@@ -11,7 +11,8 @@ import {
   Settings,
   CheckSquare,
   BarChart3,
-  Percent
+  Percent,
+  UserCheck
 } from 'lucide-react';
 
 export interface ConfigurationState {
@@ -31,6 +32,7 @@ export interface ConfigurationState {
   // Herramientas del Sistema
   enablePendingItems: boolean;
   enableUserManagement: boolean;
+  enableEmployeeManagement: boolean;
   enableBackupSystem: boolean;
   enableControlSystem: boolean;
   enableDiscountsSystem: boolean;
@@ -58,6 +60,7 @@ const defaultConfig: ConfigurationState = {
   // Herramientas del Sistema
   enablePendingItems: true,
   enableUserManagement: true,
+  enableEmployeeManagement: true,
   enableBackupSystem: true,
   enableControlSystem: true,
   enableDiscountsSystem: true,
@@ -153,6 +156,16 @@ export const useConfiguration = () => {
         enabledConfigKey: 'enableDiscountsSystem'
       },
       { 
+        id: 'empleados', 
+        label: 'Empleados', 
+        icon: UserCheck, 
+        color: 'text-emerald-600',
+        bgColor: 'bg-emerald-50',
+        activeBgColor: 'bg-emerald-100',
+        shortcut: 'M',
+        enabledConfigKey: 'enableEmployeeManagement'
+      },
+      { 
         id: 'usuarios', 
         label: 'Usuarios', 
         icon: Users, 
@@ -204,11 +217,27 @@ export const useConfiguration = () => {
       },
     ];
 
-    return items.filter(item => {
-      if (item.enabledConfigKey === null) return true;
+    const filteredItems = items.filter(item => {
+      if (item.enabledConfigKey === null) {
+        return true;
+      }
       // @ts-ignore
-      return (config as any)[item.enabledConfigKey];
+      const isEnabled = (config as any)[item.enabledConfigKey];
+      
+      // Debug para empleados
+      if (item.id === 'empleados') {
+        console.log('🔍 Debug empleados:', {
+          itemId: item.id,
+          enabledConfigKey: item.enabledConfigKey,
+          configValue: (config as any)[item.enabledConfigKey],
+          isEnabled
+        });
+      }
+      
+      return isEnabled;
     });
+    
+    return filteredItems;
   }, [config]);
 
   return {

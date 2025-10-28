@@ -37,6 +37,25 @@ function extraerConceptoTYSA(texto: string, concepto: string): string {
       const europeanValues = afterConcept.match(/(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+[.,]\d+|\d+)/g);
       
       if (europeanValues && europeanValues.length > 0) {
+        // Para JORNAL, tomar el valor monetario, no el porcentaje o cantidad
+        if (concepto.includes("JORNAL")) {
+          // Buscar el valor monetario más grande (probablemente el correcto)
+          const monetaryValues = europeanValues.filter(val => 
+            parseFloat(val.replace(/[^\d.,]/g, '').replace(',', '.')) > 1000
+          );
+          return monetaryValues.length > 0 ? monetaryValues[0] : europeanValues[0];
+        }
+        
+        // Para HORAS EXTRAS, evitar capturar el porcentaje (100%)
+        if (concepto.includes("HORAS EXTRAS")) {
+          // Buscar valores que no sean exactamente "100" o porcentajes
+          const nonPercentageValues = europeanValues.filter(val => 
+            val !== "100" && !val.includes("%") && 
+            parseFloat(val.replace(/[^\d.,]/g, '').replace(',', '.')) > 100
+          );
+          return nonPercentageValues.length > 0 ? nonPercentageValues[0] : europeanValues[0];
+        }
+        
         return europeanValues[0];
       }
       
@@ -297,6 +316,24 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     }
   }
 
+  // Extraer conceptos básicos de TYSA
+  const jornal = extraerConceptoTYSA(rawText, "Sueldo/Jornal") || 
+                 extraerConceptoTYSA(rawText, "JORNAL") || 
+                 extraerConceptoTYSA(rawText, "JORNALES");
+  const horasExtras = extraerConceptoTYSA(rawText, "Horas Extras 100%") || 
+                      extraerConceptoTYSA(rawText, "HORAS EXTRAS") || 
+                      extraerConceptoTYSA(rawText, "H.EXTRA");
+  const antiguedad = extraerConceptoTYSA(rawText, "Adicional Antiguedad") || 
+                     extraerConceptoTYSA(rawText, "ANTIGUEDAD");
+  const adicionales = extraerConceptoTYSA(rawText, "Adicional 18 %") || 
+                      extraerConceptoTYSA(rawText, "ADICIONALES") || 
+                      extraerConceptoTYSA(rawText, "ADICIONAL");
+  const inasistencias = extraerConceptoTYSA(rawText, "INASISTENCIAS") || extraerConceptoTYSA(rawText, "INASISTENCIA");
+  const sueldoBasico = extraerConceptoTYSA(rawText, "SUELDO BASICO") || extraerConceptoTYSA(rawText, "SUELDO BÁSICO");
+  const sueldoBruto = extraerConceptoTYSA(rawText, "SUELDO BRUTO");
+  const total = extraerConceptoTYSA(rawText, "TOTAL") || extraerConceptoTYSA(rawText, "TOTAL A COBRAR");
+  const descuentos = extraerConceptoTYSA(rawText, "DESCUENTOS") || extraerConceptoTYSA(rawText, "TOTAL DESCUENTOS");
+
   // Extraer conceptos específicos de TYSA (similar a LIME pero adaptado)
   const contribSolidaria = extraerConceptoTYSA(rawText, "Contrib.Solidaria");
   const gastosSepelio = extraerConceptoTYSA(rawText, "Gastos de sepelio");
@@ -307,6 +344,17 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
                    extraerConceptoTYSA(rawText, "5.3.10");
 
 
+
+  // Mapear conceptos básicos
+  data["JORNAL"] = toDotDecimal(jornal);
+  data["HORAS_EXTRAS"] = toDotDecimal(horasExtras);
+  data["ANTIGUEDAD"] = toDotDecimal(antiguedad);
+  data["ADICIONALES"] = toDotDecimal(adicionales);
+  data["INASISTENCIAS"] = toDotDecimal(inasistencias);
+  data["SUELDO_BASICO"] = toDotDecimal(sueldoBasico);
+  data["SUELDO_BRUTO"] = toDotDecimal(sueldoBruto);
+  data["TOTAL"] = toDotDecimal(total);
+  data["DESCUENTOS"] = toDotDecimal(descuentos);
 
   // Mapear a códigos estándar (usando los mismos que LIME)
   data["20540"] = toDotDecimal(contribSolidaria); // CONTRIBUCION SOLIDARIA

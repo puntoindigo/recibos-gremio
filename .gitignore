@@ -21,3 +21,4 @@ public/recibos/*
 
 # Opcional: mantener la carpeta data vacía en el repo
 !data/.gitkeep
+.vercel

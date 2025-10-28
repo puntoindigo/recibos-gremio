@@ -6,10 +6,11 @@ import { UploadSessionManager } from '@/lib/upload-session-manager';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Database, RefreshCw, Trash2 } from 'lucide-react';
-import { db } from '@/lib/db';
+import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { toast } from 'sonner';
 
 export default function DebugSessions() {
+  const { dataManager } = useCentralizedDataManager();
   const { data: session } = useSession();
   const [allSessions, setAllSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,14 +41,14 @@ export default function DebugSessions() {
       console.log('🧹 Limpiando completamente la base de datos...');
       
       // Verificar estado antes de limpiar
-      const receiptsBefore = await db.receipts.count();
-      const consolidatedBefore = await db.consolidated.count();
-      const uploadSessionsBefore = await db.uploadSessions.count();
-      const descuentosBefore = await db.descuentos.count();
-      const columnConfigsBefore = await db.columnConfigs.count();
-      const userActivitiesBefore = await db.userActivities.count();
-      const savedControlsBefore = await db.savedControls.count();
-      const controlBefore = await db.control.count();
+      const receiptsBefore = await dataManager.countReceipts();
+      const consolidatedBefore = await dataManager.countConsolidated();
+      const uploadSessionsBefore = await dataManager.countUploadSessions();
+      const descuentosBefore = await dataManager.countDescuentos();
+      const columnConfigsBefore = await dataManager.countColumnConfigs();
+      const userActivitiesBefore = await dataManager.countUserActivities();
+      const savedControlsBefore = await dataManager.countSavedControls();
+      const controlBefore = await dataManager.countControl();
       
       console.log('📊 Estado ANTES de limpiar:');
       console.log('- Receipts:', receiptsBefore);
@@ -60,24 +61,24 @@ export default function DebugSessions() {
       console.log('- Control:', controlBefore);
       
       // Limpiar todas las tablas
-      await db.receipts.clear();
-      await db.consolidated.clear();
-      await db.uploadSessions.clear();
-      await db.descuentos.clear();
-      await db.columnConfigs.clear();
-      await db.userActivities.clear();
-      await db.savedControls.clear();
-      await db.control.clear();
+      await dataManager.clearReceipts();
+      await dataManager.clearConsolidated();
+      await dataManager.clearUploadSessions();
+      await dataManager.clearDescuentos();
+      await dataManager.clearColumnConfigs();
+      await dataManager.clearUserActivities();
+      await dataManager.clearSavedControls();
+      await dataManager.clearControl();
       
       // Verificar estado después de limpiar
-      const receiptsAfter = await db.receipts.count();
-      const consolidatedAfter = await db.consolidated.count();
-      const uploadSessionsAfter = await db.uploadSessions.count();
-      const descuentosAfter = await db.descuentos.count();
-      const columnConfigsAfter = await db.columnConfigs.count();
-      const userActivitiesAfter = await db.userActivities.count();
-      const savedControlsAfter = await db.savedControls.count();
-      const controlAfter = await db.control.count();
+      const receiptsAfter = await dataManager.countReceipts();
+      const consolidatedAfter = await dataManager.countConsolidated();
+      const uploadSessionsAfter = await dataManager.countUploadSessions();
+      const descuentosAfter = await dataManager.countDescuentos();
+      const columnConfigsAfter = await dataManager.countColumnConfigs();
+      const userActivitiesAfter = await dataManager.countUserActivities();
+      const savedControlsAfter = await dataManager.countSavedControls();
+      const controlAfter = await dataManager.countControl();
       
       console.log('📊 Estado DESPUÉS de limpiar:');
       console.log('- Receipts:', receiptsAfter);

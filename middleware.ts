@@ -35,7 +35,8 @@ export const config = {
      * - favicon.ico (favicon file)
      * - backups (backup files)
      * - public (public files)
+     * - recibos (PDF files)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|backups|public).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|backups|public|recibos).*)',
   ],
 };

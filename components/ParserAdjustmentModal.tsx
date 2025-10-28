@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertTriangle, FileText, ChevronRight, ChevronLeft, Plus, X } from 'lucide-react';
+import { CheckCircle, AlertTriangle, FileText, ChevronRight, ChevronLeft, Plus, X, Save } from 'lucide-react';
 import { EmpresaSelector } from './EmpresaSelector';
 
 interface ParserAdjustmentModalProps {
@@ -213,8 +213,8 @@ export default function ParserAdjustmentModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className={`max-w-6xl max-h-[90vh] overflow-hidden ${showPdfSidebar ? 'w-[90vw]' : 'w-auto'}`}>
-        <DialogHeader>
+      <DialogContent className={`max-w-6xl max-h-[90vh] overflow-hidden flex flex-col ${showPdfSidebar ? 'w-[90vw]' : 'w-auto'}`}>
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
@@ -249,6 +249,7 @@ export default function ParserAdjustmentModal({
           </DialogDescription>
         </DialogHeader>
 
+        <div className="flex-1 overflow-y-auto px-6 py-4 modal-content-fix">
         <div className="flex gap-4 h-[70vh]">
           {/* Panel principal de ajustes */}
           <div className={`space-y-6 overflow-y-auto ${showPdfSidebar ? 'flex-1' : 'w-full'}`}>
@@ -442,12 +443,15 @@ export default function ParserAdjustmentModal({
           )}
         </div>
 
-        <div className="flex justify-end space-x-2 pt-4 border-t">
+        </div>
+
+        <div className="flex justify-end gap-2 pt-4 border-t -mx-6 px-6 flex-shrink-0">
           <Button variant="outline" onClick={onClose}>
             Cancelar
           </Button>
           <Button onClick={handleConfirm}>
-            Confirmar Ajustes
+            <Save className="h-4 w-4 mr-2" />
+            Guardar Cambios
           </Button>
         </div>
       </DialogContent>
