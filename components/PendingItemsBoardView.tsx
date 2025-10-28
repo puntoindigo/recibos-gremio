@@ -106,7 +106,7 @@ export default function PendingItemsBoardView({
   const [editingItem, setEditingItem] = useState<PendingItem | null>(null);
   const [draggedItem, setDraggedItem] = useState<PendingItem | null>(null);
 
-  // Agrupar items por estado
+  // Agrupar items por estado y ordenar por prioridad
   const itemsByStatus = items.reduce((acc, item) => {
     if (!acc[item.status]) {
       acc[item.status] = [];
@@ -114,6 +114,14 @@ export default function PendingItemsBoardView({
     acc[item.status].push(item);
     return acc;
   }, {} as Record<string, PendingItem[]>);
+
+  // Ordenar cada columna por prioridad (high -> medium -> low)
+  Object.keys(itemsByStatus).forEach(status => {
+    itemsByStatus[status].sort((a, b) => {
+      const priorityOrder = { high: 3, medium: 2, low: 1 };
+      return priorityOrder[b.priority] - priorityOrder[a.priority];
+    });
+  });
 
   // Solo mostrar columnas que tengan items
   const visibleStatuses = Object.keys(STATUS_CONFIG).filter(status => 
@@ -149,6 +157,18 @@ export default function PendingItemsBoardView({
   const handleCreate = () => {
     setEditingItem(null);
     setShowModal(true);
+  };
+
+  const handlePriorityChange = (item: PendingItem) => {
+    const priorities: PendingItem['priority'][] = ['high', 'medium', 'low'];
+    const currentIndex = priorities.indexOf(item.priority);
+    const nextIndex = (currentIndex + 1) % priorities.length;
+    const newPriority = priorities[nextIndex];
+    
+    const updatedItem = { ...item, priority: newPriority };
+    const updatedItems = items.map(i => i.id === item.id ? updatedItem : i);
+    onItemsChange(updatedItems);
+    toast.success(`Prioridad cambiada a ${PRIORITY_CONFIG[newPriority].label}`);
   };
 
   const handleSave = async (item: PendingItem) => {
@@ -285,7 +305,11 @@ export default function PendingItemsBoardView({
                           <div className="flex items-center gap-2">
                             <Badge 
                               variant="outline" 
-                              className={`${priorityConfig.bgColor} ${priorityConfig.color.split(' ')[1]} border-2 ${priorityConfig.color.split(' ')[2]}`}
+                              className={`${priorityConfig.bgColor} ${priorityConfig.color.split(' ')[1]} border-2 ${priorityConfig.color.split(' ')[2]} cursor-pointer hover:opacity-80 transition-opacity`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePriorityChange(item);
+                              }}
                             >
                               <PriorityIcon className="h-3 w-3 mr-1" />
                               {priorityConfig.label}

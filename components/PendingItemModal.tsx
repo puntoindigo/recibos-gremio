@@ -105,6 +105,8 @@ export default function PendingItemModal({
   });
   
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Inicializar formulario cuando se abre el modal
   useEffect(() => {
@@ -128,6 +130,46 @@ export default function PendingItemModal({
       }
     }
   }, [isOpen, item]);
+
+  // Función de guardado automático
+  const autoSave = async () => {
+    if (!item || isSaving) return;
+    
+    setIsSaving(true);
+    try {
+      const itemData: PendingItem = {
+        ...item,
+        ...formData,
+        updatedAt: new Date().toISOString()
+      };
+      await onSave(itemData);
+    } catch (error) {
+      console.error('Error en guardado automático:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Efecto para guardado automático con debounce
+  useEffect(() => {
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+    
+    if (item && formData.description.trim()) {
+      const timeout = setTimeout(() => {
+        autoSave();
+      }, 1000); // Guardar después de 1 segundo de inactividad
+      
+      setAutoSaveTimeout(timeout);
+    }
+    
+    return () => {
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+      }
+    };
+  }, [formData]);
 
   const handleSave = async () => {
     if (!formData.description.trim()) {
@@ -203,19 +245,31 @@ export default function PendingItemModal({
         
         <DialogHeader className="space-y-4">
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1">
               {item ? (
                 <>
                   <Calendar className="h-5 w-5" />
-                  Editar Item Pendiente
+                  <Input
+                    value={formData.description}
+                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    className="text-xl font-bold border-none shadow-none p-0 h-auto bg-transparent focus:ring-0 focus:border-none"
+                    placeholder="Título del item..."
+                    disabled={isLoading}
+                  />
                 </>
               ) : (
                 <>
                   <Plus className="h-5 w-5" />
-                  Nuevo Item Pendiente
+                  <span className="text-xl font-bold">Nuevo Item Pendiente</span>
                 </>
               )}
-            </DialogTitle>
+              {isSaving && (
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <div className="animate-spin h-3 w-3 border border-gray-300 border-t-gray-600 rounded-full"></div>
+                  <span>Guardando...</span>
+                </div>
+              )}
+            </div>
             
             <Button
               variant="ghost"
@@ -252,9 +306,6 @@ export default function PendingItemModal({
           <div className="space-y-4">
             {/* Descripción */}
             <div className="space-y-2">
-              <Label htmlFor="description" className="text-sm font-medium">
-                Descripción *
-              </Label>
               <Textarea
                 id="description"
                 value={formData.description}
@@ -267,14 +318,11 @@ export default function PendingItemModal({
 
             {/* Categoría */}
             <div className="space-y-2">
-              <Label htmlFor="category" className="text-sm font-medium">
-                Categoría
-              </Label>
               <Input
                 id="category"
                 value={formData.category}
                 onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                placeholder="Ej: Bug, Feature, Mejora..."
+                placeholder="Categoría (ej: Bug, Feature, Mejora...)"
                 disabled={isLoading}
               />
             </div>
@@ -283,7 +331,6 @@ export default function PendingItemModal({
             <div className="grid grid-cols-2 gap-4">
               {/* Prioridad */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Prioridad</Label>
                 <Select
                   value={formData.priority}
                   onValueChange={(value: 'high' | 'medium' | 'low') => 
@@ -292,7 +339,7 @@ export default function PendingItemModal({
                   disabled={isLoading}
                 >
                   <SelectTrigger className={`${priorityConfig.bgColor} border-2 ${priorityConfig.color.split(' ')[2]}`}>
-                    <SelectValue />
+                    <SelectValue placeholder="Prioridad" />
                   </SelectTrigger>
                   <SelectContent>
                     {Object.entries(PRIORITY_CONFIG).map(([key, config]) => {
@@ -312,7 +359,6 @@ export default function PendingItemModal({
 
               {/* Estado */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Estado</Label>
                 <Select
                   value={formData.status}
                   onValueChange={(value: 'pending' | 'in_progress' | 'completed' | 'cancelled') => 
@@ -321,7 +367,7 @@ export default function PendingItemModal({
                   disabled={isLoading}
                 >
                   <SelectTrigger className={`${statusConfig.bgColor} border-2 ${statusConfig.color.split(' ')[2]}`}>
-                    <SelectValue />
+                    <SelectValue placeholder="Estado" />
                   </SelectTrigger>
                   <SelectContent>
                     {Object.entries(STATUS_CONFIG).map(([key, config]) => {
@@ -342,14 +388,11 @@ export default function PendingItemModal({
 
             {/* Solución Propuesta */}
             <div className="space-y-2">
-              <Label htmlFor="proposedSolution" className="text-sm font-medium">
-                Solución Propuesta
-              </Label>
               <Textarea
                 id="proposedSolution"
                 value={formData.proposedSolution}
                 onChange={(e) => setFormData(prev => ({ ...prev, proposedSolution: e.target.value }))}
-                placeholder="Describe la solución propuesta..."
+                placeholder="Solución propuesta (opcional)..."
                 className="min-h-[80px] resize-none"
                 disabled={isLoading}
               />
