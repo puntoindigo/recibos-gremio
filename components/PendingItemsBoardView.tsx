@@ -95,6 +95,194 @@ const PRIORITY_CONFIG = {
   }
 };
 
+// Componente de Card Compacta
+const CompactCard: React.FC<{
+  item: PendingItem;
+  onEdit: () => void;
+  onDelete: () => void;
+  onStatusChange: (status: PendingItem['status']) => void;
+  onPriorityChange: () => void;
+  draggedItem?: PendingItem | null;
+  onDragStart: (e: React.DragEvent, item: PendingItem) => void;
+  onDragEnd: (e: React.DragEvent) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+}> = ({ 
+  item, 
+  onEdit, 
+  onDelete, 
+  onStatusChange, 
+  onPriorityChange,
+  draggedItem,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDragLeave,
+  onDrop
+}) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const priorityConfig = PRIORITY_CONFIG[item.priority];
+  const PriorityIcon = priorityConfig.icon;
+
+  return (
+    <Card
+      className={`bg-white/70 border border-white/30 hover:shadow-lg transition-all duration-200 cursor-pointer group relative ${
+        isHovered ? 'shadow-lg scale-105 z-10' : ''
+      } ${draggedItem?.id === item.id ? 'opacity-50 scale-95' : ''}`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={onEdit}
+      draggable
+      onDragStart={(e) => onDragStart(e, item)}
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      style={{
+        animation: 'cardSlideIn 0.3s ease-out'
+      }}
+    >
+      <CardContent className="p-3">
+        {/* Vista Compacta (por defecto) */}
+        <div className={`transition-all duration-200 ${isHovered ? 'opacity-0 absolute' : 'opacity-100'}`}>
+          {/* Título */}
+          <div className="font-medium text-sm mb-2 line-clamp-2">
+            {item.description || 'Sin título'}
+          </div>
+          
+          {/* Tags y Estado */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              {/* Tags */}
+              {item.tags && item.tags.length > 0 && (
+                <div className="flex gap-1">
+                  {item.tags.slice(0, 2).map((tag, index) => (
+                    <Badge key={index} variant="secondary" className="text-xs px-1 py-0">
+                      {tag}
+                    </Badge>
+                  ))}
+                  {item.tags.length > 2 && (
+                    <Badge variant="secondary" className="text-xs px-1 py-0">
+                      +{item.tags.length - 2}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Prioridad */}
+            <Badge 
+              variant="outline" 
+              className={`${priorityConfig.bgColor} ${priorityConfig.color.split(' ')[1]} border-2 ${priorityConfig.color.split(' ')[2]} cursor-pointer hover:opacity-80 transition-opacity text-xs px-1 py-0`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPriorityChange();
+              }}
+            >
+              <PriorityIcon className="h-2 w-2 mr-1" />
+              {priorityConfig.label}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Vista Expandida (en hover) */}
+        <div className={`transition-all duration-200 ${isHovered ? 'opacity-100' : 'opacity-0 absolute'}`}>
+          {/* Título expandido */}
+          <div className="font-medium text-sm mb-2">
+            {item.description || 'Sin título'}
+          </div>
+          
+          {/* Categoría */}
+          {item.category && (
+            <div className="text-xs text-gray-600 mb-2">
+              <Badge variant="outline" className="text-xs">
+                {item.category}
+              </Badge>
+            </div>
+          )}
+          
+          {/* Descripción completa */}
+          {item.proposedSolution && (
+            <div className="text-xs text-gray-600 mb-2 line-clamp-2">
+              {item.proposedSolution}
+            </div>
+          )}
+          
+          {/* Tags completos */}
+          {item.tags && item.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {item.tags.map((tag, index) => (
+                <Badge key={index} variant="secondary" className="text-xs px-1 py-0">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
+          
+          {/* Botones de acción */}
+          <div className="flex items-center justify-between gap-2">
+            {/* Prioridad */}
+            <Badge 
+              variant="outline" 
+              className={`${priorityConfig.bgColor} ${priorityConfig.color.split(' ')[1]} border-2 ${priorityConfig.color.split(' ')[2]} cursor-pointer hover:opacity-80 transition-opacity text-xs px-1 py-0`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPriorityChange();
+              }}
+            >
+              <PriorityIcon className="h-2 w-2 mr-1" />
+              {priorityConfig.label}
+            </Badge>
+            
+            {/* Botones de estado rápido */}
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStatusChange('in_progress');
+                }}
+              >
+                <Play className="h-3 w-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStatusChange('completed');
+                }}
+              >
+                <CheckCircle className="h-3 w-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+          
+          {/* Fecha */}
+          <div className="text-xs text-gray-500 mt-2">
+            Ult.Act.: {new Date(item.updatedAt).toLocaleString()}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 export default function PendingItemsBoardView({
   items,
   onItemsChange,
@@ -335,12 +523,14 @@ export default function PendingItemsBoardView({
                         <div className="h-2 bg-blue-400 rounded-full mx-2 animate-pulse"></div>
                       )}
                       
-                      <Card
-                        className={`bg-white/70 border border-white/30 hover:shadow-md transition-all duration-200 cursor-move hover:scale-105 active:scale-95 ${
-                          draggedItem?.id === item.id ? 'opacity-50 scale-95' : ''
-                        }`}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, item)}
+                      <CompactCard
+                        item={item}
+                        onEdit={() => handleEdit(item)}
+                        onDelete={() => handleDelete(item.id)}
+                        onStatusChange={(newStatus) => onStatusChange(item.id, newStatus)}
+                        onPriorityChange={() => handlePriorityChange(item)}
+                        draggedItem={draggedItem}
+                        onDragStart={handleDragStart}
                         onDragEnd={(e) => {
                           const target = e.target as HTMLElement;
                           target.classList.remove('opacity-50', 'scale-95');
@@ -361,95 +551,7 @@ export default function PendingItemsBoardView({
                           }
                         }}
                         onDrop={(e) => handleDropInColumn(e, status as PendingItem['status'], index)}
-                        style={{
-                          animation: 'cardSlideIn 0.3s ease-out'
-                        }}
-                      >
-                      <style jsx>{`
-                        @keyframes cardSlideIn {
-                          from {
-                            opacity: 0;
-                            transform: translateY(-10px);
-                          }
-                          to {
-                            opacity: 1;
-                            transform: translateY(0);
-                          }
-                        }
-                      `}</style>
-                      
-                      <CardContent className="p-4">
-                        <div className="space-y-3">
-                          {/* Header del item */}
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-gray-900 line-clamp-2">
-                                {item.description}
-                              </p>
-                              {item.category && (
-                                <p className="text-xs text-gray-600 mt-1">
-                                  {item.category}
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1 ml-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEdit(item)}
-                                className="h-6 w-6 p-0 hover:bg-blue-100"
-                              >
-                                <Edit className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDelete(item.id)}
-                                className="h-6 w-6 p-0 hover:bg-red-100"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-
-                          {/* Prioridad */}
-                          <div className="flex items-center gap-2">
-                            <Badge 
-                              variant="outline" 
-                              className={`${priorityConfig.bgColor} ${priorityConfig.color.split(' ')[1]} border-2 ${priorityConfig.color.split(' ')[2]} cursor-pointer hover:opacity-80 transition-opacity`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handlePriorityChange(item);
-                              }}
-                            >
-                              <PriorityIcon className="h-3 w-3 mr-1" />
-                              {priorityConfig.label}
-                            </Badge>
-                          </div>
-
-                          {/* Solución propuesta */}
-                          {item.proposedSolution && (
-                            <div className="text-xs text-gray-600 bg-white/50 p-2 rounded border">
-                              <strong>Solución:</strong> {item.proposedSolution}
-                            </div>
-                          )}
-
-                          {/* Fechas */}
-                          <div className="text-xs text-gray-500 space-y-1">
-                            <div className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              <span>Creado: {new Date(item.createdAt).toLocaleDateString()}</span>
-                            </div>
-                            {item.updatedAt !== item.createdAt && (
-                              <div className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                <span>Actualizado: {new Date(item.updatedAt).toLocaleDateString()}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                      />
                     </React.Fragment>
                   );
                 })}
@@ -482,6 +584,42 @@ export default function PendingItemsBoardView({
         item={editingItem}
         cardColor="bg-blue-50"
       />
+      
+      {/* Estilos CSS para animaciones */}
+      <style jsx>{`
+        @keyframes cardSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        @keyframes modalSlideIn {
+          from {
+            opacity: 0;
+            transform: scale(0.95) translateX(-50%);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateX(-50%);
+          }
+        }
+        
+        @keyframes modalSlideOut {
+          from {
+            opacity: 1;
+            transform: scale(1) translateX(-50%);
+          }
+          to {
+            opacity: 0;
+            transform: scale(0.95) translateX(-50%);
+          }
+        }
+      `}</style>
     </div>
   );
 }

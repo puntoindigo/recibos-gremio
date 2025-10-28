@@ -34,7 +34,7 @@ type ViewMode = 'list' | 'cards' | 'board';
 export default function PendingItemsViewManager() {
   const [items, setItems] = useState<PendingItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [viewMode, setViewMode] = useState<ViewMode>('board');
   const [showSettings, setShowSettings] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [postItMode, setPostItMode] = useState(false);
