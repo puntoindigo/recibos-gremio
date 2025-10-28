@@ -105,6 +105,9 @@ export default function PendingItemsBoardView({
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<PendingItem | null>(null);
   const [draggedItem, setDraggedItem] = useState<PendingItem | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [customOrder, setCustomOrder] = useState<Record<string, string[]>>({});
 
   // Agrupar items por estado y ordenar por prioridad
   const itemsByStatus = items.reduce((acc, item) => {
@@ -115,12 +118,29 @@ export default function PendingItemsBoardView({
     return acc;
   }, {} as Record<string, PendingItem[]>);
 
-  // Ordenar cada columna por prioridad (high -> medium -> low)
+  // Ordenar cada columna por prioridad o por orden personalizado
   Object.keys(itemsByStatus).forEach(status => {
-    itemsByStatus[status].sort((a, b) => {
-      const priorityOrder = { high: 3, medium: 2, low: 1 };
-      return priorityOrder[b.priority] - priorityOrder[a.priority];
-    });
+    if (customOrder[status] && customOrder[status].length > 0) {
+      // Usar orden personalizado
+      const orderedItems: PendingItem[] = [];
+      customOrder[status].forEach(itemId => {
+        const item = itemsByStatus[status].find(i => i.id === itemId);
+        if (item) orderedItems.push(item);
+      });
+      // Agregar items que no están en el orden personalizado
+      itemsByStatus[status].forEach(item => {
+        if (!customOrder[status].includes(item.id)) {
+          orderedItems.push(item);
+        }
+      });
+      itemsByStatus[status] = orderedItems;
+    } else {
+      // Ordenar por prioridad (high -> medium -> low)
+      itemsByStatus[status].sort((a, b) => {
+        const priorityOrder = { high: 3, medium: 2, low: 1 };
+        return priorityOrder[b.priority] - priorityOrder[a.priority];
+      });
+    }
   });
 
   // Solo mostrar columnas que tengan items
@@ -131,22 +151,83 @@ export default function PendingItemsBoardView({
   const handleDragStart = (e: React.DragEvent, item: PendingItem) => {
     setDraggedItem(item);
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', item.id);
+    
+    // Agregar clase de arrastre al elemento
+    const target = e.target as HTMLElement;
+    target.classList.add('opacity-50', 'scale-95');
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent, status: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    setDragOverColumn(status);
   };
 
-  const handleDrop = (e: React.DragEvent, targetStatus: PendingItem['status']) => {
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Solo limpiar si realmente salimos del área de drop
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverColumn(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetStatus: PendingItem['status']) => {
     e.preventDefault();
     
     if (draggedItem && draggedItem.status !== targetStatus) {
-      onStatusChange(draggedItem.id, targetStatus);
+      // Animación de movimiento
+      const targetColumn = e.currentTarget as HTMLElement;
+      targetColumn.classList.add('bg-blue-100', 'scale-105');
+      
+      setTimeout(() => {
+        targetColumn.classList.remove('bg-blue-100', 'scale-105');
+      }, 300);
+      
+      await onStatusChange(draggedItem.id, targetStatus);
       toast.success(`Item movido a ${STATUS_CONFIG[targetStatus].label}`);
     }
     
     setDraggedItem(null);
+    setDragOverColumn(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDropInColumn = async (e: React.DragEvent, targetStatus: PendingItem['status'], targetIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!draggedItem) return;
+    
+    const currentStatus = draggedItem.status;
+    const newOrder = [...(customOrder[currentStatus] || [])];
+    
+    if (currentStatus === targetStatus) {
+      // Reordenar dentro de la misma columna
+      const currentIndex = newOrder.indexOf(draggedItem.id);
+      if (currentIndex !== -1) {
+        newOrder.splice(currentIndex, 1);
+      }
+      newOrder.splice(targetIndex, 0, draggedItem.id);
+      
+      setCustomOrder(prev => ({
+        ...prev,
+        [currentStatus]: newOrder
+      }));
+      
+      toast.success('Orden actualizado');
+    } else {
+      // Cambiar de columna
+      await onStatusChange(draggedItem.id, targetStatus);
+      toast.success(`Item movido a ${STATUS_CONFIG[targetStatus].label}`);
+    }
+    
+    setDraggedItem(null);
+    setDragOverColumn(null);
+    setDragOverIndex(null);
   };
 
   const handleEdit = (item: PendingItem) => {
@@ -221,8 +302,11 @@ export default function PendingItemsBoardView({
           return (
             <div
               key={status}
-              className={`${config.bgColor} rounded-lg border-2 ${config.color.split(' ')[2]} min-h-[400px]`}
-              onDragOver={handleDragOver}
+              className={`${config.bgColor} rounded-lg border-2 ${config.color.split(' ')[2]} min-h-[400px] transition-all duration-200 ${
+                dragOverColumn === status ? 'ring-2 ring-blue-400 ring-opacity-50 scale-105' : ''
+              }`}
+              onDragOver={(e) => handleDragOver(e, status)}
+              onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, status as PendingItem['status'])}
             >
               {/* Header de la columna */}
@@ -240,20 +324,47 @@ export default function PendingItemsBoardView({
 
               {/* Items de la columna */}
               <div className="p-4 space-y-3 min-h-[300px]">
-                {statusItems.map((item) => {
+                {statusItems.map((item, index) => {
                   const priorityConfig = PRIORITY_CONFIG[item.priority];
                   const PriorityIcon = priorityConfig.icon;
 
                   return (
-                    <Card
-                      key={item.id}
-                      className={`bg-white/70 border border-white/30 hover:shadow-md transition-all duration-200 cursor-move`}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, item)}
-                      style={{
-                        animation: 'cardSlideIn 0.3s ease-out'
-                      }}
-                    >
+                    <React.Fragment key={item.id}>
+                      {/* Indicador de drop */}
+                      {dragOverColumn === status && dragOverIndex === index && (
+                        <div className="h-2 bg-blue-400 rounded-full mx-2 animate-pulse"></div>
+                      )}
+                      
+                      <Card
+                        className={`bg-white/70 border border-white/30 hover:shadow-md transition-all duration-200 cursor-move hover:scale-105 active:scale-95 ${
+                          draggedItem?.id === item.id ? 'opacity-50 scale-95' : ''
+                        }`}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, item)}
+                        onDragEnd={(e) => {
+                          const target = e.target as HTMLElement;
+                          target.classList.remove('opacity-50', 'scale-95');
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDragOverColumn(status);
+                          setDragOverIndex(index);
+                        }}
+                        onDragLeave={(e) => {
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          const x = e.clientX;
+                          const y = e.clientY;
+                          
+                          if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+                            setDragOverIndex(null);
+                          }
+                        }}
+                        onDrop={(e) => handleDropInColumn(e, status as PendingItem['status'], index)}
+                        style={{
+                          animation: 'cardSlideIn 0.3s ease-out'
+                        }}
+                      >
                       <style jsx>{`
                         @keyframes cardSlideIn {
                           from {
@@ -339,8 +450,14 @@ export default function PendingItemsBoardView({
                         </div>
                       </CardContent>
                     </Card>
+                    </React.Fragment>
                   );
                 })}
+
+                {/* Indicador de drop al final */}
+                {dragOverColumn === status && dragOverIndex === statusItems.length && (
+                  <div className="h-2 bg-blue-400 rounded-full mx-2 animate-pulse"></div>
+                )}
 
                 {/* Mensaje cuando no hay items */}
                 {statusItems.length === 0 && (

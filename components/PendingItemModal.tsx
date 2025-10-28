@@ -19,6 +19,7 @@ import {
   X
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { PendingItemTagsSelector } from './PendingItemTagsSelector';
 
 interface PendingItem {
   id: string;
@@ -97,11 +98,13 @@ export default function PendingItemModal({
   cardColor = 'bg-blue-50' 
 }: PendingItemModalProps) {
   const [formData, setFormData] = useState({
+    title: '',
     description: '',
     category: '',
     priority: 'medium' as 'high' | 'medium' | 'low',
     status: 'pending' as 'pending' | 'in_progress' | 'completed' | 'cancelled',
-    proposedSolution: ''
+    proposedSolution: '',
+    tags: [] as string[]
   });
   
   const [isLoading, setIsLoading] = useState(false);
@@ -113,19 +116,23 @@ export default function PendingItemModal({
     if (isOpen) {
       if (item) {
         setFormData({
+          title: item.description || '',
           description: item.description || '',
           category: item.category || '',
           priority: item.priority || 'medium',
           status: item.status || 'pending',
-          proposedSolution: item.proposedSolution || ''
+          proposedSolution: item.proposedSolution || '',
+          tags: item.tags || []
         });
       } else {
         setFormData({
+          title: '',
           description: '',
           category: '',
           priority: 'medium',
           status: 'pending',
-          proposedSolution: ''
+          proposedSolution: '',
+          tags: []
         });
       }
     }
@@ -139,7 +146,12 @@ export default function PendingItemModal({
     try {
       const itemData: PendingItem = {
         ...item,
-        ...formData,
+        description: formData.title, // Usar el título como descripción
+        category: formData.category,
+        priority: formData.priority,
+        status: formData.status,
+        proposedSolution: formData.proposedSolution,
+        tags: formData.tags,
         updatedAt: new Date().toISOString()
       };
       await onSave(itemData);
@@ -156,7 +168,7 @@ export default function PendingItemModal({
       clearTimeout(autoSaveTimeout);
     }
     
-    if (item && formData.description.trim()) {
+    if (item && formData.title.trim()) {
       const timeout = setTimeout(() => {
         autoSave();
       }, 1000); // Guardar después de 1 segundo de inactividad
@@ -170,6 +182,23 @@ export default function PendingItemModal({
       }
     };
   }, [formData]);
+
+  // Efecto para manejar tecla ESC
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isOpen) {
+        handleClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
 
   const handleSave = async () => {
     if (!formData.description.trim()) {
@@ -243,63 +272,51 @@ export default function PendingItemModal({
           }
         `}</style>
         
-        <DialogHeader className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 flex-1">
-              {item ? (
-                <>
-                  <Calendar className="h-5 w-5" />
-                  <Input
-                    value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    className="text-xl font-bold border-none shadow-none p-0 h-auto bg-transparent focus:ring-0 focus:border-none"
-                    placeholder="Título del item..."
-                    disabled={isLoading}
-                  />
-                </>
-              ) : (
-                <>
-                  <Plus className="h-5 w-5" />
-                  <span className="text-xl font-bold">Nuevo Item Pendiente</span>
-                </>
-              )}
-              {isSaving && (
-                <div className="flex items-center gap-1 text-sm text-gray-500">
-                  <div className="animate-spin h-3 w-3 border border-gray-300 border-t-gray-600 rounded-full"></div>
-                  <span>Guardando...</span>
-                </div>
-              )}
-            </div>
-            
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClose}
-              disabled={isLoading}
-              className="h-8 w-8 p-0"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+        {/* Botón de cerrar fuera del contenido */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleClose}
+          disabled={isLoading}
+          className="absolute top-4 right-4 h-8 w-8 p-0 z-10 bg-white/80 hover:bg-white shadow-md"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+
+        <DialogHeader className="space-y-4 pb-4">
+          <div className="flex items-center gap-2">
+            {item ? (
+              <>
+                <Calendar className="h-6 w-6 text-blue-600" />
+                <Input
+                  value={formData.title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  className="text-2xl font-bold border-none shadow-none p-0 h-auto bg-transparent focus:ring-0 focus:border-none focus:outline-none"
+                  placeholder="Título del item..."
+                  disabled={isLoading}
+                />
+              </>
+            ) : (
+              <>
+                <Plus className="h-6 w-6 text-blue-600" />
+                <span className="text-2xl font-bold">Nuevo Item Pendiente</span>
+              </>
+            )}
+            {isSaving && (
+              <div className="flex items-center gap-1 text-sm text-gray-500 ml-4">
+                <div className="animate-spin h-3 w-3 border border-gray-300 border-t-gray-600 rounded-full"></div>
+                <span>Guardando...</span>
+              </div>
+            )}
           </div>
         </DialogHeader>
 
         <div className="space-y-6">
           {/* Información del item */}
           {item && (
-            <Card className="bg-white/50 border border-white/20">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-gray-500" />
-                    <span>Creado: {new Date(item.createdAt).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-gray-500" />
-                    <span>Actualizado: {new Date(item.updatedAt).toLocaleDateString()}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="text-xs text-gray-500 text-right">
+              <span>Ult.Act.: {new Date(item.updatedAt).toLocaleString()}</span>
+            </div>
           )}
 
           {/* Formulario */}
@@ -397,35 +414,16 @@ export default function PendingItemModal({
                 disabled={isLoading}
               />
             </div>
-          </div>
 
-          {/* Botones */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-white/20">
-            <Button
-              variant="outline"
-              onClick={handleClose}
-              disabled={isLoading}
-              className="bg-white/50 hover:bg-white/70"
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleSave}
-              disabled={isLoading || !formData.description.trim()}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              {isLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  {item ? 'Actualizar' : 'Crear'}
-                </>
-              )}
-            </Button>
+            {/* Tags */}
+            <div className="space-y-2">
+              <PendingItemTagsSelector
+                tags={formData.tags}
+                onTagsChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
+                existingTags={['bug', 'feature', 'mejora', 'urgente', 'documentación', 'testing', 'refactor']}
+                disabled={isLoading}
+              />
+            </div>
           </div>
         </div>
       </DialogContent>
