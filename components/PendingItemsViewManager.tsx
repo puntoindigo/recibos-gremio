@@ -26,6 +26,7 @@ import PendingItemsListView from './PendingItemsListView';
 import PendingItemsCardsView from './PendingItemsCardsView';
 import PendingItemsBoardView from './PendingItemsBoardView';
 import PendingItemModal from './PendingItemModal';
+import ColoredSelect from './ColoredSelect';
 import { supabasePendingItemsManager, PendingItem } from '@/lib/supabase-pending-items-manager';
 
 type ViewMode = 'list' | 'cards' | 'board';
