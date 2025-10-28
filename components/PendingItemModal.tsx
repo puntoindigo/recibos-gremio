@@ -1,5 +1,5 @@
 // components/PendingItemModal.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -139,7 +139,7 @@ export default function PendingItemModal({
   }, [isOpen, item]);
 
   // Función de guardado automático
-  const autoSave = async () => {
+  const autoSave = useCallback(async () => {
     if (!item || isSaving) return;
     
     setIsSaving(true);
@@ -160,7 +160,7 @@ export default function PendingItemModal({
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [item, isSaving, formData.title, formData.category, formData.priority, formData.status, formData.proposedSolution, formData.tags, onSave]);
 
   // Efecto para guardado automático con debounce
   useEffect(() => {
@@ -181,7 +181,7 @@ export default function PendingItemModal({
         clearTimeout(autoSaveTimeout);
       }
     };
-  }, [formData]);
+  }, [formData.title, formData.category, formData.priority, formData.status, formData.proposedSolution, formData.tags, item, autoSave]);
 
   // Efecto para manejar tecla ESC
   useEffect(() => {
