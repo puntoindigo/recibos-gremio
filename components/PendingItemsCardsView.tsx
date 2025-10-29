@@ -222,7 +222,7 @@ function SortableCard({
       {/* ID oculto - era muy largo */}
 
       {/* Contenido principal */}
-      <div className="p-1 text-gray-800 h-full flex flex-col" onDoubleClick={() => onEdit?.(item)}>
+      <div className="p-1.5 text-gray-800 h-full flex flex-col" onDoubleClick={() => onEdit?.(item)}>
         {/* Categoría */}
         <div className="text-xs font-medium text-gray-600/80 uppercase tracking-wide mb-0.5">
           {item.category}

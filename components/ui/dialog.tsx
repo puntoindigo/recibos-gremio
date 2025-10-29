@@ -49,7 +49,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
         ref={ref}
         className={cn(
           "relative bg-white rounded-lg shadow-lg",
-          "w-full max-w-md mx-4 p-3",
+          "w-full max-w-md mx-4 p-6",
           "max-h-[90vh] overflow-y-auto",
           className
         )}
