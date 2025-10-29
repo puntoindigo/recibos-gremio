@@ -73,20 +73,17 @@ export const PendingItemTagsSelector = forwardRef<HTMLInputElement, PendingItemT
 
   // Auto-agregar el defaultTag cuando se monta el componente si no hay tags
   const hasAddedDefaultTag = useRef(false);
-  const onTagsChangeRef = useRef(onTagsChange);
   
-  // Actualizar la referencia cuando cambie onTagsChange
-  useEffect(() => {
-    onTagsChangeRef.current = onTagsChange;
-  }, [onTagsChange]);
-  
-  // Auto-agregar el defaultTag cuando se monta el componente si no hay tags
+  // Auto-agregar el defaultTag cuando se monta el componente si no hay tags - SIMPLIFICADO
   useEffect(() => {
     if (defaultTag && tags.length === 0 && !tags.includes(defaultTag) && !hasAddedDefaultTag.current) {
       hasAddedDefaultTag.current = true;
-      onTagsChangeRef.current([defaultTag]);
+      // Usar setTimeout para evitar loops infinitos
+      setTimeout(() => {
+        onTagsChange([defaultTag]);
+      }, 0);
     }
-  }, [defaultTag]); // Solo cuando cambie defaultTag
+  }, [defaultTag, tags.length]); // Solo cuando cambie defaultTag o tags.length
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
