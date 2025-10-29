@@ -112,30 +112,30 @@ export default function PendingItemModal({
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showSaveAnimation, setShowSaveAnimation] = useState(false);
 
-  // Inicializar datos del formulario
-  useEffect(() => {
-    if (isOpen) {
-      if (item) {
-        setFormData({
-          title: item.description || '',
-          description: item.description || '',
-          priority: item.priority || 'medium',
-          status: item.status || 'pending',
-          proposedSolution: item.proposedSolution || '',
-          tags: item.tags || []
-        });
-      } else {
-        setFormData({
-          title: '',
-          description: '',
-          priority: 'medium',
-          status: 'pending',
-          proposedSolution: '',
-          tags: []
-        });
-      }
-    }
-  }, [isOpen, item]);
+  // Inicializar datos del formulario - DESHABILITADO TEMPORALMENTE PARA DEBUG
+  // useEffect(() => {
+  //   if (isOpen) {
+  //     if (item) {
+  //       setFormData({
+  //         title: item.description || '',
+  //         description: item.description || '',
+  //         priority: item.priority || 'medium',
+  //         status: item.status || 'pending',
+  //         proposedSolution: item.proposedSolution || '',
+  //         tags: item.tags || []
+  //       });
+  //     } else {
+  //       setFormData({
+  //         title: '',
+  //         description: '',
+  //         priority: 'medium',
+  //         status: 'pending',
+  //         proposedSolution: '',
+  //         tags: []
+  //       });
+  //     }
+  //   }
+  // }, [isOpen, item]);
 
   // Función de guardado automático
   const autoSave = useCallback(async () => {

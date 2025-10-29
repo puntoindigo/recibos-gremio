@@ -55,21 +55,21 @@ export const PendingItemTagsSelector = forwardRef<HTMLInputElement, PendingItemT
     return Array.from(tagsSet).sort();
   }, [existingTags, allItems]);
 
-  // Filtrar sugerencias basadas en el input
-  useEffect(() => {
-    if (inputValue.trim()) {
-      const searchTerm = inputValue.toLowerCase();
-      const filtered = allExistingTags.filter(tag => 
-        tag.toLowerCase().includes(searchTerm) && !tags.includes(tag)
-      );
-      setSuggestions(filtered.slice(0, 8)); // Mostrar máximo 8 sugerencias
-      setShowSuggestions(true);
-    } else {
-      // NO mostrar sugerencias automáticamente cuando no hay input
-      setSuggestions([]);
-      setShowSuggestions(false);
-    }
-  }, [inputValue, allExistingTags, tags]);
+  // Filtrar sugerencias basadas en el input - DESHABILITADO TEMPORALMENTE PARA DEBUG
+  // useEffect(() => {
+  //   if (inputValue.trim()) {
+  //     const searchTerm = inputValue.toLowerCase();
+  //     const filtered = allExistingTags.filter(tag => 
+  //       tag.toLowerCase().includes(searchTerm) && !tags.includes(tag)
+  //     );
+  //     setSuggestions(filtered.slice(0, 8)); // Mostrar máximo 8 sugerencias
+  //     setShowSuggestions(true);
+  //   } else {
+  //     // NO mostrar sugerencias automáticamente cuando no hay input
+  //     setSuggestions([]);
+  //     setShowSuggestions(false);
+  //   }
+  // }, [inputValue, allExistingTags, tags]);
 
   // Auto-agregar el defaultTag cuando se monta el componente si no hay tags
   const hasAddedDefaultTag = useRef(false);
