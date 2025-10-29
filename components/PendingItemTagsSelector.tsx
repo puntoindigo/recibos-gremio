@@ -75,11 +75,11 @@ export const PendingItemTagsSelector = forwardRef<HTMLInputElement, PendingItemT
       hasAddedDefaultTag.current = true;
       onTagsChange([defaultTag]);
     }
-  }, [defaultTag, tags, onTagsChange]);
+  }, [defaultTag, onTagsChange]); // Removido 'tags' para evitar loop infinito
   
   useEffect(() => {
     addDefaultTag();
-  }, [addDefaultTag]);
+  }, [defaultTag]); // Solo ejecutar cuando cambie defaultTag, no cuando cambie addDefaultTag
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);

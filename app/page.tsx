@@ -2053,7 +2053,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       console.log(`🔍 Periodos disponibles:`, periodos);
       setPeriodoFiltro('Todos');
     }
-  }, [consolidated, empresaFiltro, periodoFiltro]);
+  }, [consolidated]); // Removidos empresaFiltro y periodoFiltro para evitar loop infinito
 
   // Función para limpiar hashes huérfanos (recibos eliminados pero hashes que quedaron)
   const cleanOrphanedHashes = useCallback(async () => {
@@ -2384,7 +2384,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
         setPeriodoFiltro("Todas");
       }
     }
-  }, [empresaFiltro, periodos, periodoFiltro]);
+  }, [empresaFiltro, periodos]); // Removido periodoFiltro para evitar loop infinito
 
   // Actualizar datos cuando se regresa al tablero (focus)
   useEffect(() => {
