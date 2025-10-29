@@ -340,9 +340,9 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
   const [showEmpresaModal, setShowEmpresaModal] = useState<boolean>(false);
 
   // Debug: verificar cuándo se cambia showEmpresaModal
-  useEffect(() => {
-    console.log('🔍 Debug page.tsx - showEmpresaModal cambió a:', showEmpresaModal);
-  }, [showEmpresaModal]);
+  // useEffect(() => {
+  //   console.log('🔍 Debug page.tsx - showEmpresaModal cambió a:', showEmpresaModal);
+  // }, [showEmpresaModal]);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   
   // Estados para drag & drop
@@ -912,7 +912,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
     return () => {
       isMounted = false; // Cleanup
     };
-  }, [config.enableSupabaseStorage]); // Dependencia en el storage type
+  }, []); // Removido config.enableSupabaseStorage para evitar loops infinitos
 
   // Verificar subidas pendientes al cargar la app - SOLO UNA VEZ por usuario
   useEffect(() => {
@@ -961,7 +961,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
     return () => {
       isMounted = false; // Cleanup
     };
-  }, [session?.user?.id]);
+  }, []); // Removido session?.user?.id para evitar loops infinitos
 
   // Manejar cambio de filtros - SOLO cuando cambia el tab a control
   useEffect(() => {
@@ -978,7 +978,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       // Aquí se aplicarán los filtros sin recargar datos
       // Los filtros se manejan en el componente ControlDetailsPanel
     }
-  }, [periodoFiltro, empresaFiltro, activeTab, savedControls.length]);
+  }, [activeTab]); // Simplificado para evitar loops infinitos
 
   const loadControlFromDexie = async () => {
     try {
@@ -1715,7 +1715,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       console.error("Error verificando subidas pendientes:", error);
       toast.error("Error verificando subidas pendientes");
     }
-  }, [session?.user?.id]);
+  }, []); // Removido session?.user?.id para evitar loops infinitos
 
   // Función para verificar todas las sesiones en la base de datos
   const handleCheckAllSessions = useCallback(async () => {
@@ -2400,7 +2400,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
         dashboardRef.current.refresh();
       }
     }
-  }, [activeTab]); // Removido loadData de las dependencias
+  }, [activeTab, consolidated.length]); // Agregado consolidated.length para evitar loops
 
   // Mostrar loading mientras se verifica la autenticación
   if (status === 'loading') {
