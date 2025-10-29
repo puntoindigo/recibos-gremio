@@ -2730,9 +2730,6 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
                     <CardTitle className="text-lg sm:text-xl">
                       Recibos de Sueldo
                     </CardTitle>
-                    <CardDescription className="text-sm">
-                      {filteredData.length} registros encontrados
-                    </CardDescription>
               </div>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <input
@@ -2781,10 +2778,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
                       valueNombre={nombreFiltro}
                       onNombre={setNombreFiltro}
                     />
-                <div className="mt-4 flex justify-between items-center">
-                  <div className="text-sm text-gray-600">
-                    {filteredData.length} registros encontrados
-                  </div>
+                <div className="mt-4 flex justify-end items-center">
                   <ExcelExporter 
                     data={filteredData} 
                     showEmpresa={empresaFiltro === "Todas" || !empresaFiltro}

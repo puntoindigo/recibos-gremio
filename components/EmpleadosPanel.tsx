@@ -362,10 +362,6 @@ export default function EmpleadosPanel({ empresaFiltro }: EmpleadosPanelProps) {
             </div>
           </div>
 
-          <div className="text-sm text-gray-600">
-            {filteredEmpleados.length} empleados encontrados
-          </div>
-
           {/* Tabla de empleados */}
           <div className="overflow-x-auto border rounded-lg">
             <table className="w-full">
