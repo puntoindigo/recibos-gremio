@@ -16,7 +16,8 @@ import {
   XCircle, 
   Plus,
   Save,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PendingItemTagsSelector } from './PendingItemTagsSelector';
@@ -32,6 +33,7 @@ interface PendingItem {
   proposedSolution?: string;
   feedback?: string;
   resolvedAt?: string;
+  tags?: string[];
 }
 
 interface PendingItemModalProps {
@@ -70,10 +72,10 @@ const STATUS_CONFIG = {
     icon: Clock,
     bgColor: 'bg-gray-50'
   },
-  in_progress: { 
+  'in_progress': { 
     label: 'En Progreso', 
     color: 'bg-blue-100 text-blue-800 border-blue-200', 
-    icon: Calendar,
+    icon: Clock,
     bgColor: 'bg-blue-50'
   },
   completed: { 
@@ -95,30 +97,28 @@ export default function PendingItemModal({
   onClose, 
   onSave, 
   item, 
-  cardColor = 'bg-blue-50' 
+  cardColor 
 }: PendingItemModalProps) {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    category: '',
     priority: 'medium' as 'high' | 'medium' | 'low',
     status: 'pending' as 'pending' | 'in_progress' | 'completed' | 'cancelled',
     proposedSolution: '',
     tags: [] as string[]
   });
-  
-  const [isLoading, setIsLoading] = useState(false);
+
   const [isSaving, setIsSaving] = useState(false);
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [showSaveAnimation, setShowSaveAnimation] = useState(false);
 
-  // Inicializar formulario cuando se abre el modal
+  // Inicializar datos del formulario
   useEffect(() => {
     if (isOpen) {
       if (item) {
         setFormData({
           title: item.description || '',
           description: item.description || '',
-          category: item.category || '',
           priority: item.priority || 'medium',
           status: item.status || 'pending',
           proposedSolution: item.proposedSolution || '',
@@ -128,7 +128,6 @@ export default function PendingItemModal({
         setFormData({
           title: '',
           description: '',
-          category: '',
           priority: 'medium',
           status: 'pending',
           proposedSolution: '',
@@ -143,11 +142,12 @@ export default function PendingItemModal({
     if (!item || isSaving) return;
     
     setIsSaving(true);
+    setShowSaveAnimation(true);
+    
     try {
       const itemData: PendingItem = {
         ...item,
         description: formData.title, // Usar el título como descripción
-        category: formData.category,
         priority: formData.priority,
         status: formData.status,
         proposedSolution: formData.proposedSolution,
@@ -155,12 +155,18 @@ export default function PendingItemModal({
         updatedAt: new Date().toISOString()
       };
       await onSave(itemData);
+      
+      // Mostrar animación de guardado exitoso
+      setTimeout(() => {
+        setShowSaveAnimation(false);
+      }, 1000);
     } catch (error) {
       console.error('Error en guardado automático:', error);
+      setShowSaveAnimation(false);
     } finally {
       setIsSaving(false);
     }
-  }, [item, isSaving, onSave]); // Removidas las dependencias de formData para evitar loops infinitos
+  }, [item, isSaving, onSave]);
 
   // Efecto para guardado automático con debounce
   useEffect(() => {
@@ -181,7 +187,7 @@ export default function PendingItemModal({
         clearTimeout(autoSaveTimeout);
       }
     };
-  }, [formData.title, formData.category, formData.priority, formData.status, formData.proposedSolution, formData.tags, item]); // Removido autoSave de las dependencias
+  }, [formData.title, formData.priority, formData.status, formData.proposedSolution, formData.tags, item]);
 
   // Efecto para manejar tecla ESC
   useEffect(() => {
@@ -200,230 +206,237 @@ export default function PendingItemModal({
     };
   }, [isOpen]);
 
+  const handleClose = () => {
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+    onClose();
+  };
+
   const handleSave = async () => {
-    if (!formData.description.trim()) {
-      toast.error('La descripción es requerida');
+    if (!formData.title.trim()) {
+      toast.error('El título es requerido');
       return;
     }
 
-    setIsLoading(true);
-    
+    setIsSaving(true);
+    setShowSaveAnimation(true);
+
     try {
       const itemData: PendingItem = {
-        id: item?.id || `item_${Date.now()}`,
-        description: formData.description.trim(),
-        category: formData.category.trim(),
+        id: item?.id || `item-${Date.now()}`,
+        description: formData.title,
+        category: '', // Ya no usamos categoría
         priority: formData.priority,
         status: formData.status,
         createdAt: item?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        proposedSolution: formData.proposedSolution.trim() || undefined
+        proposedSolution: formData.proposedSolution,
+        tags: formData.tags
       };
 
       await onSave(itemData);
-      toast.success(item ? 'Item actualizado' : 'Item creado');
-      onClose();
+      
+      // Mostrar animación de guardado exitoso
+      setTimeout(() => {
+        setShowSaveAnimation(false);
+        handleClose();
+      }, 1000);
     } catch (error) {
       console.error('Error guardando item:', error);
-      toast.error('Error guardando item');
+      setShowSaveAnimation(false);
+      toast.error('Error guardando el item');
     } finally {
-      setIsLoading(false);
+      setIsSaving(false);
     }
   };
 
-  const handleClose = () => {
-    if (!isLoading) {
-      onClose();
-    }
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
-  const priorityConfig = PRIORITY_CONFIG[formData.priority];
-  const statusConfig = STATUS_CONFIG[formData.status];
+  const handleTagsChange = (tags: string[]) => {
+    handleInputChange('tags', tags);
+  };
+
+  const PriorityIcon = PRIORITY_CONFIG[formData.priority].icon;
+  const StatusIcon = STATUS_CONFIG[formData.status].icon;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent 
-        className={`max-w-2xl ${cardColor} border-2 shadow-2xl transition-all duration-300 ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=open]:slide-in-from-left-1/2`}
-        style={{
-          animation: isOpen ? 'modalSlideIn 0.3s ease-out' : 'modalSlideOut 0.3s ease-in'
-        }}
-      >
-        <style jsx>{`
-          @keyframes modalSlideIn {
-            from {
-              opacity: 0;
-              transform: scale(0.95) translateY(-20px);
-            }
-            to {
-              opacity: 1;
-              transform: scale(1) translateY(0);
-            }
-          }
-          
-          @keyframes modalSlideOut {
-            from {
-              opacity: 1;
-              transform: scale(1) translateY(0);
-            }
-            to {
-              opacity: 0;
-              transform: scale(0.95) translateY(-20px);
-            }
-          }
-        `}</style>
-        
-        {/* Botón de cerrar fuera del contenido */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleClose}
-          disabled={isLoading}
-          className="absolute top-4 right-4 h-8 w-8 p-0 z-10 bg-white/80 hover:bg-white shadow-md"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-
-        <DialogHeader className="space-y-4 pb-4">
-          <div className="flex items-center gap-2">
-            {item ? (
-              <>
-                <Calendar className="h-6 w-6 text-blue-600" />
-                <Input
-                  value={formData.title}
-                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                  className="text-2xl font-bold border-none shadow-none p-0 h-auto bg-transparent focus:ring-0 focus:border-none focus:outline-none"
-                  placeholder="Título del item..."
-                  disabled={isLoading}
-                />
-              </>
-            ) : (
-              <>
-                <Plus className="h-6 w-6 text-blue-600" />
-                <span className="text-2xl font-bold">Nuevo Item Pendiente</span>
-              </>
-            )}
-            {isSaving && (
-              <div className="flex items-center gap-1 text-sm text-gray-500 ml-4">
-                <div className="animate-spin h-3 w-3 border border-gray-300 border-t-gray-600 rounded-full"></div>
-                <span>Guardando...</span>
-              </div>
-            )}
-          </div>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="relative">
+          <DialogTitle className="text-xl font-semibold pr-8">
+            {item ? 'Editar Item Pendiente' : 'Nuevo Item Pendiente'}
+          </DialogTitle>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClose}
+            className="absolute top-0 right-0 h-6 w-6 p-0 hover:bg-gray-100"
+          >
+            <X className="h-3 w-3" />
+          </Button>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Información del item */}
-          {item && (
-            <div className="text-xs text-gray-500 text-right">
-              <span>Ult.Act.: {new Date(item.updatedAt).toLocaleString()}</span>
+          {/* Título editable */}
+          <div className="space-y-2">
+            <Label htmlFor="title" className="text-sm font-medium">
+              Título del Item
+            </Label>
+            <Input
+              id="title"
+              placeholder="Describe el item pendiente..."
+              value={formData.title}
+              onChange={(e) => handleInputChange('title', e.target.value)}
+              className="text-base"
+            />
+          </div>
+
+          {/* Tags */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">
+              Tags
+            </Label>
+            <PendingItemTagsSelector
+              tags={formData.tags}
+              onTagsChange={handleTagsChange}
+              defaultTag="General"
+            />
+          </div>
+
+          {/* Prioridad y Estado */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Prioridad</Label>
+              <Select
+                value={formData.priority}
+                onValueChange={(value: 'high' | 'medium' | 'low') => handleInputChange('priority', value)}
+              >
+                <SelectTrigger className="h-10">
+                  <div className="flex items-center space-x-2">
+                    <PriorityIcon className="h-4 w-4" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="high">
+                    <div className="flex items-center space-x-2">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      <span>Alta</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="medium">
+                    <div className="flex items-center space-x-2">
+                      <Clock className="h-4 w-4 text-yellow-500" />
+                      <span>Media</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="low">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span>Baja</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Estado</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value: 'pending' | 'in_progress' | 'completed' | 'cancelled') => handleInputChange('status', value)}
+              >
+                <SelectTrigger className="h-10">
+                  <div className="flex items-center space-x-2">
+                    <StatusIcon className="h-4 w-4" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">
+                    <div className="flex items-center space-x-2">
+                      <Clock className="h-4 w-4 text-gray-500" />
+                      <span>Pendiente</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="in_progress">
+                    <div className="flex items-center space-x-2">
+                      <Clock className="h-4 w-4 text-blue-500" />
+                      <span>En Progreso</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="completed">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span>Completado</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="cancelled">
+                    <div className="flex items-center space-x-2">
+                      <XCircle className="h-4 w-4 text-red-500" />
+                      <span>Cancelado</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Solución Propuesta */}
+          <div className="space-y-2">
+            <Label htmlFor="proposedSolution" className="text-sm font-medium">
+              Solución Propuesta (opcional)
+            </Label>
+            <Textarea
+              id="proposedSolution"
+              placeholder="Describe la solución propuesta..."
+              value={formData.proposedSolution}
+              onChange={(e) => handleInputChange('proposedSolution', e.target.value)}
+              rows={4}
+              className="resize-none"
+            />
+          </div>
+
+          {/* Indicador de guardado automático */}
+          {showSaveAnimation && (
+            <div className="flex items-center justify-center space-x-2 text-green-600 bg-green-50 p-3 rounded-lg">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm font-medium">Guardando...</span>
             </div>
           )}
 
-          {/* Formulario */}
-          <div className="space-y-4">
-            {/* Descripción */}
-            <div className="space-y-2">
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Describe el item pendiente..."
-                className="min-h-[100px] resize-none"
-                disabled={isLoading}
-              />
-            </div>
-
-            {/* Categoría */}
-            <div className="space-y-2">
-              <Input
-                id="category"
-                value={formData.category}
-                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                placeholder="Categoría (ej: Bug, Feature, Mejora...)"
-                disabled={isLoading}
-              />
-            </div>
-
-            {/* Prioridad y Estado */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* Prioridad */}
-              <div className="space-y-2">
-                <Select
-                  value={formData.priority}
-                  onValueChange={(value: 'high' | 'medium' | 'low') => 
-                    setFormData(prev => ({ ...prev, priority: value }))
-                  }
-                  disabled={isLoading}
-                >
-                  <SelectTrigger className={`${priorityConfig.bgColor} border-2 ${priorityConfig.color.split(' ')[2]}`}>
-                    <SelectValue placeholder="Prioridad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(PRIORITY_CONFIG).map(([key, config]) => {
-                      const Icon = config.icon;
-                      return (
-                        <SelectItem key={key} value={key} className={config.bgColor}>
-                          <div className="flex items-center gap-2">
-                            <Icon className="h-4 w-4" />
-                            <span>{config.label}</span>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Estado */}
-              <div className="space-y-2">
-                <Select
-                  value={formData.status}
-                  onValueChange={(value: 'pending' | 'in_progress' | 'completed' | 'cancelled') => 
-                    setFormData(prev => ({ ...prev, status: value }))
-                  }
-                  disabled={isLoading}
-                >
-                  <SelectTrigger className={`${statusConfig.bgColor} border-2 ${statusConfig.color.split(' ')[2]}`}>
-                    <SelectValue placeholder="Estado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(STATUS_CONFIG).map(([key, config]) => {
-                      const Icon = config.icon;
-                      return (
-                        <SelectItem key={key} value={key} className={config.bgColor}>
-                          <div className="flex items-center gap-2">
-                            <Icon className="h-4 w-4" />
-                            <span>{config.label}</span>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Solución Propuesta */}
-            <div className="space-y-2">
-              <Textarea
-                id="proposedSolution"
-                value={formData.proposedSolution}
-                onChange={(e) => setFormData(prev => ({ ...prev, proposedSolution: e.target.value }))}
-                placeholder="Solución propuesta (opcional)..."
-                className="min-h-[80px] resize-none"
-                disabled={isLoading}
-              />
-            </div>
-
-            {/* Tags */}
-            <div className="space-y-2">
-              <PendingItemTagsSelector
-                tags={formData.tags}
-                onTagsChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
-                existingTags={['bug', 'feature', 'mejora', 'urgente', 'documentación', 'testing', 'refactor']}
-                disabled={isLoading}
-              />
-            </div>
+          {/* Botones de acción */}
+          <div className="flex justify-end space-x-3 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              disabled={isSaving}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={isSaving || !formData.title.trim()}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Guardar
+                </>
+              )}
+            </Button>
           </div>
         </div>
       </DialogContent>
