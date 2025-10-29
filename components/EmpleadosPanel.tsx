@@ -318,8 +318,9 @@ export default function EmpleadosPanel({ empresaFiltro }: EmpleadosPanelProps) {
             Administra los empleados del sistema
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <CardContent className="space-y-6">
+          {/* Filtros */}
+          <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -361,16 +362,12 @@ export default function EmpleadosPanel({ empresaFiltro }: EmpleadosPanelProps) {
             </div>
           </div>
 
-          <div className="text-sm text-gray-600 mb-4">
+          <div className="text-sm text-gray-600">
             {filteredEmpleados.length} empleados encontrados
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Lista de empleados */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Tabla de empleados */}
+          <div className="overflow-x-auto border rounded-lg">
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
@@ -516,7 +513,7 @@ export default function EmpleadosPanel({ empresaFiltro }: EmpleadosPanelProps) {
 
           {/* Paginación */}
           {showPagination && (
-            <div className="px-6 py-4 border-t border-gray-200">
+            <div className="pt-4">
               <Pagination
                 currentPage={pagination.currentPage}
                 totalPages={pagination.totalPages}
