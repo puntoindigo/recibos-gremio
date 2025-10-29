@@ -284,13 +284,10 @@ export default function PendingItemModal({
 
         <div className="space-y-6">
           {/* Título editable */}
-          <div className="space-y-2">
-            <Label htmlFor="title" className="text-sm font-medium">
-              Título del Item
-            </Label>
+          <div>
             <Input
               id="title"
-              placeholder="Describe el item pendiente..."
+              placeholder="Título del item pendiente..."
               value={formData.title}
               onChange={(e) => handleInputChange('title', e.target.value)}
               className="text-base"

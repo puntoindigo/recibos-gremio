@@ -2096,7 +2096,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       console.error('Error en limpieza de hashes huérfanos:', error);
       toast.error('Error durante la limpieza');
     }
-  }, [loadData]);
+  }, []); // Removido loadData para evitar loop infinito
 
   // Función para depurar archivos físicos huérfanos
   const cleanOrphanedFiles = useCallback(async () => {
@@ -2142,7 +2142,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       console.error('Error en limpieza de archivos físicos:', error);
       toast.error('Error durante la limpieza de archivos');
     }
-  }, [loadData]);
+  }, []); // Removido loadData para evitar loop infinito
 
   // Función para normalizar nombres de archivos (aplicable a todos los parsers)
   const normalizeFileNames = useCallback(async () => {
@@ -2224,7 +2224,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       toast.error('Error durante la normalización de nombres');
       return null;
     }
-  }, [loadData]);
+  }, []); // Removido loadData para evitar loop infinito
 
 
   // Exponer funciones globalmente para uso desde consola
@@ -2267,7 +2267,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       setShowParserAdjustmentModal(false);
       setPendingParserData(null);
     }
-  }, [pendingParserData, showDebug, loadData]);
+  }, [pendingParserData, showDebug]); // Removido loadData para evitar loop infinito
 
   // Función para abrir el modal con descuentos habilitados
   const openParserModalWithDescuentos = useCallback((file: File, data: Record<string, string>) => {

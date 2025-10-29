@@ -65,10 +65,9 @@ export const PendingItemTagsSelector = forwardRef<HTMLInputElement, PendingItemT
       setSuggestions(filtered.slice(0, 8)); // Mostrar máximo 8 sugerencias
       setShowSuggestions(true);
     } else {
-      // Mostrar tags más comunes cuando no hay input
-      const commonTags = predefinedTags.filter(tag => !tags.includes(tag));
-      setSuggestions(commonTags.slice(0, 6));
-      setShowSuggestions(true);
+      // NO mostrar sugerencias automáticamente cuando no hay input
+      setSuggestions([]);
+      setShowSuggestions(false);
     }
   }, [inputValue, allExistingTags, tags]);
 
@@ -187,7 +186,11 @@ export const PendingItemTagsSelector = forwardRef<HTMLInputElement, PendingItemT
           value={inputValue}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          onFocus={() => setShowSuggestions(true)}
+          onFocus={() => {
+            if (inputValue.trim()) {
+              setShowSuggestions(true);
+            }
+          }}
           placeholder="Agregar tags..."
           disabled={disabled}
           tabIndex={tabIndex}
