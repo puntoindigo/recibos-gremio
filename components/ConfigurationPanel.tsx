@@ -313,9 +313,6 @@ const ConfigurationPanel: React.FC = () => {
             <p className="text-gray-600">Personaliza la apariencia y funcionalidades de la aplicación</p>
           </div>
         </div>
-        <Button onClick={handleResetConfiguration} variant="outline">
-          Restablecer
-        </Button>
       </div>
 
               {/* HERRAMIENTAS DEL SISTEMA - PRIMERA SECCIÓN */}
@@ -440,33 +437,6 @@ const ConfigurationPanel: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <BarChart3 className="h-5 w-5 text-pink-600" />
-                <div>
-                  <Label className="text-base font-medium">Analytics</Label>
-                  <p className="text-sm text-gray-500">Análisis y estadísticas</p>
-                </div>
-              </div>
-              <Switch
-                checked={config.enableAnalytics}
-                onCheckedChange={(checked) => handleSaveConfiguration({ enableAnalytics: checked })}
-              />
-            </div>
-
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <Shield className="h-5 w-5 text-yellow-600" />
-                <div>
-                  <Label className="text-base font-medium">Características de Seguridad</Label>
-                  <p className="text-sm text-gray-500">Funciones de seguridad</p>
-                </div>
-              </div>
-              <Switch
-                checked={config.enableSecurityFeatures}
-                onCheckedChange={(checked) => handleSaveConfiguration({ enableSecurityFeatures: checked })}
-              />
-            </div>
 
             <div className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-3">

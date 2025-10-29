@@ -92,16 +92,23 @@ export const authOptions: NextAuthOptions = {
     },
     async redirect({ url, baseUrl }) {
       console.log('NextAuth Redirect:', { url, baseUrl });
+      
+      // Determinar el puerto correcto basado en la URL actual
+      const currentPort = typeof window !== 'undefined' ? window.location.port : '8000';
+      const correctBaseUrl = `http://localhost:${currentPort}`;
+      
       // Evitar bucles de redirección
       if (url === baseUrl + '/auth/signin') {
-        return baseUrl;
+        return correctBaseUrl;
       }
-      // Si la URL es relativa, agregar baseUrl
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      // Si la URL es del mismo dominio, permitirla
-      if (url.startsWith(baseUrl)) return url;
-      // Por defecto, redirigir a la página principal
-      return baseUrl;
+      // Si la URL es relativa, agregar baseUrl correcto
+      if (url.startsWith("/")) return `${correctBaseUrl}${url}`;
+      // Si la URL es del mismo dominio, permitirla pero corregir puerto
+      if (url.startsWith('http://localhost:')) {
+        return url.replace(/localhost:\d+/, `localhost:${currentPort}`);
+      }
+      // Por defecto, redirigir a la página principal con puerto correcto
+      return correctBaseUrl;
     }
   },
   pages: {

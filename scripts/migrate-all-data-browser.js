@@ -224,3 +224,6 @@ console.log('📋 Script de migración cargado. Ejecuta: migrateAllData()');
 
 
 
+
+
+

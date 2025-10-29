@@ -160,7 +160,7 @@ export default function PendingItemModal({
     } finally {
       setIsSaving(false);
     }
-  }, [item, isSaving, formData.title, formData.category, formData.priority, formData.status, formData.proposedSolution, formData.tags, onSave]);
+  }, [item, isSaving, onSave]); // Removidas las dependencias de formData para evitar loops infinitos
 
   // Efecto para guardado automático con debounce
   useEffect(() => {
@@ -181,7 +181,7 @@ export default function PendingItemModal({
         clearTimeout(autoSaveTimeout);
       }
     };
-  }, [formData.title, formData.category, formData.priority, formData.status, formData.proposedSolution, formData.tags, item, autoSave]);
+  }, [formData.title, formData.category, formData.priority, formData.status, formData.proposedSolution, formData.tags, item]); // Removido autoSave de las dependencias
 
   // Efecto para manejar tecla ESC
   useEffect(() => {

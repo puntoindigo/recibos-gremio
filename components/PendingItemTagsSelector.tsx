@@ -1,5 +1,5 @@
 // components/PendingItemTagsSelector.tsx
-import React, { useState, useEffect, useRef, useMemo, forwardRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, forwardRef, useCallback } from 'react';
 import { X, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -67,11 +67,19 @@ export const PendingItemTagsSelector = forwardRef<HTMLInputElement, PendingItemT
   }, [inputValue, allExistingTags, tags, defaultTag]);
 
   // Auto-agregar el defaultTag cuando se monta el componente si no hay tags
-  useEffect(() => {
-    if (defaultTag && tags.length === 0 && !tags.includes(defaultTag)) {
-      addTag(defaultTag);
+  const hasAddedDefaultTag = useRef(false);
+  
+  // Memoizar la función para evitar re-renders innecesarios
+  const addDefaultTag = useCallback(() => {
+    if (defaultTag && tags.length === 0 && !tags.includes(defaultTag) && !hasAddedDefaultTag.current) {
+      hasAddedDefaultTag.current = true;
+      onTagsChange([defaultTag]);
     }
-  }, [defaultTag, tags]);
+  }, [defaultTag, tags, onTagsChange]);
+  
+  useEffect(() => {
+    addDefaultTag();
+  }, [addDefaultTag]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);

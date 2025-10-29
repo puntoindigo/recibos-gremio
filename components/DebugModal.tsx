@@ -21,6 +21,7 @@ import {
   Play
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { useUploadResume } from '@/hooks/useUploadResume';
 
@@ -76,6 +77,11 @@ export default function DebugModal({
   const [modalSize, setModalSize] = useState({ width: 800, height: 600 });
   const [uploadSessions, setUploadSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [showDeleteVisibleModal, setShowDeleteVisibleModal] = useState(false);
+  const [showDeleteControlModal, setShowDeleteControlModal] = useState(false);
+  const [showClearAllModal, setShowClearAllModal] = useState(false);
+  const [deleteVisibleData, setDeleteVisibleData] = useState<{consolidatedCount: number, receiptsCount: number} | null>(null);
+  const [deleteControlData, setDeleteControlData] = useState<{controlsCount: number} | null>(null);
   const { resumeUpload, isResuming } = useUploadResume();
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -142,19 +148,23 @@ export default function DebugModal({
         return;
       }
       
-      const confirmed = window.confirm(
-        `¿Estás seguro de que quieres eliminar todos los recibos visibles?\n\n` +
-        `Esta acción eliminará:\n` +
-        `- ${consolidatedCount} recibos procesados\n` +
-        `- ${receiptsCount} archivos de recibos\n` +
-        `- Todos los archivos PDF asociados\n\n` +
-        `Esta acción no se puede deshacer.`
-      );
-      
-      if (confirmed) {
-        await onDeleteVisible();
-        toast.success(`✅ Eliminados ${consolidatedCount + receiptsCount} registros correctamente`);
-      }
+      // Guardar datos y abrir modal de confirmación
+      setDeleteVisibleData({ consolidatedCount, receiptsCount });
+      setShowDeleteVisibleModal(true);
+    } catch (error) {
+      toast.error('Error obteniendo información de registros');
+      console.error('Error obteniendo información de registros:', error);
+    }
+  };
+
+  const confirmDeleteVisible = async () => {
+    if (!deleteVisibleData) return;
+    
+    try {
+      await onDeleteVisible();
+      toast.success(`✅ Eliminados ${deleteVisibleData.consolidatedCount + deleteVisibleData.receiptsCount} registros correctamente`);
+      setShowDeleteVisibleModal(false);
+      setDeleteVisibleData(null);
     } catch (error) {
       toast.error('Error eliminando registros');
       console.error('Error eliminando registros:', error);
@@ -171,19 +181,23 @@ export default function DebugModal({
         return;
       }
       
-      const confirmed = window.confirm(
-        `¿Estás seguro de que quieres eliminar el control actual?\n\n` +
-        `Esta acción eliminará:\n` +
-        `- ${controlsCount} controles guardados\n` +
-        `- Datos de resumen asociados\n` +
-        `- Historial de controles\n\n` +
-        `Esta acción no se puede deshacer.`
-      );
-      
-      if (confirmed) {
-        await onDeleteControl();
-        toast.success(`✅ Control eliminado correctamente`);
-      }
+      // Guardar datos y abrir modal de confirmación
+      setDeleteControlData({ controlsCount });
+      setShowDeleteControlModal(true);
+    } catch (error) {
+      toast.error('Error obteniendo información de controles');
+      console.error('Error obteniendo información de controles:', error);
+    }
+  };
+
+  const confirmDeleteControl = async () => {
+    if (!deleteControlData) return;
+    
+    try {
+      await onDeleteControl();
+      toast.success(`✅ Control eliminado correctamente`);
+      setShowDeleteControlModal(false);
+      setDeleteControlData(null);
     } catch (error) {
       toast.error('Error eliminando control');
       console.error('Error eliminando control:', error);
@@ -192,9 +206,21 @@ export default function DebugModal({
 
   const handleClearAllData = async () => {
     try {
+      setShowClearAllModal(true);
+    } catch (error) {
+      toast.error('Error preparando limpieza de datos');
+      console.error('Error preparando limpieza de datos:', error);
+    }
+  };
+
+  const confirmClearAllData = async () => {
+    try {
       await onClearAllData?.();
+      toast.success('✅ Base de datos limpiada completamente');
+      setShowClearAllModal(false);
     } catch (error) {
       toast.error('Error limpiando base de datos');
+      console.error('Error limpiando base de datos:', error);
     }
   };
 
@@ -407,15 +433,16 @@ export default function DebugModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent 
-        className="max-w-none p-0"
-        style={{ 
-          width: `${modalSize.width}px`, 
-          height: `${modalSize.height}px`,
-          maxHeight: '90vh'
-        }}
-      >
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent 
+          className="max-w-none p-0"
+          style={{ 
+            width: `${modalSize.width}px`, 
+            height: `${modalSize.height}px`,
+            maxHeight: '90vh'
+          }}
+        >
         <DialogHeader className="p-6 pb-4 border-b">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold flex items-center gap-2">
@@ -799,5 +826,75 @@ export default function DebugModal({
         />
       </DialogContent>
     </Dialog>
+
+    {/* Modal de confirmación para eliminar registros visibles */}
+    {showDeleteVisibleModal && deleteVisibleData && (
+      <ConfirmModal
+        open={showDeleteVisibleModal}
+        onClose={() => {
+          setShowDeleteVisibleModal(false);
+          setDeleteVisibleData(null);
+        }}
+        onConfirm={confirmDeleteVisible}
+        title="Eliminar Registros Visibles"
+        description={`¿Estás seguro de que quieres eliminar todos los recibos visibles?`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        variant="destructive"
+        details={[
+          `${deleteVisibleData.consolidatedCount} recibos procesados`,
+          `${deleteVisibleData.receiptsCount} archivos de recibos`,
+          'Todos los archivos PDF asociados',
+          'Esta acción no se puede deshacer'
+        ]}
+      />
+    )}
+
+    {/* Modal de confirmación para eliminar control actual */}
+    {showDeleteControlModal && deleteControlData && (
+      <ConfirmModal
+        open={showDeleteControlModal}
+        onClose={() => {
+          setShowDeleteControlModal(false);
+          setDeleteControlData(null);
+        }}
+        onConfirm={confirmDeleteControl}
+        title="Eliminar Control Actual"
+        description={`¿Estás seguro de que quieres eliminar el control actual?`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        variant="destructive"
+        details={[
+          `${deleteControlData.controlsCount} controles guardados`,
+          'Datos de resumen asociados',
+          'Historial de controles',
+          'Esta acción no se puede deshacer'
+        ]}
+      />
+    )}
+
+    {/* Modal de confirmación para limpiar todo */}
+    {showClearAllModal && (
+      <ConfirmModal
+        open={showClearAllModal}
+        onClose={() => setShowClearAllModal(false)}
+        onConfirm={confirmClearAllData}
+        title="Limpiar TODA la Base de Datos"
+        description="¿Estás seguro de que quieres eliminar TODOS los datos de la base de datos?"
+        confirmText="Limpiar TODO"
+        cancelText="Cancelar"
+        variant="destructive"
+        details={[
+          'Todos los recibos procesados',
+          'Todos los datos consolidados',
+          'Todos los descuentos',
+          'Todas las empresas',
+          'Todos los controles guardados',
+          'Todos los items pendientes',
+          'Esta acción es IRREVERSIBLE'
+        ]}
+      />
+    )}
+    </>
   );
 }

@@ -68,14 +68,35 @@ export default function SignInPage() {
   }, []);
 
   // Función para manejar click en card de credenciales
-  const handleCredentialCardClick = (credential: typeof defaultCredentials[0]) => {
+  const handleCredentialCardClick = async (credential: typeof defaultCredentials[0]) => {
     setEmail(credential.email);
     setPassword(credential.password);
     setError('');
     
-    // Auto-submit después de un pequeño delay para que se vea el cambio
-    setTimeout(() => {
-      handleSubmit(new Event('submit') as any);
+    // Esperar a que el estado se actualice y luego hacer login
+    setTimeout(async () => {
+      try {
+        setIsLoading(true);
+        const result = await signIn('credentials', {
+          email: credential.email,
+          password: credential.password,
+          redirect: false
+        });
+
+        if (result?.error) {
+          setError('Credenciales inválidas');
+        } else {
+          // Verificar la sesión y redirigir
+          const session = await getSession();
+          if (session) {
+            router.push('/');
+          }
+        }
+      } catch (error) {
+        setError('Error al iniciar sesión');
+      } finally {
+        setIsLoading(false);
+      }
     }, 100);
   };
 

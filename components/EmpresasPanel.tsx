@@ -32,7 +32,7 @@ import {
   Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { canManageUsers } from '@/lib/user-management';
+import { canManageEmpresas } from '@/lib/user-management';
 import EmpresaModal from './EmpresaModal';
 import { ConfirmModal } from './ConfirmModal';
 import EmpresasColumnSelector from './EmpresasColumnSelector';
@@ -54,7 +54,7 @@ export default function EmpresasPanel({ empresaFiltro }: EmpresasPanelProps) {
   const [selectedEmpresa, setSelectedEmpresa] = useState<EmpresaData | null>(null);
   const [empresaToDelete, setEmpresaToDelete] = useState<EmpresaData | null>(null);
 
-  const canManage = session?.user ? canManageUsers(session.user) : false;
+  const canManage = session?.user ? canManageEmpresas(session.user) : false;
 
   // Debug: verificar permisos
   useEffect(() => {
@@ -226,6 +226,17 @@ export default function EmpresasPanel({ empresaFiltro }: EmpresasPanelProps) {
         return String(empresa[key as keyof EmpresaData] || '');
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Cargando empresas...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!canManage) {
     return (

@@ -143,28 +143,28 @@ const CompactCard: React.FC<{
         animation: 'cardSlideIn 0.3s ease-out'
       }}
     >
-      <CardContent className="p-3">
+      <CardContent className="p-2">
         {/* Vista Compacta (por defecto) */}
         <div className={`transition-all duration-200 ${isHovered ? 'opacity-0 absolute' : 'opacity-100'}`}>
           {/* Título */}
-          <div className="font-medium text-sm mb-2 line-clamp-2">
+          <div className="font-medium text-xs mb-1 line-clamp-1">
             {item.description || 'Sin título'}
           </div>
           
           {/* Tags y Estado */}
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-1">
             <div className="flex items-center gap-1">
               {/* Tags */}
               {item.tags && item.tags.length > 0 && (
                 <div className="flex gap-1">
-                  {item.tags.slice(0, 2).map((tag, index) => (
-                    <Badge key={index} variant="secondary" className="text-xs px-1 py-0">
+                  {item.tags.slice(0, 1).map((tag, index) => (
+                    <Badge key={index} variant="secondary" className="text-xs px-1 py-0 h-4">
                       {tag}
                     </Badge>
                   ))}
-                  {item.tags.length > 2 && (
-                    <Badge variant="secondary" className="text-xs px-1 py-0">
-                      +{item.tags.length - 2}
+                  {item.tags.length > 1 && (
+                    <Badge variant="secondary" className="text-xs px-1 py-0 h-4">
+                      +{item.tags.length - 1}
                     </Badge>
                   )}
                 </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { useState, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ import { getEstadisticasDescuentos } from '@/lib/descuentos-manager';
 import type { ConsolidatedEntity } from '@/lib/repo';
 import UploadManagerModal from './UploadManagerModal';
 import EmpleadoModal from './EmpleadoModal';
+import LoadingSpinner, { SectionSpinner } from './LoadingSpinner';
+import { useEmpresasLoading } from '@/hooks/useSupabaseLoading';
 
 interface DashboardStats {
   totalEmployees: number;
@@ -52,6 +54,8 @@ interface DashboardProps {
 const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, onResumeSession, onOpenNewDescuento, onOpenNewEmployee, onOpenNewEmpresa, onFilterByPeriod, onFilterByCompany }, ref) => {
   const { dataManager } = useCentralizedDataManager();
   const { config } = useConfiguration();
+  const { isLoading: isLoadingEmpresas, loadEmpresas } = useEmpresasLoading();
+  
   const [stats, setStats] = useState<DashboardStats>({
     totalEmployees: 0,
     totalReceipts: 0,
@@ -63,31 +67,11 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
     recentActivity: []
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showUploadManager, setShowUploadManager] = useState(false);
   const [showCreateEmployee, setShowCreateEmployee] = useState(false);
   
-  // Debug: monitorear cambios en showCreateEmployee
-  useEffect(() => {
-    if (showCreateEmployee) {
-      console.log('🚨 showCreateEmployee se activó - Modal de empleado se abrirá');
-    }
-  }, [showCreateEmployee]);
-
-  useEffect(() => {
-    loadDashboardData();
-  }, []); // Solo se ejecuta una vez al montar
-
-  // Recargar datos cuando cambie el storage
-  useEffect(() => {
-    loadDashboardData();
-  }, [config.enableSupabaseStorage]); // Se ejecuta cuando cambie el storage
-
-  // Exponer función de refresh para el componente padre
-  useImperativeHandle(ref, () => ({
-    refresh: loadDashboardData
-  }), []);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -192,7 +176,23 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
     } finally {
       setLoading(false);
     }
-  };
+  }, [dataManager, config.enableSupabaseStorage]);
+
+  // Debug: monitorear cambios en showCreateEmployee
+  useEffect(() => {
+    if (showCreateEmployee) {
+      console.log('🚨 showCreateEmployee se activó - Modal de empleado se abrirá');
+    }
+  }, [showCreateEmployee]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]); // Depende de loadDashboardData memoizada
+
+  // Exponer función de refresh para el componente padre
+  useImperativeHandle(ref, () => ({
+    refresh: loadDashboardData
+  }), [loadDashboardData]);
 
   if (loading) {
     return (

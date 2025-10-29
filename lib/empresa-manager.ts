@@ -143,7 +143,11 @@ export class EmpresaManager {
         }
       }
 
-      return empresas.sort((a, b) => a.nombre.localeCompare(b.nombre));
+      return empresas.sort((a, b) => {
+        const nombreA = a.nombre || '';
+        const nombreB = b.nombre || '';
+        return nombreA.localeCompare(nombreB);
+      });
     } catch (error) {
       console.error('Error obteniendo empresas:', error);
       return [];

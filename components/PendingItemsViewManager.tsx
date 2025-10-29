@@ -27,7 +27,8 @@ import PendingItemsCardsView from './PendingItemsCardsView';
 import PendingItemsBoardView from './PendingItemsBoardView';
 import PendingItemModal from './PendingItemModal';
 import ColoredSelect from './ColoredSelect';
-import { supabasePendingItemsManager, PendingItem } from '@/lib/supabase-pending-items-manager';
+import { getSupabaseManager } from '@/lib/supabase-manager';
+import { PendingItem } from '@/lib/supabase-client';
 
 type ViewMode = 'list' | 'cards' | 'board';
 
@@ -56,12 +57,31 @@ export default function PendingItemsViewManager() {
     const loadItems = async () => {
       try {
         setLoading(true);
-        // Inicializar con datos por defecto si no existen
-        await supabasePendingItemsManager.initializeDefaultItems();
         
-        // Cargar todos los items
-        const allItems = await supabasePendingItemsManager.getAllItems();
-        setItems(allItems);
+        // Cargar todos los items usando SupabaseManager
+        const supabaseManager = getSupabaseManager();
+        const allItems = await supabaseManager.getPendingItems();
+        
+        // Convertir de SupabasePendingItem a PendingItem
+        const convertedItems: PendingItem[] = allItems.map(item => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          category: item.category,
+          priority: item.priority,
+          status: item.status,
+          order: item.order,
+          color: item.color,
+          proposedSolution: item.proposed_solution,
+          feedback: item.feedback,
+          resolution: item.resolution,
+          resolvedAt: item.resolved_at,
+          createdAt: item.created_at,
+          updatedAt: item.updated_at,
+          tags: [] // La tabla no tiene tags, usar array vacío
+        }));
+        
+        setItems(convertedItems);
       } catch (error) {
         console.error('Error cargando items pendientes:', error);
         toast.error('Error cargando items pendientes');
@@ -71,6 +91,32 @@ export default function PendingItemsViewManager() {
     };
 
     loadItems();
+  }, []);
+
+  // Escuchar eventos personalizados desde el componente padre
+  useEffect(() => {
+    const handleOpenNewItemModal = () => {
+      setEditingItem(null);
+      setShowModal(true);
+    };
+
+    const handleCleanDuplicatesEvent = () => {
+      handleCleanDuplicates();
+    };
+
+    const handleSetViewMode = (event: CustomEvent) => {
+      setViewMode(event.detail);
+    };
+
+    window.addEventListener('openNewItemModal', handleOpenNewItemModal);
+    window.addEventListener('cleanDuplicates', handleCleanDuplicatesEvent);
+    window.addEventListener('setViewMode', handleSetViewMode as EventListener);
+
+    return () => {
+      window.removeEventListener('openNewItemModal', handleOpenNewItemModal);
+      window.removeEventListener('cleanDuplicates', handleCleanDuplicatesEvent);
+      window.removeEventListener('setViewMode', handleSetViewMode as EventListener);
+    };
   }, []);
 
   // Función para guardar cambios
@@ -89,27 +135,26 @@ export default function PendingItemsViewManager() {
     saveChanges(newItems);
   };
 
-  const handleStatusChange = async (itemId: string, newStatus: 'pending' | 'open' | 'in-progress' | 'verifying' | 'completed') => {
+  const handleStatusChange = async (itemId: string, newStatus: PendingItem['status']) => {
     try {
-      const success = await supabasePendingItemsManager.updateItem(itemId, { 
+      const supabaseManager = getSupabaseManager();
+      await supabaseManager.updatePendingItem(itemId, { 
         status: newStatus,
-        resolvedAt: newStatus === 'completed' ? new Date().toISOString() : undefined
+        resolved_at: newStatus === 'completed' ? new Date().toISOString() : undefined
       });
       
-      if (success) {
-        const updatedItems = items.map(item => {
-          if (item.id === itemId) {
-            return { 
-              ...item, 
-              status: newStatus,
-              resolvedAt: newStatus === 'completed' ? new Date().toISOString() : undefined
-            };
-          }
-          return item;
-        });
-        setItems(updatedItems);
-        toast.success('Estado actualizado');
-      }
+      const updatedItems = items.map(item => {
+        if (item.id === itemId) {
+          return { 
+            ...item, 
+            status: newStatus,
+            resolvedAt: newStatus === 'completed' ? new Date().toISOString() : undefined
+          };
+        }
+        return item;
+      });
+      setItems(updatedItems);
+      toast.success('Estado actualizado');
     } catch (error) {
       console.error('Error actualizando estado:', error);
       toast.error('Error actualizando estado');
@@ -117,31 +162,28 @@ export default function PendingItemsViewManager() {
   };
 
   // Nueva función para manejar cambios de prioridad
-  const handlePriorityChange = async (itemId: string, newPriority: 'high' | 'medium' | 'low') => {
+  const handlePriorityChange = async (itemId: string, newPriority: PendingItem['priority']) => {
     try {
       console.log('🔍 Cambiando prioridad:', { itemId, newPriority });
       
-      const success = await supabasePendingItemsManager.updateItem(itemId, { 
+      const supabaseManager = getSupabaseManager();
+      await supabaseManager.updatePendingItem(itemId, { 
         priority: newPriority
       });
       
-      console.log('🔍 Resultado de actualización:', success);
+      console.log('🔍 Resultado de actualización: exitoso');
       
-      if (success) {
-        const updatedItems = items.map(item => {
-          if (item.id === itemId) {
-            return { 
-              ...item, 
-              priority: newPriority
-            };
-          }
-          return item;
-        });
-        setItems(updatedItems);
-        toast.success('Prioridad actualizada');
-      } else {
-        toast.error('Error actualizando prioridad');
-      }
+      const updatedItems = items.map(item => {
+        if (item.id === itemId) {
+          return { 
+            ...item, 
+            priority: newPriority
+          };
+        }
+        return item;
+      });
+      setItems(updatedItems);
+      toast.success('Prioridad actualizada');
     } catch (error) {
       console.error('Error actualizando prioridad:', error);
       toast.error('Error actualizando prioridad');
@@ -160,7 +202,7 @@ export default function PendingItemsViewManager() {
       const item = items.find(i => i.id === itemId);
       if (item) {
         const updatedFeedback = [...(item.feedback || []), newFeedback];
-        const success = await supabasePendingItemsManager.updateItem(itemId, { feedback: updatedFeedback });
+        await getSupabaseManager().updatePendingItem(itemId, { feedback: updatedFeedback });
         
         if (success) {
           const updatedItems = items.map(item => {
@@ -187,7 +229,7 @@ export default function PendingItemsViewManager() {
           f.id === feedbackId ? { ...f, resolved: true } : f
         );
         
-        const success = await supabasePendingItemsManager.updateItem(itemId, { feedback: updatedFeedback });
+        await getSupabaseManager().updatePendingItem(itemId, { feedback: updatedFeedback });
         
         if (success) {
           const updatedItems = items.map(item => {
@@ -216,12 +258,12 @@ export default function PendingItemsViewManager() {
       if (editingItem) {
         // Actualizar item existente
         const updatedItems = items.map(i => i.id === item.id ? item : i);
-        await supabasePendingItemsManager.updateItem(item.id, item);
+        await getSupabaseManager().updatePendingItem(item.id, item);
         setItems(updatedItems);
         toast.success('Item actualizado');
       } else {
         // Crear nuevo item
-        const newItem = await supabasePendingItemsManager.createItem(item);
+        const newItem = await getSupabaseManager().createPendingItem(item);
         setItems([...items, newItem]);
         toast.success('Item creado');
       }
@@ -243,7 +285,7 @@ export default function PendingItemsViewManager() {
     }
 
     try {
-      const success = await supabasePendingItemsManager.updateItem(editingItem.id, {
+      await getSupabaseManager().updatePendingItem(editingItem.id, {
         title: newItem.description, // Usar description como title por ahora
         description: newItem.description,
         category: newItem.category,
@@ -283,7 +325,7 @@ export default function PendingItemsViewManager() {
     }
 
     try {
-      const newItemData = await supabasePendingItemsManager.createItem({
+      const newItemData = await getSupabaseManager().createPendingItem({
         title: newItem.description, // Usar description como title por ahora
         description: newItem.description,
         category: newItem.category,
@@ -348,14 +390,10 @@ export default function PendingItemsViewManager() {
   const handleDeleteItem = async (id: string) => {
     try {
       console.log('🔍 Eliminando item:', id);
-      const success = await supabasePendingItemsManager.deleteItem(id);
-      if (success) {
-        const updatedItems = items.filter(item => item.id !== id);
-        setItems(updatedItems);
-        toast.success('Item eliminado');
-      } else {
-        toast.error('Error eliminando item');
-      }
+      await getSupabaseManager().deletePendingItem(id);
+      const updatedItems = items.filter(item => item.id !== id);
+      setItems(updatedItems);
+      toast.success('Item eliminado');
     } catch (error) {
       console.error('Error eliminando item:', error);
       toast.error('Error eliminando item');
@@ -365,16 +403,8 @@ export default function PendingItemsViewManager() {
   const handleCleanDuplicates = async () => {
     try {
       setLoading(true);
-      const duplicatesRemoved = await supabasePendingItemsManager.cleanDuplicates();
-      
-      if (duplicatesRemoved > 0) {
-        // Recargar items después de limpiar
-        const allItems = await supabasePendingItemsManager.getAllItems();
-        setItems(allItems);
-        toast.success(`${duplicatesRemoved} duplicados eliminados`);
-      } else {
-        toast.info('No se encontraron duplicados');
-      }
+      // Limpiar duplicados - función no disponible en SupabaseManager
+      toast.info('Función de limpiar duplicados no disponible');
     } catch (error) {
       console.error('Error limpiando duplicados:', error);
       toast.error('Error limpiando duplicados');
@@ -421,68 +451,8 @@ export default function PendingItemsViewManager() {
   return (
     <>
       <Card className="w-full h-full flex flex-col">
-        <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                {completedCount}/{totalCount} completados
-              </Badge>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setEditingItem(null);
-                  setShowModal(true);
-                }}
-                className="bg-green-50 text-green-700 hover:bg-green-100"
-              >
-                <Edit3 className="h-4 w-4 mr-2" />
-                Nueva Nota
-              </Button>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCleanDuplicates}
-                className="bg-red-50 text-red-700 hover:bg-red-100"
-                disabled={loading}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Limpiar Duplicados
-              </Button>
-            </div>
-            
-            {/* Botones de vista */}
-            <div className="flex items-center space-x-2">
-              <div className="flex items-center bg-gray-100 rounded-lg p-1">
-                <Button
-                  variant={viewMode === 'list' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('list')}
-                  className="h-8 px-3"
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === 'cards' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('cards')}
-                  className="h-8 px-3"
-                >
-                  <Grid3X3 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === 'board' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('board')}
-                  className="h-8 px-3"
-                >
-                  <Layout className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
+        <CardHeader className="pb-2">
+          {/* Header simplificado - solo para espaciado */}
         </CardHeader>
 
         {/* Búsqueda y Filtros */}

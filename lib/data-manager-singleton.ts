@@ -112,11 +112,21 @@ export interface DataManager {
   
   // Métodos para descuentos
   getDescuentos(): Promise<any[]>;
+  getDescuentosByLegajo(legajo: string): Promise<any[]>;
+  getDescuentosByEmpresa(empresa: string): Promise<any[]>;
   addDescuento(data: any): Promise<void>;
+  updateDescuento(id: string, data: any): Promise<void>;
+  deleteDescuento(id: string): Promise<void>;
+  clearDescuentos(): Promise<void>;
+  countDescuentos(): Promise<number>;
   
   // Métodos para empresas
   getEmpresas(): Promise<any[]>;
   addEmpresa(data: any): Promise<void>;
+  updateEmpresa(id: string, data: any): Promise<void>;
+  deleteEmpresa(id: string): Promise<void>;
+  clearEmpresas(): Promise<void>;
+  countEmpresas(): Promise<number>;
   
   // Métodos para controles guardados
   getSavedControls(): Promise<any[]>;
@@ -362,7 +372,47 @@ class SupabaseDataManager implements DataManager {
   }
 
   async addEmpresa(data: any): Promise<void> {
-    await getSupabaseManager().createEmpresa(data);
+    await getSupabaseManager().addEmpresa(data);
+  }
+
+  async getDescuentosByLegajo(legajo: string): Promise<any[]> {
+    return await getSupabaseManager().getDescuentosByLegajo(legajo);
+  }
+
+  async getDescuentosByEmpresa(empresa: string): Promise<any[]> {
+    return await getSupabaseManager().getDescuentosByEmpresa(empresa);
+  }
+
+  async updateDescuento(id: string, data: any): Promise<void> {
+    await getSupabaseManager().updateDescuento(id, data);
+  }
+
+  async deleteDescuento(id: string): Promise<void> {
+    await getSupabaseManager().deleteDescuento(id);
+  }
+
+  async clearDescuentos(): Promise<void> {
+    await getSupabaseManager().clearDescuentos();
+  }
+
+  async countDescuentos(): Promise<number> {
+    return await getSupabaseManager().countDescuentos();
+  }
+
+  async updateEmpresa(id: string, data: any): Promise<void> {
+    await getSupabaseManager().updateEmpresa(id, data);
+  }
+
+  async deleteEmpresa(id: string): Promise<void> {
+    await getSupabaseManager().deleteEmpresa(id);
+  }
+
+  async clearEmpresas(): Promise<void> {
+    await getSupabaseManager().clearEmpresas();
+  }
+
+  async countEmpresas(): Promise<number> {
+    return await getSupabaseManager().countEmpresas();
   }
 
   async getSavedControls(): Promise<any[]> {

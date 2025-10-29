@@ -30,7 +30,10 @@ import {
 } from 'lucide-react';
 import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { useConfiguration } from '@/contexts/ConfigurationContext';
+import { useUploadResume } from '@/hooks/useUploadResume';
 import SystemMetrics from '@/components/SystemMetrics';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { toast } from 'sonner';
 
 interface SystemMetrics {
   totalRecords: number;
@@ -63,6 +66,7 @@ interface FeedbackEntry {
 export default function PersistentDevTools() {
   const { dataManager, storageType } = useCentralizedDataManager();
   const { config } = useConfiguration();
+  const { sessions, clearSessions, resumeSession } = useUploadResume();
   
   // Estados principales
   const [isExpanded, setIsExpanded] = useState(false); // Inicialmente colapsado
@@ -84,6 +88,13 @@ export default function PersistentDevTools() {
   const [feedbackType, setFeedbackType] = useState<'bug' | 'feature' | 'improvement' | 'question'>('bug');
   const [feedbackPriority, setFeedbackPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
   
+  // Estados para modales de confirmación
+  const [showDeleteVisibleModal, setShowDeleteVisibleModal] = useState(false);
+  const [showDeleteControlModal, setShowDeleteControlModal] = useState(false);
+  const [showClearAllModal, setShowClearAllModal] = useState(false);
+  const [showClearSessionsModal, setShowClearSessionsModal] = useState(false);
+  const [deleteVisibleData, setDeleteVisibleData] = useState<{consolidatedCount: number, receiptsCount: number} | null>(null);
+  
   const logsEndRef = useRef<HTMLDivElement>(null);
   const feedbackEndRef = useRef<HTMLDivElement>(null);
 
@@ -93,12 +104,26 @@ export default function PersistentDevTools() {
     try {
       switch (action) {
         case 'clean-all':
-          await dataManager.clearAllData();
-          addLogCallback('success', 'DevTools', 'Base de datos limpiada completamente');
+          setShowClearAllModal(true);
+          break;
+        case 'delete-visible':
+          await handleDeleteVisible();
+          break;
+        case 'delete-control':
+          await handleDeleteControl();
+          break;
+        case 'clear-sessions':
+          setShowClearSessionsModal(true);
           break;
         case 'refresh-data':
           await dataManager.refreshData();
           addLogCallback('success', 'DevTools', 'Datos refrescados desde la fuente');
+          break;
+        case 'check-database':
+          await checkDatabase();
+          break;
+        case 'check-pending-uploads':
+          await checkPendingUploads();
           break;
         case 'normalize-filenames':
           // Implementar normalización de nombres
@@ -108,22 +133,6 @@ export default function PersistentDevTools() {
           // Implementar verificación de archivos
           addLogCallback('info', 'DevTools', 'Verificación de archivos completada');
           break;
-        case 'show-debug-modal':
-          // Toggle debug modal
-          addLogCallback('info', 'DevTools', 'Modal de debug toggleado');
-          break;
-        case 'show-help-modal':
-          // Toggle help modal
-          addLogCallback('info', 'DevTools', 'Modal de ayuda toggleado');
-          break;
-        case 'show-upload-log':
-          // Toggle upload log
-          addLogCallback('info', 'DevTools', 'Log de subidas toggleado');
-          break;
-        case 'storage-config':
-          // Toggle storage config
-          addLogCallback('info', 'DevTools', 'Configuración de storage toggleada');
-          break;
         default:
           addLogCallback('warn', 'DevTools', `Acción no implementada: ${action}`);
       }
@@ -131,6 +140,121 @@ export default function PersistentDevTools() {
       addLogCallback('error', 'DevTools', `Error ejecutando ${action}: ${error}`);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Funciones específicas de limpieza
+  const handleDeleteVisible = async () => {
+    try {
+      const consolidatedCount = await dataManager.countConsolidated();
+      const receiptsCount = await dataManager.countReceipts();
+      
+      if (consolidatedCount === 0 && receiptsCount === 0) {
+        toast.info('No hay registros para eliminar');
+        return;
+      }
+      
+      setDeleteVisibleData({ consolidatedCount, receiptsCount });
+      setShowDeleteVisibleModal(true);
+    } catch (error) {
+      toast.error('Error obteniendo información de registros');
+      addLogCallback('error', 'DevTools', `Error obteniendo información: ${error}`);
+    }
+  };
+
+  const confirmDeleteVisible = async () => {
+    if (!deleteVisibleData) return;
+    
+    try {
+      await dataManager.clearConsolidated();
+      await dataManager.clearReceipts();
+      toast.success(`✅ Eliminados ${deleteVisibleData.consolidatedCount + deleteVisibleData.receiptsCount} registros correctamente`);
+      addLogCallback('success', 'DevTools', `Eliminados ${deleteVisibleData.consolidatedCount + deleteVisibleData.receiptsCount} registros visibles`);
+      setShowDeleteVisibleModal(false);
+      setDeleteVisibleData(null);
+      await updateMetrics();
+    } catch (error) {
+      toast.error('Error eliminando registros');
+      addLogCallback('error', 'DevTools', `Error eliminando registros: ${error}`);
+    }
+  };
+
+  const handleDeleteControl = async () => {
+    try {
+      const controlCount = await dataManager.countSavedControls();
+      
+      if (controlCount === 0) {
+        toast.info('No hay controles guardados para eliminar');
+        return;
+      }
+      
+      setShowDeleteControlModal(true);
+    } catch (error) {
+      toast.error('Error obteniendo información de controles');
+      addLogCallback('error', 'DevTools', `Error obteniendo información de controles: ${error}`);
+    }
+  };
+
+  const confirmDeleteControl = async () => {
+    try {
+      await dataManager.clearSavedControls();
+      toast.success('✅ Controles guardados eliminados correctamente');
+      addLogCallback('success', 'DevTools', 'Controles guardados eliminados');
+      setShowDeleteControlModal(false);
+      await updateMetrics();
+    } catch (error) {
+      toast.error('Error eliminando controles');
+      addLogCallback('error', 'DevTools', `Error eliminando controles: ${error}`);
+    }
+  };
+
+  const confirmClearAllData = async () => {
+    try {
+      await dataManager.clearAllData();
+      toast.success('✅ Base de datos limpiada completamente');
+      addLogCallback('success', 'DevTools', 'Base de datos limpiada completamente');
+      setShowClearAllModal(false);
+      await updateMetrics();
+    } catch (error) {
+      toast.error('Error limpiando base de datos');
+      addLogCallback('error', 'DevTools', `Error limpiando base de datos: ${error}`);
+    }
+  };
+
+  const confirmClearSessions = async () => {
+    try {
+      clearSessions();
+      toast.success('✅ Sesiones de subida limpiadas');
+      addLogCallback('success', 'DevTools', 'Sesiones de subida limpiadas');
+      setShowClearSessionsModal(false);
+    } catch (error) {
+      toast.error('Error limpiando sesiones');
+      addLogCallback('error', 'DevTools', `Error limpiando sesiones: ${error}`);
+    }
+  };
+
+  // Funciones de verificación
+  const checkDatabase = async () => {
+    try {
+      const consolidated = await dataManager.getConsolidated();
+      const receipts = await dataManager.getReceipts();
+      const descuentos = await dataManager.getDescuentos();
+      const empresas = await dataManager.getEmpresas();
+      
+      addLogCallback('info', 'DevTools', `Verificación de BD: ${consolidated.length} consolidados, ${receipts.length} recibos, ${descuentos.length} descuentos, ${empresas.length} empresas`);
+    } catch (error) {
+      addLogCallback('error', 'DevTools', `Error verificando BD: ${error}`);
+    }
+  };
+
+  const checkPendingUploads = async () => {
+    try {
+      addLogCallback('info', 'DevTools', `Sesiones pendientes: ${sessions.length}`);
+      sessions.forEach(session => {
+        addLogCallback('info', 'DevTools', `Sesión ${session.id}: ${session.files.length} archivos`);
+      });
+    } catch (error) {
+      addLogCallback('error', 'DevTools', `Error verificando subidas: ${error}`);
     }
   };
 
@@ -479,9 +603,44 @@ export default function PersistentDevTools() {
             {activeTab === 'tools' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  {/* Limpieza */}
+                  {/* Limpieza Específica */}
                   <div className="space-y-2">
-                    <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300">Limpieza</h4>
+                    <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300">Limpieza Específica</h4>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDevAction('delete-visible')}
+                      disabled={isLoading}
+                      className="w-full"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Eliminar Registros Visibles
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDevAction('delete-control')}
+                      disabled={isLoading}
+                      className="w-full"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Eliminar Control Actual
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDevAction('clear-sessions')}
+                      disabled={isLoading}
+                      className="w-full"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Limpiar Sesiones ({sessions.length})
+                    </Button>
+                  </div>
+
+                  {/* Limpieza Total */}
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300">Limpieza Total</h4>
                     <Button
                       variant="destructive"
                       size="sm"
@@ -490,7 +649,32 @@ export default function PersistentDevTools() {
                       className="w-full"
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
-                      Limpiar Todo
+                      Limpiar TODO
+                    </Button>
+                  </div>
+
+                  {/* Verificaciones */}
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300">Verificaciones</h4>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDevAction('check-database')}
+                      disabled={isLoading}
+                      className="w-full"
+                    >
+                      <Database className="w-4 h-4 mr-2" />
+                      Verificar BD
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDevAction('check-pending-uploads')}
+                      disabled={isLoading}
+                      className="w-full"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Verificar Subidas
                     </Button>
                   </div>
 
@@ -507,11 +691,6 @@ export default function PersistentDevTools() {
                       <RefreshCw className="w-4 h-4 mr-2" />
                       Refrescar Datos
                     </Button>
-                  </div>
-
-                  {/* Archivos */}
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300">Archivos</h4>
                     <Button
                       variant="outline"
                       size="sm"
@@ -533,62 +712,13 @@ export default function PersistentDevTools() {
                       Verificar Archivos
                     </Button>
                   </div>
-
-                  {/* Debug */}
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300">Debug</h4>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDevAction('show-debug-modal')}
-                      disabled={isLoading}
-                      className="w-full"
-                    >
-                      <Bug className="w-4 h-4 mr-2" />
-                      Debug Modal
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDevAction('show-help-modal')}
-                      disabled={isLoading}
-                      className="w-full"
-                    >
-                      <AlertTriangle className="w-4 h-4 mr-2" />
-                      Ayuda
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDevAction('show-upload-log')}
-                      disabled={isLoading}
-                      className="w-full"
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      Log Subidas
-                    </Button>
-                  </div>
-
-                  {/* Storage */}
-                  <div className="space-y-2 col-span-2">
-                    <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300">Storage</h4>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDevAction('storage-config')}
-                      disabled={isLoading}
-                      className="w-full"
-                    >
-                      <Cloud className="w-4 h-4 mr-2" />
-                      Configuración Storage
-                    </Button>
-                  </div>
                 </div>
 
                 <Separator />
                 
                 <div className="text-xs text-gray-500 dark:text-gray-400">
                   <p><strong>Estado actual:</strong> {storageType}</p>
+                  <p><strong>Sesiones pendientes:</strong> {sessions.length}</p>
                   <p><strong>Última acción:</strong> {isLoading ? 'Procesando...' : 'Listo'}</p>
                 </div>
               </div>
@@ -735,6 +865,86 @@ export default function PersistentDevTools() {
           </div>
         )}
       </div>
+
+      {/* Modales de confirmación */}
+      {showDeleteVisibleModal && deleteVisibleData && (
+        <ConfirmModal
+          open={showDeleteVisibleModal}
+          onClose={() => {
+            setShowDeleteVisibleModal(false);
+            setDeleteVisibleData(null);
+          }}
+          onConfirm={confirmDeleteVisible}
+          title="Eliminar Registros Visibles"
+          description={`¿Estás seguro de que quieres eliminar todos los recibos visibles?`}
+          confirmText="Eliminar"
+          cancelText="Cancelar"
+          variant="destructive"
+          details={[
+            `${deleteVisibleData.consolidatedCount} recibos procesados`,
+            `${deleteVisibleData.receiptsCount} recibos originales`,
+            'Esta acción es IRREVERSIBLE'
+          ]}
+        />
+      )}
+
+      {showDeleteControlModal && (
+        <ConfirmModal
+          open={showDeleteControlModal}
+          onClose={() => setShowDeleteControlModal(false)}
+          onConfirm={confirmDeleteControl}
+          title="Eliminar Control Actual"
+          description="¿Estás seguro de que quieres eliminar todos los controles guardados?"
+          confirmText="Eliminar"
+          cancelText="Cancelar"
+          variant="destructive"
+          details={[
+            'Todos los controles guardados',
+            'Esta acción es IRREVERSIBLE'
+          ]}
+        />
+      )}
+
+      {showClearAllModal && (
+        <ConfirmModal
+          open={showClearAllModal}
+          onClose={() => setShowClearAllModal(false)}
+          onConfirm={confirmClearAllData}
+          title="Limpiar TODA la Base de Datos"
+          description="¿Estás seguro de que quieres eliminar TODOS los datos de la base de datos?"
+          confirmText="Limpiar TODO"
+          cancelText="Cancelar"
+          variant="destructive"
+          details={[
+            'Todos los recibos procesados',
+            'Todos los datos consolidados',
+            'Todos los descuentos',
+            'Todas las empresas',
+            'Todos los controles guardados',
+            'Todos los items pendientes',
+            'Esta acción es IRREVERSIBLE'
+          ]}
+        />
+      )}
+
+      {showClearSessionsModal && (
+        <ConfirmModal
+          open={showClearSessionsModal}
+          onClose={() => setShowClearSessionsModal(false)}
+          onConfirm={confirmClearSessions}
+          title="Limpiar Sesiones de Subida"
+          description={`¿Estás seguro de que quieres eliminar todas las sesiones de subida pendientes?`}
+          confirmText="Limpiar"
+          cancelText="Cancelar"
+          variant="destructive"
+          details={[
+            `${sessions.length} sesiones pendientes`,
+            'Se perderá el progreso de subidas incompletas',
+            'Esta acción es IRREVERSIBLE'
+          ]}
+        />
+      )}
     </div>
   );
 }
+

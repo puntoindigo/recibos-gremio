@@ -255,50 +255,96 @@ export class SupabaseManager {
       loadingState.setLoading('descuentos', false);
     }
   }
-  
+
+  async getDescuentosByLegajo(legajo: string): Promise<SupabaseDescuento[]> {
+    const cacheKey = `descuentos_legajo_${legajo}`;
+    const cached = dataCache.get(cacheKey);
+    if (cached) return cached;
+    
+    loadingState.setLoading('descuentos', true);
+    
+    try {
+      const { data, error } = await this.client
+        .from('descuentos')
+        .select('*')
+        .eq('legajo', legajo)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      dataCache.set(cacheKey, data);
+      return data || [];
+    } finally {
+      loadingState.setLoading('descuentos', false);
+    }
+  }
+
+  async getDescuentosByEmpresa(empresa: string): Promise<SupabaseDescuento[]> {
+    const cacheKey = `descuentos_empresa_${empresa}`;
+    const cached = dataCache.get(cacheKey);
+    if (cached) return cached;
+    
+    loadingState.setLoading('descuentos', true);
+    
+    try {
+      const { data, error } = await this.client
+        .from('descuentos')
+        .select('*')
+        .eq('empresa', empresa)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      dataCache.set(cacheKey, data);
+      return data || [];
+    } finally {
+      loadingState.setLoading('descuentos', false);
+    }
+  }
+
   async createDescuento(descuento: Omit<SupabaseDescuento, 'id' | 'created_at' | 'updated_at'>): Promise<SupabaseDescuento> {
     loadingState.setLoading('descuentos', true);
     
     try {
       const { data, error } = await this.client
         .from('descuentos')
-        .insert([descuento])
+        .insert(descuento)
         .select()
         .single();
       
       if (error) throw error;
       
-      // Limpiar cache relacionado
+      // Limpiar cache
       dataCache.delete('descuentos_all');
+      dataCache.delete(`descuentos_legajo_${descuento.legajo}`);
+      dataCache.delete(`descuentos_empresa_${descuento.empresa}`);
       
       return data;
     } finally {
       loadingState.setLoading('descuentos', false);
     }
   }
-  
-  async updateDescuento(id: string, updates: Partial<SupabaseDescuento>): Promise<SupabaseDescuento> {
+
+  async updateDescuento(id: string, descuento: Partial<SupabaseDescuento>): Promise<void> {
     loadingState.setLoading('descuentos', true);
     
     try {
-      const { data, error } = await this.client
+      const { error } = await this.client
         .from('descuentos')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
+        .update(descuento)
+        .eq('id', id);
       
       if (error) throw error;
       
-      // Limpiar cache relacionado
-      dataCache.clear();
-      
-      return data;
+      // Limpiar cache
+      dataCache.delete('descuentos_all');
+      dataCache.delete(`descuentos_legajo_${descuento.legajo}`);
+      dataCache.delete(`descuentos_empresa_${descuento.empresa}`);
     } finally {
       loadingState.setLoading('descuentos', false);
     }
   }
-  
+
   async deleteDescuento(id: string): Promise<void> {
     loadingState.setLoading('descuentos', true);
     
@@ -310,10 +356,42 @@ export class SupabaseManager {
       
       if (error) throw error;
       
-      // Limpiar cache relacionado
-      dataCache.clear();
+      // Limpiar cache
+      dataCache.delete('descuentos_all');
     } finally {
       loadingState.setLoading('descuentos', false);
+    }
+  }
+
+  async clearDescuentos(): Promise<void> {
+    loadingState.setLoading('descuentos', true);
+    
+    try {
+      const { error } = await this.client
+        .from('descuentos')
+        .delete()
+        .neq('id', '');
+      
+      if (error) throw error;
+      
+      // Limpiar cache
+      dataCache.delete('descuentos_all');
+    } finally {
+      loadingState.setLoading('descuentos', false);
+    }
+  }
+
+  async countDescuentos(): Promise<number> {
+    try {
+      const { count, error } = await this.client
+        .from('descuentos')
+        .select('*', { count: 'exact', head: true });
+      
+      if (error) throw error;
+      return count || 0;
+    } catch (error) {
+      console.error('Error counting descuentos:', error);
+      return 0;
     }
   }
   
@@ -391,7 +469,10 @@ export class SupabaseManager {
     try {
       const { data, error } = await this.client
         .from('pending_items')
-        .insert([item])
+        .insert([{
+          ...item,
+          id: crypto.randomUUID()
+        }])
         .select()
         .single();
       
@@ -655,74 +736,43 @@ export class SupabaseManager {
     
     try {
       console.log('🔍 SupabaseManager.getAllEmpresas() - Iniciando consulta...');
-      console.log('🔗 SupabaseManager.getAllEmpresas() - URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
-      console.log('🔑 SupabaseManager.getAllEmpresas() - Key configurada:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
       
       // Verificar conexión básica primero
       const connectionTest = await this.testConnection();
       if (!connectionTest.success) {
-        console.error('❌ SupabaseManager.getAllEmpresas() - Error de conexión:', connectionTest.error);
-        throw new Error(`Error de conexión: ${connectionTest.error}`);
+        console.warn('⚠️ SupabaseManager.getAllEmpresas() - Error de conexión, usando método alternativo');
+        return await this.getAllEmpresasAlternative();
       }
       
       console.log('✅ SupabaseManager.getAllEmpresas() - Conexión verificada');
       
-      const { data, error } = await this.client
-        .from('recibos')
-        .select('empresa')
-        .not('empresa', 'is', null);
+      // Obtener empresas desde la tabla empresas directamente
+      const { data: empresasData, error: empresasError } = await this.client
+        .from('empresas')
+        .select('nombre')
+        .not('nombre', 'is', null);
       
-      if (error) {
-        console.error('❌ SupabaseManager.getAllEmpresas() - Error en consulta:', error);
-        console.error('❌ SupabaseManager.getAllEmpresas() - Tipo de error:', typeof error);
-        console.error('❌ SupabaseManager.getAllEmpresas() - Error completo:', JSON.stringify(error, null, 2));
-        throw error;
+      if (empresasError) {
+        console.error('❌ SupabaseManager.getAllEmpresas() - Error en tabla empresas:', empresasError);
+        return await this.getAllEmpresasAlternative();
       }
       
-      console.log('📊 SupabaseManager.getAllEmpresas() - Datos recibidos:', data);
-      console.log('📊 SupabaseManager.getAllEmpresas() - Tipo de datos:', typeof data);
-      console.log('📊 SupabaseManager.getAllEmpresas() - Longitud:', data?.length);
-      
-      if (!data || data.length === 0) {
-        console.log('⚠️ SupabaseManager.getAllEmpresas() - No hay datos de recibos, intentando desde consolidated...');
-        
-        // Intentar obtener empresas desde la tabla consolidated
-        const { data: consolidatedData, error: consolidatedError } = await this.client
-          .from('consolidated')
-          .select('empresa')
-          .not('empresa', 'is', null);
-        
-        if (consolidatedError) {
-          console.error('❌ SupabaseManager.getAllEmpresas() - Error en consolidated:', consolidatedError);
-          console.error('❌ SupabaseManager.getAllEmpresas() - Tipo de error consolidated:', typeof consolidatedError);
-          console.error('❌ SupabaseManager.getAllEmpresas() - Error consolidated completo:', JSON.stringify(consolidatedError, null, 2));
-          return [];
-        }
-        
-        if (!consolidatedData || consolidatedData.length === 0) {
-          console.log('⚠️ SupabaseManager.getAllEmpresas() - No hay datos en ninguna tabla');
-          return [];
-        }
-        
-        const empresasFromConsolidated = [...new Set(consolidatedData.map((item: any) => item.empresa).filter(Boolean))] as string[];
-        console.log('✅ SupabaseManager.getAllEmpresas() - Empresas desde consolidated:', empresasFromConsolidated);
-        
-        dataCache.set(cacheKey, empresasFromConsolidated);
-        return empresasFromConsolidated;
+      if (empresasData && empresasData.length > 0) {
+        const empresas = empresasData.map((item: any) => item.nombre).filter(Boolean);
+        console.log('✅ SupabaseManager.getAllEmpresas() - Empresas desde tabla empresas:', empresas);
+        dataCache.set(cacheKey, empresas);
+        return empresas;
       }
       
-      const empresas = [...new Set(data.map((item: any) => item.empresa).filter(Boolean))] as string[];
-      console.log('✅ SupabaseManager.getAllEmpresas() - Empresas encontradas:', empresas);
+      // Si no hay empresas en la tabla empresas, usar método alternativo
+      console.log('⚠️ SupabaseManager.getAllEmpresas() - No hay empresas en tabla empresas, usando método alternativo');
+      return await this.getAllEmpresasAlternative();
       
-      dataCache.set(cacheKey, empresas);
-      return empresas;
     } catch (error) {
-      console.error('❌ SupabaseManager.getAllEmpresas() - Error completo:', error);
-      console.error('❌ SupabaseManager.getAllEmpresas() - Tipo de error:', typeof error);
-      console.error('❌ SupabaseManager.getAllEmpresas() - Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('❌ SupabaseManager.getAllEmpresas() - Error fatal:', error);
       
-      // Usar método alternativo como fallback
-      console.log('🔄 SupabaseManager.getAllEmpresas() - Usando método alternativo como fallback');
+      // Fallback a método alternativo
+      console.log('🔄 SupabaseManager.getAllEmpresas() - Usando método alternativo...');
       return await this.getAllEmpresasAlternative();
     } finally {
       loadingState.setLoading('empresas', false);
@@ -730,9 +780,34 @@ export class SupabaseManager {
   }
   
   async createEmpresa(empresa: string): Promise<void> {
-    // Las empresas se crean automáticamente cuando se crean recibos
-    // Este método existe para compatibilidad
-    console.log('Empresa creada automáticamente:', empresa);
+    try {
+      console.log('🔍 SupabaseManager.createEmpresa() - Creando empresa:', empresa);
+      
+      const { data, error } = await this.client
+        .from('empresas')
+        .insert([
+          {
+            id: crypto.randomUUID(),
+            nombre: empresa,
+            logo_url: null
+          }
+        ])
+        .select();
+      
+      if (error) {
+        console.error('❌ SupabaseManager.createEmpresa() - Error:', error);
+        throw error;
+      }
+      
+      console.log('✅ SupabaseManager.createEmpresa() - Empresa creada:', data);
+      
+      // Limpiar cache de empresas
+      dataCache.delete('empresas_all');
+      
+    } catch (error) {
+      console.error('❌ SupabaseManager.createEmpresa() - Error fatal:', error);
+      throw error;
+    }
   }
   
   async getAllSavedControls(): Promise<any[]> {
@@ -957,6 +1032,135 @@ export class SupabaseManager {
     } catch (error) {
       console.error('❌ SupabaseManager.diagnoseTables() - Error fatal:', error);
       throw error;
+    }
+  }
+
+  async addEmpresa(empresa: { nombre: string; descripcion?: string }): Promise<void> {
+    loadingState.setLoading('empresas', true);
+    
+    try {
+      const { error } = await this.client
+        .from('empresas')
+        .insert({
+          nombre: empresa.nombre,
+          descripcion: empresa.descripcion || '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      
+      if (error) throw error;
+      
+      // Limpiar cache
+      dataCache.delete('empresas_all');
+    } finally {
+      loadingState.setLoading('empresas', false);
+    }
+  }
+
+  async updateEmpresa(id: string, empresa: { nombre?: string; descripcion?: string }): Promise<void> {
+    loadingState.setLoading('empresas', true);
+    
+    try {
+      const { error } = await this.client
+        .from('empresas')
+        .update({
+          ...empresa,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      // Limpiar cache
+      dataCache.delete('empresas_all');
+    } finally {
+      loadingState.setLoading('empresas', false);
+    }
+  }
+
+  async deleteEmpresa(id: string): Promise<void> {
+    loadingState.setLoading('empresas', true);
+    
+    try {
+      const { error } = await this.client
+        .from('empresas')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      // Limpiar cache
+      dataCache.delete('empresas_all');
+    } finally {
+      loadingState.setLoading('empresas', false);
+    }
+  }
+
+  async clearEmpresas(): Promise<void> {
+    loadingState.setLoading('empresas', true);
+    
+    try {
+      const { error } = await this.client
+        .from('empresas')
+        .delete()
+        .neq('id', '');
+      
+      if (error) throw error;
+      
+      // Limpiar cache
+      dataCache.delete('empresas_all');
+    } finally {
+      loadingState.setLoading('empresas', false);
+    }
+  }
+
+  async countEmpresas(): Promise<number> {
+    try {
+      const { count, error } = await this.client
+        .from('empresas')
+        .select('*', { count: 'exact', head: true });
+      
+      if (error) throw error;
+      return count || 0;
+    } catch (error) {
+      console.error('Error counting empresas:', error);
+      return 0;
+    }
+  }
+
+  async clearSavedControls(): Promise<void> {
+    loadingState.setLoading('saved_controls', true);
+    
+    try {
+      const { error } = await this.client
+        .from('saved_controls')
+        .delete()
+        .neq('id', '');
+      
+      if (error) throw error;
+      
+      // Limpiar cache
+      dataCache.delete('saved_controls_all');
+    } finally {
+      loadingState.setLoading('saved_controls', false);
+    }
+  }
+
+  async clearPendingItems(): Promise<void> {
+    loadingState.setLoading('pending_items', true);
+    
+    try {
+      const { error } = await this.client
+        .from('pending_items')
+        .delete()
+        .neq('id', '');
+      
+      if (error) throw error;
+      
+      // Limpiar cache
+      dataCache.delete('pending_items_all');
+    } finally {
+      loadingState.setLoading('pending_items', false);
     }
   }
 

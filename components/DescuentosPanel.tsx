@@ -1,7 +1,7 @@
 // components/DescuentosPanel.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useEmpresasFromReceipts } from '@/hooks/useEmpresasFromReceipts';
 import { usePagination } from '@/hooks/usePagination';
@@ -81,9 +81,7 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
     }
   }, [session, canManage]);
 
-  useEffect(() => {
-    loadDescuentos();
-  }, [empresaFiltroDescuentos]);
+  // Mover este useEffect después de la definición de loadDescuentos
 
   // Escuchar evento personalizado para abrir modal de nuevo descuento
   useEffect(() => {
@@ -127,7 +125,7 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
     };
   }, [canManage]);
 
-  const loadDescuentos = async () => {
+  const loadDescuentos = useCallback(async () => {
     setIsLoading(true);
     try {
       // Cargar descuentos de la base de datos
@@ -145,7 +143,12 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [dataManager, empresaFiltroDescuentos]);
+
+  // Cargar descuentos al montar el componente y cuando cambien las dependencias
+  useEffect(() => {
+    loadDescuentos();
+  }, [loadDescuentos]);
 
   // Obtener valores predeterminados basados en los últimos 3 registros
   const getDefaultValues = () => {

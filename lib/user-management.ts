@@ -7,7 +7,7 @@ export type User = {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'user' | 'viewer';
+  role: 'SUPERADMIN' | 'ADMIN' | 'USER';
   empresa?: string;
   permissions: string[];
   createdAt: number;
@@ -29,7 +29,7 @@ export type Invitation = {
   token: string;
   email: string;
   empresa: string;
-  role: 'admin' | 'user' | 'viewer';
+  role: 'SUPERADMIN' | 'ADMIN' | 'USER';
   createdBy: string;
   createdAt: number;
   expiresAt: number;
@@ -49,9 +49,9 @@ export type UserActivity = {
 };
 
 export const ROLE_PERMISSIONS = {
-  admin: ['all'],
-  user: ['read', 'write', 'export'],
-  viewer: ['read']
+  SUPERADMIN: ['*'],
+  ADMIN: ['recibos', 'controles', 'descuentos', 'reportes', 'usuarios:view', 'usuarios:create', 'usuarios:edit', 'usuarios:invite', 'empresas:view', 'empresas:create', 'empresas:edit'],
+  USER: ['recibos:view', 'controles:view', 'descuentos:view', 'empresas:view']
 };
 
 export function generateUserId(): string {
@@ -228,4 +228,11 @@ export function canManageDescuentos(user: User): boolean {
   if (user.permissions.includes('*')) return true;
   
   return hasPermission(user, 'descuentos:create') || hasPermission(user, 'descuentos:edit');
+}
+
+export function canManageEmpresas(user: User): boolean {
+  // Si tiene permisos de SUPERADMIN (todos los permisos)
+  if (user.permissions.includes('*')) return true;
+  
+  return hasPermission(user, 'empresas:create') || hasPermission(user, 'empresas:edit');
 }

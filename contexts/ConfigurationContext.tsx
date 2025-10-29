@@ -39,8 +39,6 @@ export interface ConfigurationState {
   enableDiscountsSystem: boolean;
   enableReceiptsSystem: boolean;
   enableExportSystem: boolean;
-  enableAnalytics: boolean;
-  enableSecurityFeatures: boolean;
   enableDocumentation: boolean;
   enableSupabaseStorage: boolean;
 }
@@ -69,8 +67,6 @@ const defaultConfig: ConfigurationState = {
   enableDiscountsSystem: true,
   enableReceiptsSystem: true,
   enableExportSystem: true,
-  enableAnalytics: true,
-  enableSecurityFeatures: true,
   enableDocumentation: true,
   enableSupabaseStorage: false,
 };
@@ -127,7 +123,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         color: 'text-indigo-600',
         bgColor: 'bg-indigo-50',
         activeBgColor: 'bg-indigo-100',
-        shortcut: 'T',
+        shortcut: 'H',
         enabledConfigKey: null
       },
       { 
@@ -187,7 +183,8 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         color: 'text-cyan-600',
         bgColor: 'bg-cyan-50',
         activeBgColor: 'bg-cyan-100',
-        shortcut: 'R',
+        shortcut: 'M',
+        permission: 'empresas:view',
         enabledConfigKey: 'enableCompanyManagement'
       },
       { 
@@ -212,7 +209,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
       },
       { 
         id: 'pending-items', 
-        label: 'Items Pendientes', 
+        label: 'Pendientes', 
         icon: CheckSquare, 
         color: 'text-emerald-600',
         bgColor: 'bg-emerald-50',
@@ -237,7 +234,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         color: 'text-gray-600',
         bgColor: 'bg-gray-50',
         activeBgColor: 'bg-gray-100',
-        shortcut: 'S',
+        shortcut: 'F',
         enabledConfigKey: null
       },
     ];

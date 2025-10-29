@@ -44,12 +44,12 @@ import { buildAggregatedCsv } from "@/lib/export-aggregated";
 import ReceiptsFilters from "@/components/ReceiptsFilters";
 import { UnifiedStatusPanel } from "@/components/UnifiedStatusPanel";
 import { DebugPanel } from "@/components/DebugPanel";
-import DebugModal from "@/components/DebugModal";
 import EmpresaModal from "@/components/EmpresaModal";
 import ParserAdjustmentModal from "@/components/ParserAdjustmentModal";
 import EditDataModal from "@/components/EditDataModal";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import ConfirmLogoutModal from "@/components/ConfirmLogoutModal";
 import PendingItemsManager from '@/components/PendingItemsManager';
 import { UploadLogModal } from "@/components/UploadLogModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -64,8 +64,10 @@ import PersistentUploadProgress from "@/components/PersistentUploadProgress";
 import DocumentationPanel from "@/components/DocumentationPanel";
 import ConfigurationPanel from "@/components/ConfigurationPanel";
 import PendingItemsPage from "@/components/PendingItemsPage";
+import PersistentDevTools from "@/components/PersistentDevTools";
 // import { UploadSessionManager } from "@/lib/upload-session-manager"; // ELIMINADO
 import DebugSessions from "@/components/DebugSessions";
+import SimpleDebugModal from "@/components/SimpleDebugModal";
 import OCRConfigModal from "@/components/OCRConfigModal";
 
 type UploadItem = { 
@@ -94,11 +96,24 @@ export default function Page() {
   const [showTestConfirm, setShowTestConfirm] = useState(false);
   const [showPendingItems, setShowPendingItems] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [logoutButtonVisible, setLogoutButtonVisible] = useState(false);
+  const [showDevTools, setShowDevTools] = useState(false);
   
-  // Debug para el modal de confirmación
+  // Indicador del botón de logout
   useEffect(() => {
-    console.log(`🔍 showDeleteConfirm cambió a:`, showDeleteConfirm);
-  }, [showDeleteConfirm]);
+    const checkLogoutButton = () => {
+      const buttons = document.querySelectorAll('button');
+      const logoutButton = Array.from(buttons).find(button => 
+        button.textContent?.includes('Cerrar Sesión') || 
+        button.getAttribute('title')?.includes('logout')
+      );
+      setLogoutButtonVisible(!!logoutButton);
+    };
+    
+    checkLogoutButton();
+    const interval = setInterval(checkLogoutButton, 1000);
+    return () => clearInterval(interval);
+  }, []);
   const [deleteConfirmData, setDeleteConfirmData] = useState<{
     title: string;
     message: string;
@@ -163,7 +178,7 @@ export default function Page() {
       
       switch (key) {
         // Navegación entre secciones
-        case 't':
+        case 'h':
           event.preventDefault();
           setActiveTab('tablero');
           break;
@@ -183,6 +198,10 @@ export default function Page() {
           event.preventDefault();
           setActiveTab('empleados');
           break;
+        case 'm':
+          event.preventDefault();
+          setActiveTab('empresas');
+          break;
         case 'u':
           event.preventDefault();
           setActiveTab('usuarios');
@@ -191,32 +210,29 @@ export default function Page() {
           event.preventDefault();
           setActiveTab('backup');
           break;
+        case 'p':
+          event.preventDefault();
+          setActiveTab('pending-items');
+          break;
         case 'o':
           event.preventDefault();
           setActiveTab('documentacion');
+          break;
+        case 'f':
+          event.preventDefault();
+          setActiveTab('configuracion');
+          break;
+        case 'l':
+          event.preventDefault();
+          // Logout - Abrir modal de confirmación
+          setShowLogoutModal(true);
           break;
         case 'x':
           event.preventDefault();
           setActiveTab('export');
           break;
-        case 'e':
-          event.preventDefault();
-          setActiveTab('empleados');
-          break;
         
         // Acciones rápidas globales
-        case 'f':
-          event.preventDefault();
-          // Abrir modal de debug
-          setShowDebugModal(true);
-          console.log("🔧 Abriendo modal de debug");
-          break;
-        case 'h':
-          event.preventDefault();
-          // Abrir modal de ayuda
-          setShowHelpModal(true);
-          console.log("❓ Abriendo modal de ayuda");
-          break;
         case '?':
           event.preventDefault();
           // Mostrar ayuda completa contextual
@@ -280,6 +296,14 @@ export default function Page() {
           setIsMobileMenuOpen(!isMobileMenuOpen);
           console.log("📱 Toggle menú móvil:", !isMobileMenuOpen);
           break;
+        case 'Escape':
+          event.preventDefault();
+          // Cerrar panel de debug si está abierto
+          if (config.showDebugPanel) {
+            updateConfig({ showDebugPanel: false });
+            toast.info("Panel de debug cerrado");
+          }
+          break;
       }
     };
     
@@ -306,6 +330,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
   const [showDebug, setShowDebug] = useState<boolean>(true); // Activado para debug
   const [showDebugModal, setShowDebugModal] = useState<boolean>(false);
   const [showHelpModal, setShowHelpModal] = useState<boolean>(false);
+  const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
   
   // Estados para persistencia de subidas
   const [currentUploadSessionId, setCurrentUploadSessionId] = useState<string | null>(null);
@@ -2410,6 +2435,14 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
+            {/* Indicador del botón de logout */}
+            <div className="flex items-center space-x-2">
+              <div className={`w-2 h-2 rounded-full ${logoutButtonVisible ? 'bg-green-500' : 'bg-red-500'}`} 
+                   title={logoutButtonVisible ? '✅ Botón de logout visible' : '❌ Botón de logout no visible'}></div>
+              <span className="text-xs text-gray-600">
+                {logoutButtonVisible ? 'Logout OK' : 'Logout Missing'}
+              </span>
+            </div>
           <Button
               variant="ghost"
             size="sm"
@@ -2445,7 +2478,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
         <SidebarNavigation 
           activeTab={activeTab} 
           onTabChange={setActiveTab}
-          onDebugClick={() => setShowDebugModal(true)}
+          onDebugClick={() => setShowDevTools(!showDevTools)}
         />
       </div>
 
@@ -3009,61 +3042,18 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       </Tabs>
 
         {/* Debug Modal */}
-        <DebugModal
+        <SimpleDebugModal
           isOpen={showDebugModal}
           onClose={() => setShowDebugModal(false)}
-              debugInfo={{
-                totalRows: consolidated?.length || 0,
-                consolidatedCount: consolidated?.length || 0,
-                controlCount: 0,
-                savedControlsCount: savedControls?.length || 0,
-                settingsCount: 0
-              }}
-          onDeleteVisible={handleDeleteVisible}
-          onDeleteControl={handleDeleteControl}
-          onClearAllData={handleClearAllData}
-          onCheckDatabase={handleCheckDatabase}
-          onCheckPendingUploads={handleCheckPendingUploads}
-          onCheckAllSessions={handleCheckAllSessions}
-          onClearUploadSessions={async () => {
-            // Recargar datos después de limpiar sesiones
-            await loadData();
-            setHasPendingUploads(false);
-            setCurrentUploadSessionId(null);
-            console.log('🔄 Datos recargados después de limpiar sesiones');
+          onOpenDevTools={() => setShowDevTools(true)}
+          debugInfo={{
+            totalRows: consolidated?.length || 0,
+            consolidatedCount: consolidated?.length || 0,
+            controlCount: 0,
+            savedControlsCount: savedControls?.length || 0,
+            settingsCount: 0
           }}
-          onResumeSession={async (sessionId: string) => {
-            // Manejar reanudación desde el modal
-            console.log(`🔄 Reanudando sesión desde modal: ${sessionId}`);
-            console.log('🔍 Estado antes de reanudar:', {
-              hasPendingUploads,
-              currentUploadSessionId,
-              processingFiles
-            });
-            
-            setCurrentUploadSessionId(sessionId);
-            setHasPendingUploads(true);
-            setShowDebugModal(false); // Cerrar el modal
-            
-            console.log('🔍 Estado después de establecer:', {
-              sessionId,
-              hasPendingUploads: true,
-              currentUploadSessionId: sessionId
-            });
-            
-            toast.success('Sesión reanudada. Ver evolución en la interfaz principal.', {
-              duration: 3000,
-              description: 'La interfaz de progreso aparecerá en unos segundos'
-            });
-          }}
-            activeTab={activeTab}
-            periodoFiltro={periodoFiltro}
-            empresaFiltro={empresaFiltro}
-            nombreFiltro={nombreFiltro}
-              hasControlForCurrentFilters={!!savedControls && savedControls.length > 0}
-              processingFiles={processingFiles}
-              lastProcessedIndex={lastProcessedIndex}
-          />
+        />
         
         {/* Modal de Empresa Manual */}
         {showEmpresaModal && (
@@ -3486,6 +3476,16 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             'Se registrará la acción en el log'
           ]}
         />
+
+        {/* Logout Modal */}
+        <ConfirmLogoutModal
+          isOpen={showLogoutModal}
+          onClose={() => setShowLogoutModal(false)}
+          userName={session?.user?.name}
+        />
+
+        {/* DevTools */}
+        {showDevTools && <PersistentDevTools />}
       </main>
     </div>
     );
