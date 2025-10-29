@@ -419,7 +419,8 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
             )}
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6">
+          {/* Filtros */}
           <div className="flex flex-wrap gap-4 items-end">
             <div className="flex-1 min-w-[200px]">
               <label className="text-xs font-medium text-muted-foreground">Buscar</label>
@@ -483,13 +484,9 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
               disabled={isLoading}
             />
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Lista de descuentos */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Tabla de descuentos */}
+          <div className="overflow-x-auto border rounded-lg">
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
@@ -686,20 +683,22 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
               </tbody>
             </table>
           </div>
+
+          {/* Paginación - solo si hay 25+ registros */}
+          {showPagination && (
+            <div className="pt-4">
+              <Pagination
+                currentPage={pagination.currentPage}
+                totalPages={pagination.totalPages}
+                totalItems={pagination.totalItems}
+                itemsPerPage={pagination.itemsPerPage}
+                onPageChange={pagination.setCurrentPage}
+                onItemsPerPageChange={pagination.setItemsPerPage}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
-
-      {/* Paginación - solo si hay 25+ registros */}
-      {showPagination && (
-        <Pagination
-          currentPage={pagination.currentPage}
-          totalPages={pagination.totalPages}
-          totalItems={pagination.totalItems}
-          itemsPerPage={pagination.itemsPerPage}
-          onPageChange={pagination.setCurrentPage}
-          onItemsPerPageChange={pagination.setItemsPerPage}
-        />
-      )}
 
       {/* Modales */}
       {showModal && (
