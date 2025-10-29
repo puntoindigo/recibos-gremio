@@ -120,11 +120,11 @@ function SortableCard({
 
   const { size, containerRef, handleMouseDown } = useResizable({
     minWidth: 120,
-    minHeight: 100,
+    minHeight: 50, // Reducido de 100 a 50
     maxWidth: 300,
-    maxHeight: 250,
+    maxHeight: 125, // Reducido de 250 a 125 (la mitad)
     initialWidth: postItMode ? 160 : 140,
-    initialHeight: postItMode ? 120 : 140
+    initialHeight: postItMode ? 60 : 70 // Reducido de 120/140 a 60/70 (la mitad)
   });
 
   const style = {
@@ -222,20 +222,20 @@ function SortableCard({
       {/* ID oculto - era muy largo */}
 
       {/* Contenido principal */}
-      <div className="p-2 text-gray-800 h-full flex flex-col" onDoubleClick={() => onEdit?.(item)}>
+      <div className="p-1.5 text-gray-800 h-full flex flex-col" onDoubleClick={() => onEdit?.(item)}>
         {/* Categoría */}
-        <div className="text-xs font-medium text-gray-600/80 uppercase tracking-wide mb-1">
+        <div className="text-xs font-medium text-gray-600/80 uppercase tracking-wide mb-0.5">
           {item.category}
         </div>
           
         {/* Título */}
-        <h3 className="font-semibold text-xs leading-tight text-gray-900 mb-2 flex-1 line-clamp-4">
+        <h3 className="font-semibold text-xs leading-tight text-gray-900 mb-1.5 flex-1 line-clamp-3">
           {cleanText(item.description)}
         </h3>
         
         {/* Solución Propuesta - más compacta */}
         {item.proposedSolution && (
-          <div className="text-xs text-gray-700/90 bg-white/30 p-1.5 rounded border-l-2 border-blue-400/50 mb-2">
+          <div className="text-xs text-gray-700/90 bg-white/30 p-1 rounded border-l-2 border-blue-400/50 mb-1.5">
             <span className="font-medium text-blue-800/90">Solución:</span> {cleanText(item.proposedSolution)}
           </div>
         )}
@@ -245,7 +245,7 @@ function SortableCard({
           {/* Prioridad con dropdown */}
           <div className="flex-1">
             <Select value={item.priority} onValueChange={(value) => onPriorityChange?.(item.id, value)}>
-              <SelectTrigger className="text-xs h-6">
+              <SelectTrigger className="text-xs h-5">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -264,7 +264,7 @@ function SortableCard({
           {/* Estado con dropdown */}
           <div className="flex-1">
             <Select value={item.status} onValueChange={(value) => onStatusChange?.(item.id, value)}>
-              <SelectTrigger className="text-xs h-6">
+              <SelectTrigger className="text-xs h-5">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
