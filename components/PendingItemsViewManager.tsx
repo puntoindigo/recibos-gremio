@@ -108,14 +108,16 @@ export default function PendingItemsViewManager() {
       setViewMode(event.detail);
     };
 
-    window.addEventListener('openNewItemModal', handleOpenNewItemModal);
-    window.addEventListener('cleanDuplicates', handleCleanDuplicatesEvent);
-    window.addEventListener('setViewMode', handleSetViewMode as EventListener);
+    // DESHABILITADOS TEMPORALMENTE PARA DEBUG
+    // window.addEventListener('openNewItemModal', handleOpenNewItemModal);
+    // window.addEventListener('cleanDuplicates', handleCleanDuplicatesEvent);
+    // window.addEventListener('setViewMode', handleSetViewMode as EventListener);
 
     return () => {
-      window.removeEventListener('openNewItemModal', handleOpenNewItemModal);
-      window.removeEventListener('cleanDuplicates', handleCleanDuplicatesEvent);
-      window.removeEventListener('setViewMode', handleSetViewMode as EventListener);
+      // DESHABILITADOS TEMPORALMENTE PARA DEBUG
+      // window.removeEventListener('openNewItemModal', handleOpenNewItemModal);
+      // window.removeEventListener('cleanDuplicates', handleCleanDuplicatesEvent);
+      // window.removeEventListener('setViewMode', handleSetViewMode as EventListener);
     };
   }, []);
 

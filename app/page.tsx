@@ -159,8 +159,8 @@ export default function Page() {
     }
   };
   
-  // Atajos de teclado globales
-  useEffect(() => {
+  // Atajos de teclado globales - DESHABILITADOS TEMPORALMENTE PARA DEBUG
+  // useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Solo procesar atajos si no estamos en un input, textarea o select
       if (event.target instanceof HTMLInputElement || 
@@ -307,11 +307,11 @@ export default function Page() {
       }
     };
     
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
+  //   document.addEventListener('keydown', handleKeyDown);
+  //   return () => {
+  //     document.removeEventListener('keydown', handleKeyDown);
+  //   };
+  // }, []);
   
   // Estados principales
   const [consolidated, setConsolidated] = useState<ConsolidatedEntity[]>([]);

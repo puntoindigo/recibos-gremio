@@ -168,26 +168,26 @@ export default function PendingItemModal({
     }
   }, [item, isSaving, onSave]);
 
-  // Efecto para guardado automático con debounce
-  useEffect(() => {
-    if (autoSaveTimeout) {
-      clearTimeout(autoSaveTimeout);
-    }
+  // Efecto para guardado automático con debounce - DESHABILITADO TEMPORALMENTE PARA DEBUG
+  // useEffect(() => {
+  //   if (autoSaveTimeout) {
+  //     clearTimeout(autoSaveTimeout);
+  //   }
     
-    if (item && formData.title.trim()) {
-      const timeout = setTimeout(() => {
-        autoSave();
-      }, 1000); // Guardar después de 1 segundo de inactividad
+  //   if (item && formData.title.trim()) {
+  //     const timeout = setTimeout(() => {
+  //       autoSave();
+  //     }, 1000); // Guardar después de 1 segundo de inactividad
       
-      setAutoSaveTimeout(timeout);
-    }
+  //     setAutoSaveTimeout(timeout);
+  //   }
     
-    return () => {
-      if (autoSaveTimeout) {
-        clearTimeout(autoSaveTimeout);
-      }
-    };
-  }, [formData.title, formData.priority, formData.status, formData.proposedSolution, formData.tags, item]);
+  //   return () => {
+  //     if (autoSaveTimeout) {
+  //       clearTimeout(autoSaveTimeout);
+  //     }
+  //   };
+  // }, [formData.title, formData.priority, formData.status, formData.proposedSolution, formData.tags, item]);
 
   // Efecto para manejar tecla ESC
   useEffect(() => {
