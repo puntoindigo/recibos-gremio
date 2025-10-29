@@ -152,13 +152,13 @@ function SortableCard({
       style={{
         ...style,
         width: postItMode ? `${size.width}px` : 'auto',
-        height: postItMode ? `${size.height}px` : 'auto'
+        height: postItMode ? `${size.height}px` : undefined
       }}
       {...attributes}
       {...listeners}
       className={`relative ${cardColor} rounded-lg shadow-md hover:shadow-lg transition-all duration-200 cursor-grab active:cursor-grabbing group ${
         isSortableDragging ? 'shadow-xl scale-105' : 'hover:scale-102'
-      } ${isDragging ? 'opacity-50' : ''} ${postItMode ? 'overflow-hidden' : ''}`}
+      } ${isDragging ? 'opacity-50' : ''} ${postItMode ? 'overflow-hidden' : 'overflow-hidden max-h-[125px]'}`}
     >
       {/* Herramientas que aparecen en hover - esquina superior derecha */}
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex space-x-1">

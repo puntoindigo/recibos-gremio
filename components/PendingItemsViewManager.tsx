@@ -433,8 +433,8 @@ export default function PendingItemsViewManager() {
     return matchesSearch && matchesCategory && matchesPriority && matchesStatus;
   });
 
-  // Obtener categorías únicas
-  const categories = Array.from(new Set(items.map(item => item.category)));
+  // Obtener categorías únicas, filtrando las vacías
+  const categories = Array.from(new Set(items.map(item => item.category).filter(cat => cat && cat.trim() !== '')));
 
   // Mostrar indicador de carga
   if (loading) {
