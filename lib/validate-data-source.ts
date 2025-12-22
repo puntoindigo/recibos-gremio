@@ -20,9 +20,6 @@ export function getCurrentStorageType(): 'IndexedDB' | 'SUPABASE' {
  * Valida que una consulta use el sistema centralizado
  */
 export function validateDataSource(source: string, expectedStorage: 'IndexedDB' | 'SUPABASE' = 'SUPABASE') {
-  console.log('🔍 validate-data-source - Validando consulta desde:', source);
-  console.log('🔍 validate-data-source - Storage esperado:', expectedStorage);
-  console.log('🔍 validate-data-source - Storage actual:', currentStorageType);
   
   if (currentStorageType !== expectedStorage) {
     console.error('🚨 ERROR DE VALIDACIÓN DE DATA SOURCE');
@@ -35,7 +32,6 @@ export function validateDataSource(source: string, expectedStorage: 'IndexedDB' 
     throw new Error(`🚨 CONSULTA INCORRECTA - Storage actual: ${currentStorageType}, esperado: ${expectedStorage}`);
   }
   
-  console.log('✅ validate-data-source - Consulta válida');
 }
 
 /**

@@ -12,19 +12,17 @@ export function normalizeFileName(filename: string): string {
 // Función para verificar duplicados por nombre de archivo
 async function checkForDuplicateByName(filename: string, dataManager: any): Promise<any> {
   try {
-    // Buscar en la tabla consolidated por filename
-    const { data, error } = await getSupabaseManager().supabase
-      .from('consolidated')
-      .select('*')
-      .eq('data->>filename', filename)
-      .limit(1);
+    // Usar el manager directamente para buscar
+    const manager = getSupabaseManager();
+    const allConsolidated = await manager.getConsolidated();
     
-    if (error) {
-      console.error('Error verificando duplicados por nombre:', error);
-      return null;
-    }
+    // Buscar en los datos consolidados por filename
+    const found = allConsolidated.find(item => {
+      const itemFilename = item.data?.filename || item.archivos?.[0];
+      return itemFilename === filename || itemFilename === normalizeFileName(filename);
+    });
     
-    return data && data.length > 0 ? data[0] : null;
+    return found || null;
   } catch (error) {
     console.error('Error en checkForDuplicateByName:', error);
     return null;
@@ -34,19 +32,17 @@ async function checkForDuplicateByName(filename: string, dataManager: any): Prom
 // Función para verificar duplicados por hash
 async function checkForDuplicateFile(hash: string, dataManager: any): Promise<any> {
   try {
-    // Buscar en la tabla consolidated por fileHash
-    const { data, error } = await getSupabaseManager().supabase
-      .from('consolidated')
-      .select('*')
-      .eq('data->>fileHash', hash)
-      .limit(1);
+    // Usar el manager directamente para buscar
+    const manager = getSupabaseManager();
+    const allConsolidated = await manager.getConsolidated();
     
-    if (error) {
-      console.error('Error verificando duplicados por hash:', error);
-      return null;
-    }
+    // Buscar en los datos consolidados por fileHash
+    const found = allConsolidated.find(item => {
+      const itemHash = item.data?.fileHash;
+      return itemHash === hash;
+    });
     
-    return data && data.length > 0 ? data[0] : null;
+    return found || null;
   } catch (error) {
     console.error('Error en checkForDuplicateFile:', error);
     return null;
@@ -72,33 +68,18 @@ export async function processSingleFile(
   learnedRules?: { empresa?: string; periodo?: string }
 ): Promise<SimpleProcessingResult> {
   try {
-    if (debug) {
-      console.log(`🔍 Procesando archivo: ${file.name}`);
-    }
-
     // Generar hash
     const hash = await sha256OfFile(file);
     if (!hash) {
-      if (debug) console.log(`❌ Error generando hash para: ${file.name}`);
       return { success: false, fileName: file.name, error: "Error generando hash" };
-    }
-
-    if (debug) {
-      console.log(`✅ Hash generado para ${file.name}: ${hash.substring(0, 10)}...`);
     }
 
     // Verificar duplicados por nombre de archivo ANTES de procesar
     const normalizedFilename = normalizeFileName(file.name);
-    if (debug) {
-      console.log(`🔍 Verificando duplicados por nombre: ${file.name} → ${normalizedFilename}`);
-    }
 
     // Verificar si ya existe un archivo con el mismo nombre
     const existingByName = await checkForDuplicateByName(normalizedFilename, dataManager);
     if (existingByName) {
-      if (debug) {
-        console.log(`⚠️ Archivo duplicado por nombre encontrado: ${file.name}`);
-      }
       return {
         success: true,
         fileName: file.name,
@@ -109,22 +90,8 @@ export async function processSingleFile(
 
     // Verificar duplicados por hash
     const existing = await checkForDuplicateFile(hash, dataManager);
-    if (debug) {
-      console.log(`🔍 Verificando duplicados para ${file.name}:`, {
-        hash: hash.substring(0, 10) + "...",
-        existing: existing ? "ENCONTRADO" : "NO ENCONTRADO",
-        existingData: existing ? {
-          legajo: existing.legajo,
-          periodo: existing.periodo,
-          filename: existing.filename
-        } : null
-      });
-    }
     
     if (existing) {
-      if (debug) {
-        console.log(`⏭️ Archivo duplicado por contenido: ${file.name} (hash: ${hash.substring(0, 10)}...)`);
-      }
       return { 
         success: true, 
         fileName: file.name, 
@@ -135,7 +102,6 @@ export async function processSingleFile(
 
     // Parsear PDF
     if (debug) {
-      console.log(`🔍 Parseando PDF: ${file.name}`);
     }
     const parsed = await parsePdfReceiptToRecord(file, debug);
     
@@ -144,32 +110,49 @@ export async function processSingleFile(
       if (learnedRules.empresa && (!parsed.data.EMPRESA || parsed.data.EMPRESA === 'DESCONOCIDA')) {
         parsed.data.EMPRESA = learnedRules.empresa;
         if (debug) {
-          console.log(`🧠 Aplicando empresa aprendida: ${learnedRules.empresa}`);
         }
       }
       if (learnedRules.periodo && (!parsed.data.PERIODO || parsed.data.PERIODO === 'FALTANTE')) {
         parsed.data.PERIODO = learnedRules.periodo;
         if (debug) {
-          console.log(`🧠 Aplicando período aprendido: ${learnedRules.periodo}`);
+        }
+      }
+    }
+    
+    // Aplicar reglas de reemplazo por empresa si existen
+    if (parsed.data.EMPRESA && typeof window === 'undefined') {
+      try {
+        const manager = getSupabaseManager();
+        const replacementRules = await manager.getAppConfig(`ocr_replacements_${parsed.data.EMPRESA}`);
+        if (replacementRules && typeof replacementRules === 'object' && Array.isArray(replacementRules.rules)) {
+          for (const rule of replacementRules.rules) {
+            if (rule.fieldName && rule.from && rule.to && parsed.data[rule.fieldName]) {
+              const currentValue = parsed.data[rule.fieldName];
+              // Aplicar reemplazo (case-insensitive)
+              const regex = new RegExp(rule.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+              if (regex.test(currentValue)) {
+                parsed.data[rule.fieldName] = currentValue.replace(regex, rule.to);
+                if (debug) {
+                  console.log(`  🔄 Reemplazo aplicado en parsing: "${rule.from}" -> "${rule.to}" en ${rule.fieldName}`);
+                }
+              }
+            }
+          }
+        }
+      } catch (replacementError) {
+        // Si falla cargar reglas de reemplazo, continuar sin ellas
+        if (debug) {
+          console.log(`  ⚠️ No se pudieron cargar reglas de reemplazo: ${replacementError instanceof Error ? replacementError.message : String(replacementError)}`);
         }
       }
     }
     
     if (debug) {
-      console.log(`📊 Resultado del parsing para ${file.name}:`, {
-        empresa: parsed.data.EMPRESA,
-        legajo: parsed.data.LEGAJO,
-        periodo: parsed.data.PERIODO,
-        nombre: parsed.data.NOMBRE,
-        guardar: parsed.data.GUARDAR,
-        error: parsed.data.ERROR
-      });
     }
     
     // Verificar si debe guardarse
     if (parsed.data.GUARDAR === 'false') {
       if (debug) {
-        console.log(`⏭️ No guardar archivo: ${file.name}, razón: ${parsed.data.GUARDAR_REASON || "No guardar"}`);
       }
       return { 
         success: true, 
@@ -182,111 +165,155 @@ export async function processSingleFile(
     // Verificar que se detectó una empresa válida
     const empresa = parsed.data.EMPRESA;
     if (debug) {
-      console.log(`🔍 Verificando empresa para ${file.name}:`, {
-        empresa,
-        dataEMPRESA: parsed.data.EMPRESA,
-        allData: parsed.data
-      });
     }
     
     if (!empresa || empresa === 'DESCONOCIDA' || empresa === 'N/A') {
       if (debug) {
-        console.log(`⏭️ No guardar archivo: ${file.name}, razón: Empresa no detectada (${empresa})`);
-        console.log(`🔍 Datos completos del archivo:`, parsed.data);
       }
       return { 
         success: true, 
         fileName: file.name, 
         skipped: true, 
         reason: `Empresa no detectada (${empresa})`,
-        needsEmpresaInput: true // Flag para indicar que necesita input manual
+        needsEmpresaInput: true, // Flag para indicar que necesita input manual
+        missingFields: ['EMPRESA'],
+        hasAllRequiredFields: false
       };
     }
     
     // Si la empresa es LIMPAR (fallback), procesar normalmente sin marcar como needsEmpresaInput
     if (empresa === 'LIMPAR') {
       if (debug) {
-        console.log(`📄 Procesando archivo con empresa LIMPAR (fallback): ${file.name}`);
       }
     }
 
-    // Verificar si faltan datos básicos y necesita ajustes del parser
-    const legajo = parsed.data.LEGAJO;
-    const nombre = parsed.data.NOMBRE;
-    const periodo = parsed.data.PERIODO;
+    // Verificar campos obligatorios: legajo, empresa, DNI/CUIL, nombre, categoria
+    const legajo = parsed.data.LEGAJO || '';
+    const nombre = parsed.data.NOMBRE || '';
+    const periodo = parsed.data.PERIODO || '';
+    const cuil = parsed.data.CUIL || parsed.data.DNI || '';
+    const categoria = parsed.data.CATEGORIA || parsed.data.CATEGORÍA || '';
+    
+    // Determinar qué campos faltan
+    const missingFields: string[] = [];
+    if (!legajo.trim()) missingFields.push('LEGAJO');
+    if (!empresa.trim() || empresa === 'DESCONOCIDA' || empresa === 'N/A') missingFields.push('EMPRESA');
+    if (!cuil.trim()) missingFields.push('CUIL/DNI');
+    if (!nombre.trim()) missingFields.push('NOMBRE');
+    if (!categoria.trim()) missingFields.push('CATEGORIA');
+    
+    // Si faltan campos obligatorios, marcar como incompleto
+    const hasAllRequiredFields = missingFields.length === 0;
     
     if (!legajo || !nombre || !periodo) {
       if (debug) {
-        console.log(`⚠️ Datos incompletos en ${file.name}:`, {
-          legajo: legajo || 'FALTANTE',
-          nombre: nombre || 'FALTANTE', 
-          periodo: periodo || 'FALTANTE',
-          empresa: empresa
-        });
       }
       return {
         success: true,
         fileName: file.name,
         skipped: true,
-        reason: 'Datos incompletos - necesita ajustes del parser',
+        reason: `Datos incompletos - campos faltantes: ${missingFields.join(', ')}`,
         needsParserAdjustment: true,
-        parsedData: parsed.data
+        parsedData: parsed.data,
+        missingFields,
+        hasAllRequiredFields: false
       };
+    }
+    
+    // Si falta CUIL/DNI o EMPRESA pero tiene legajo y nombre, marcar como incompleto pero permitir guardar
+    if (!hasAllRequiredFields) {
+      if (debug) {
+      }
+      // Continuar con el guardado pero marcar como incompleto
     }
 
     // Guardar en base de datos
     if (debug) {
-      console.log(`💾 Guardando en base de datos: ${file.name}`);
     }
     
     // Usar el nombre normalizado ya calculado
-    if (debug && file.name !== normalizedFilename) {
-      console.log(`📝 Normalizando nombre: ${file.name} → ${normalizedFilename}`);
-    }
     
     // Guardar recibo en Supabase usando dataManager
     try {
+      // Según el schema SQL, recibos solo tiene: id, key, legajo, nombre, periodo, archivos, data
+      // NO tiene empresa, filename, ni cuil como columnas separadas - todo va en data
       const reciboData = {
         id: `${parsed.data.LEGAJO || ''}-${parsed.data.PERIODO || ''}-${parsed.data.EMPRESA || ''}-${Date.now()}`,
         key: `${parsed.data.LEGAJO || ''}-${parsed.data.PERIODO || ''}-${parsed.data.EMPRESA || ''}`,
         legajo: parsed.data.LEGAJO || '',
         nombre: parsed.data.NOMBRE || '',
         periodo: parsed.data.PERIODO || '',
-        archivos: [normalizedFilename],
+        archivos: [normalizedFilename], // JSONB array
         data: {
           ...parsed.data,
           filename: normalizedFilename,
           fileHash: hash,
-          EMPRESA: parsed.data.EMPRESA || ''
+          EMPRESA: parsed.data.EMPRESA || '',
+          CUIL: parsed.data.CUIL || '',
+          empresa: parsed.data.EMPRESA || '' // También dentro de data para compatibilidad
         }
       };
 
-      console.log('💾 Guardando recibo en Supabase:', {
-        legajo: reciboData.legajo,
-        periodo: reciboData.periodo,
-        nombre: reciboData.nombre,
-        empresa: reciboData.data.EMPRESA,
-        filename: normalizedFilename
-      });
-
-      await getSupabaseManager().createRecibo(reciboData);
+      const createdRecibo = await getSupabaseManager().createRecibo(reciboData);
       
-      console.log('✅ Recibo guardado exitosamente en Supabase');
+      // También crear el registro consolidado
+      try {
+        const consolidatedData = {
+          id: `${parsed.data.LEGAJO || ''}-${parsed.data.PERIODO || ''}-${parsed.data.EMPRESA || ''}`,
+          key: `${parsed.data.LEGAJO || ''}-${parsed.data.PERIODO || ''}-${parsed.data.EMPRESA || ''}`,
+          legajo: parsed.data.LEGAJO || '',
+          nombre: parsed.data.NOMBRE || '',
+          periodo: parsed.data.PERIODO || '',
+          cuil: parsed.data.CUIL || '',
+          cuil_norm: parsed.data.CUIL_NORM || '',
+          archivos: [normalizedFilename], // IMPORTANTE: Incluir archivos en consolidated también
+          data: {
+            ...parsed.data,
+            filename: normalizedFilename,
+            fileHash: hash,
+            // Marcar si tiene todos los campos obligatorios
+            _hasAllRequiredFields: hasAllRequiredFields,
+            _missingFields: missingFields
+          }
+        };
+        
+        const createdConsolidated = await getSupabaseManager().createConsolidated(consolidatedData);
+        
+        // Aplicar reglas OCR automáticamente si hay una regla guardada para esta empresa
+        if (parsed.data.EMPRESA && typeof window === 'undefined') {
+          // Solo aplicar en el servidor (Node.js), no en el cliente
+          try {
+            const { applyOCRRulesToReceipt } = await import('./apply-ocr-rules');
+            const extractedValues = await applyOCRRulesToReceipt(
+              parsed.data.EMPRESA,
+              normalizedFilename,
+              consolidatedData.key
+            );
+            
+            // Los logs de OCR se muestran en el servidor (terminal)
+            // Los valores extraídos se guardan en la BD y se verán en la tabla
+          } catch (ocrError) {
+            // No fallar si la aplicación de OCR falla - es opcional
+            const errorMsg = ocrError instanceof Error ? ocrError.message : String(ocrError);
+            console.log(`⚠️ OCR: Error aplicando regla a ${file.name} - ${errorMsg}`);
+          }
+        }
+      } catch (consolidatedError) {
+        // No fallar si el consolidado falla, puede que ya exista
+      }
     } catch (error) {
-      console.error('❌ Error guardando recibo en Supabase:', error);
       throw error;
     }
 
-    if (debug) {
-      console.log(`✅ Archivo guardado exitosamente: ${file.name}`);
-    }
-
-    return { success: true, fileName: file.name, parsedData: parsed.data };
+    return { 
+      success: true, 
+      fileName: file.name, 
+      parsedData: parsed.data,
+      missingFields,
+      hasAllRequiredFields
+    };
 
   } catch (error) {
-    if (debug) {
-      console.error(`❌ Error procesando archivo ${file.name}:`, error);
-    }
     return { 
       success: false, 
       fileName: file.name, 
@@ -308,7 +335,6 @@ async function uploadFileToServer(
     const normalizedFile = new File([file], normalizedName, { type: file.type });
     
     if (debug) {
-      console.log(`📤 Enviando archivo al servidor: ${file.name} → ${normalizedName}`);
     }
 
     const formData = new FormData();
@@ -456,7 +482,6 @@ export async function processSingleFileWithData(
     
     // Usar el nombre normalizado ya calculado
     if (debug && file.name !== normalizedFilename) {
-      console.log(`📝 Normalizando nombre: ${file.name} → ${normalizedFilename}`);
     }
     
     // Guardar recibo ajustado en Supabase usando dataManager

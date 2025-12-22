@@ -562,6 +562,25 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   
   data["EMPRESA"] = empresaDetectada;
   
+  // Extraer CATEGORIA
+  const categoriaPatterns = [
+    /Categoría\s*:?\s*([A-ZÁÉÍÓÚÑ\s\d\-]+)/i,
+    /CATEGORIA\s*:?\s*([A-ZÁÉÍÓÚÑ\s\d\-]+)/i,
+    /Categoría\s+([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s|$)/i,
+    /CATEGORIA\s+([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s|$)/i
+  ];
+  
+  for (const pattern of categoriaPatterns) {
+    const categoriaMatch = rawText.match(pattern);
+    if (categoriaMatch) {
+      const categoria = categoriaMatch[1].trim();
+      if (categoria && categoria.length > 0 && !categoria.match(/^[\s\-]+$/)) {
+        data["CATEGORIA"] = categoria;
+        break;
+      }
+    }
+  }
+  
   // Procesamiento específico por empresa
   if (empresaDetectada === "ESTRATEGIA AMBIENTAL") {
         

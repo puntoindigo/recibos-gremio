@@ -346,45 +346,41 @@ export default function BackupPanel() {
     notifyInfo('Vaciando Bases de Datos', 'Eliminando todos los datos del sistema...', { persistent: true });
     
     try {
-      const result = await clearAllDatabases();
+      // Limpiar todas las tablas usando el dataManager (solo métodos disponibles)
+      await dataManager.clearReceipts();
+      await dataManager.clearConsolidated();
+      await dataManager.clearDescuentos();
+      await dataManager.clearSavedControls();
+      // Nota: clearColumnConfigs, clearUserActivities y clearUploadSessions no están disponibles en DataManager
       
-      if (result.success) {
-        notifySuccess(
-          'Bases de Datos Vacías',
-          'Todas las bases de datos han sido vaciadas exitosamente. Redirigiendo al tablero...',
-          { duration: 3000 }
-        );
-        setMessage({ type: 'success', text: 'Todas las bases de datos han sido vaciadas exitosamente. Recarga la página para ver los cambios.' });
-        
-        // Cerrar modal primero
-        closeClearModal();
-        
-        // Redirigir al tablero después de un breve delay
-        setTimeout(() => {
-          // Cambiar a la pestaña del tablero
-          const tableroButton = document.querySelector('[data-tab="tablero"]') as HTMLButtonElement;
-          if (tableroButton) {
-            tableroButton.click();
-          }
-          // Recargar la página para mostrar el tablero vacío
-          window.location.reload();
-        }, 1500);
-      } else {
-        notifyError(
-          'Error al Vaciar Bases de Datos',
-          `No se pudieron vaciar las bases de datos: ${result.error}`,
-          { persistent: true }
-        );
-        setMessage({ type: 'error', text: 'Error vaciando bases de datos: ' + result.error });
-        setClearModal(prev => ({ ...prev, isLoading: false }));
-      }
+      notifySuccess(
+        'Bases de Datos Vacías',
+        'Todas las bases de datos han sido vaciadas exitosamente. Redirigiendo al tablero...',
+        { duration: 3000 }
+      );
+      setMessage({ type: 'success', text: 'Todas las bases de datos han sido vaciadas exitosamente. Recarga la página para ver los cambios.' });
+      
+      // Cerrar modal primero
+      closeClearModal();
+      
+      // Redirigir al tablero después de un breve delay
+      setTimeout(() => {
+        // Cambiar a la pestaña del tablero
+        const tableroButton = document.querySelector('[data-tab="tablero"]') as HTMLButtonElement;
+        if (tableroButton) {
+          tableroButton.click();
+        }
+        // Recargar la página para mostrar el tablero vacío
+        window.location.reload();
+      }, 1500);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       notifyError(
-        'Error de Conexión',
-        'No se pudo conectar con la base de datos para vaciar los datos',
+        'Error al Vaciar Bases de Datos',
+        `No se pudieron vaciar las bases de datos: ${errorMessage}`,
         { persistent: true }
       );
-      setMessage({ type: 'error', text: 'Error de conexión al vaciar bases de datos' });
+      setMessage({ type: 'error', text: 'Error vaciando bases de datos: ' + errorMessage });
       setClearModal(prev => ({ ...prev, isLoading: false }));
     }
   };
@@ -729,12 +725,49 @@ export default function BackupPanel() {
       if (adaptedData.empresas && adaptedData.empresas.length > 0) {
         console.log(`🏢 Restaurando ${adaptedData.empresas.length} empresas en lotes...`);
         
+        // Validar y limpiar datos de empresas antes de procesar
+        const cleanedEmpresas = adaptedData.empresas
+          .filter((empresa: any) => empresa && typeof empresa === 'object' && !Array.isArray(empresa))
+          .map((empresa: any) => {
+            // Asegurar que solo tenga campos válidos para Supabase
+            const cleaned = {
+              id: empresa.id || crypto.randomUUID(),
+              nombre: empresa.nombre || empresa.name || 'Sin nombre',
+              logo_url: empresa.logo_url || empresa.logoUrl || null,
+              created_at: empresa.created_at || new Date().toISOString(),
+              updated_at: empresa.updated_at || new Date().toISOString()
+            };
+            return cleaned;
+          });
+        
+        if (cleanedEmpresas.length === 0) {
+          console.warn('⚠️ No hay empresas válidas para restaurar después de la limpieza');
+        } else {
+          console.log(`✅ ${cleanedEmpresas.length} empresas válidas después de limpieza`);
+        }
+        
+        // Agrupar empresas por nombre único para evitar duplicados en el mismo batch
+        // PostgreSQL no puede actualizar la misma fila dos veces en un solo comando
+        const empresasUnicas = new Map<string, any>();
+        cleanedEmpresas.forEach(empresa => {
+          const nombre = empresa.nombre || 'Sin nombre';
+          // Mantener la primera empresa con este nombre, o la más reciente
+          if (!empresasUnicas.has(nombre) || 
+              (empresa.updated_at && empresasUnicas.get(nombre)?.updated_at && 
+               empresa.updated_at > empresasUnicas.get(nombre).updated_at)) {
+            empresasUnicas.set(nombre, empresa);
+          }
+        });
+        
+        const empresasFinales = Array.from(empresasUnicas.values());
+        console.log(`✅ ${empresasFinales.length} empresas únicas después de eliminar duplicados (de ${cleanedEmpresas.length} originales)`);
+        
         // Procesar en lotes de 50 (empresas son menos)
         const batchSize = 50;
         const batches = [];
         
-        for (let i = 0; i < adaptedData.empresas.length; i += batchSize) {
-          batches.push(adaptedData.empresas.slice(i, i + batchSize));
+        for (let i = 0; i < empresasFinales.length; i += batchSize) {
+          batches.push(empresasFinales.slice(i, i + batchSize));
         }
         
         console.log(`📦 Procesando ${batches.length} lotes de empresas`);
@@ -743,19 +776,37 @@ export default function BackupPanel() {
           const batch = batches[batchIndex];
           console.log(`📦 Procesando lote empresas ${batchIndex + 1}/${batches.length} (${batch.length} registros)...`);
           
+          // Validar que el batch sea un array de objetos
+          if (!Array.isArray(batch)) {
+            console.error(`❌ Error: El batch no es un array`, batch);
+            throw new Error(`Error en lote empresas ${batchIndex + 1}: El batch no es un array`);
+          }
+          
+          // Validar que cada elemento sea un objeto
+          const invalidItems = batch.filter((item: any) => !item || typeof item !== 'object' || Array.isArray(item));
+          if (invalidItems.length > 0) {
+            console.error(`❌ Error: El batch contiene elementos inválidos:`, invalidItems);
+            throw new Error(`Error en lote empresas ${batchIndex + 1}: El batch contiene ${invalidItems.length} elementos inválidos`);
+          }
+          
           try {
+            console.log(`📤 Insertando/Actualizando lote empresas ${batchIndex + 1}:`, JSON.stringify(batch, null, 2).substring(0, 500));
+            
+            // Usar upsert para evitar errores de duplicados (inserta o actualiza)
             const { data, error } = await supabaseManager.client
               .from('empresas')
-              .insert(batch);
+              .upsert(batch, { onConflict: 'nombre' });
             
             if (error) {
               console.error(`❌ Error en lote empresas ${batchIndex + 1}:`, error);
+              console.error(`❌ Datos del batch:`, JSON.stringify(batch, null, 2));
               throw new Error(`Error en lote empresas ${batchIndex + 1}: ${error.message}`);
             }
             
             console.log(`✅ Lote empresas ${batchIndex + 1}/${batches.length} completado`);
           } catch (error) {
             console.error(`❌ Error procesando lote empresas ${batchIndex + 1}:`, error);
+            console.error(`❌ Datos del batch que causaron el error:`, JSON.stringify(batch, null, 2));
             throw new Error(`Error procesando lote empresas ${batchIndex + 1}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
           }
         }

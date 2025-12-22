@@ -66,7 +66,42 @@ interface FeedbackEntry {
 export default function PersistentDevTools() {
   const { dataManager, storageType } = useCentralizedDataManager();
   const { config } = useConfiguration();
-  const { sessions, clearSessions, resumeSession } = useUploadResume();
+  const { resumeUpload, isResuming } = useUploadResume();
+  const [sessions, setSessions] = useState<any[]>([]);
+  
+  // Cargar sesiones al montar
+  useEffect(() => {
+    const loadSessions = async () => {
+      try {
+        const allSessions = await dataManager.getUploadSessions();
+        setSessions(allSessions || []);
+      } catch (error) {
+        console.error('Error cargando sesiones:', error);
+        setSessions([]);
+      }
+    };
+    loadSessions();
+  }, [dataManager]);
+  
+  const clearSessions = useCallback(async () => {
+    try {
+      await dataManager.clearUploadSessions();
+      setSessions([]);
+    } catch (error) {
+      console.error('Error limpiando sesiones:', error);
+    }
+  }, [dataManager]);
+  
+  const resumeSession = useCallback(async (sessionId: string) => {
+    try {
+      await resumeUpload(sessionId);
+      // Recargar sesiones después de reanudar
+      const allSessions = await dataManager.getUploadSessions();
+      setSessions(allSessions || []);
+    } catch (error) {
+      console.error('Error reanudando sesión:', error);
+    }
+  }, [dataManager, resumeUpload]);
   
   // Estados principales
   const [isExpanded, setIsExpanded] = useState(false); // Inicialmente colapsado
@@ -146,17 +181,32 @@ export default function PersistentDevTools() {
   // Funciones específicas de limpieza
   const handleDeleteVisible = async () => {
     try {
-      const consolidatedCount = await dataManager.countConsolidated();
-      const receiptsCount = await dataManager.countReceipts();
+      // Obtener datos directamente SIN cache para contar correctamente
+      // Usar getConsolidated() y getReceipts() que ya limpian cache cuando es necesario
+      const allConsolidated = await dataManager.getConsolidated();
+      const allReceipts = await dataManager.getReceipts();
+      
+      const consolidatedCount = allConsolidated?.length || 0;
+      const receiptsCount = allReceipts?.length || 0;
+      
+      console.log('🔍 Debug - Conteo de registros:', {
+        consolidatedCount,
+        receiptsCount,
+        total: consolidatedCount + receiptsCount,
+        consolidatedSample: allConsolidated?.slice(0, 3)?.map(r => ({ key: r.key, legajo: r.legajo, empresa: r.data?.EMPRESA }))
+      });
       
       if (consolidatedCount === 0 && receiptsCount === 0) {
         toast.info('No hay registros para eliminar');
+        addLogCallback('info', 'DevTools', 'No hay registros para eliminar');
         return;
       }
       
       setDeleteVisibleData({ consolidatedCount, receiptsCount });
       setShowDeleteVisibleModal(true);
+      addLogCallback('info', 'DevTools', `Preparado para eliminar ${consolidatedCount} consolidados y ${receiptsCount} recibos`);
     } catch (error) {
+      console.error('❌ Error obteniendo información de registros:', error);
       toast.error('Error obteniendo información de registros');
       addLogCallback('error', 'DevTools', `Error obteniendo información: ${error}`);
     }
@@ -166,10 +216,27 @@ export default function PersistentDevTools() {
     if (!deleteVisibleData) return;
     
     try {
+      console.log('🗑️ Eliminando registros visibles...', deleteVisibleData);
+      
       await dataManager.clearConsolidated();
       await dataManager.clearReceipts();
+      
+      // Verificar que realmente se eliminaron
+      const verifyConsolidated = await dataManager.getConsolidated();
+      const verifyReceipts = await dataManager.getReceipts();
+      
+      console.log('🔍 Verificación después de eliminar:', {
+        consolidatedRestantes: verifyConsolidated?.length || 0,
+        receiptsRestantes: verifyReceipts?.length || 0
+      });
+      
+      // Disparar evento para notificar al componente padre y recargar datos
+      window.dispatchEvent(new CustomEvent('data-cleared', { 
+        detail: { type: 'visible' } 
+      }));
+      
       toast.success(`✅ Eliminados ${deleteVisibleData.consolidatedCount + deleteVisibleData.receiptsCount} registros correctamente`);
-      addLogCallback('success', 'DevTools', `Eliminados ${deleteVisibleData.consolidatedCount + deleteVisibleData.receiptsCount} registros visibles`);
+      addLogCallback('success', 'DevTools', `Eliminados ${deleteVisibleData.consolidatedCount} consolidados y ${deleteVisibleData.receiptsCount} recibos`);
       setShowDeleteVisibleModal(false);
       setDeleteVisibleData(null);
       await updateMetrics();
@@ -241,7 +308,7 @@ export default function PersistentDevTools() {
       const descuentos = await dataManager.getDescuentos();
       const empresas = await dataManager.getEmpresas();
       
-      addLogCallback('info', 'DevTools', `Verificación de BD: ${consolidated.length} consolidados, ${receipts.length} recibos, ${descuentos.length} descuentos, ${empresas.length} empresas`);
+      addLogCallback('info', 'DevTools', `Verificación de BD: ${consolidated?.length || 0} consolidados, ${receipts?.length || 0} recibos, ${descuentos?.length || 0} descuentos, ${empresas?.length || 0} empresas`);
     } catch (error) {
       addLogCallback('error', 'DevTools', `Error verificando BD: ${error}`);
     }
@@ -249,9 +316,9 @@ export default function PersistentDevTools() {
 
   const checkPendingUploads = async () => {
     try {
-      addLogCallback('info', 'DevTools', `Sesiones pendientes: ${sessions.length}`);
-      sessions.forEach(session => {
-        addLogCallback('info', 'DevTools', `Sesión ${session.id}: ${session.files.length} archivos`);
+      addLogCallback('info', 'DevTools', `Sesiones pendientes: ${sessions?.length || 0}`);
+      sessions?.forEach(session => {
+        addLogCallback('info', 'DevTools', `Sesión ${session.id}: ${session.files?.length || 0} archivos`);
       });
     } catch (error) {
       addLogCallback('error', 'DevTools', `Error verificando subidas: ${error}`);
@@ -324,16 +391,16 @@ export default function PersistentDevTools() {
       const responseTime = Date.now() - startTime;
       
       setMetrics({
-        totalRecords: consolidated.length,
-        supabaseRecords: storageType === 'SUPABASE' ? consolidated.length : 0,
-        indexedDbRecords: storageType === 'IndexedDB' ? consolidated.length : 0,
+        totalRecords: consolidated?.length || 0,
+        supabaseRecords: storageType === 'SUPABASE' ? (consolidated?.length || 0) : 0,
+        indexedDbRecords: storageType === 'IndexedDB' ? (consolidated?.length || 0) : 0,
         lastUpdate: new Date(),
         responseTime,
         errors: logs.filter(log => log.level === 'error').length,
         warnings: logs.filter(log => log.level === 'warn').length
       });
       
-      addLog('success', 'Metrics', `Métricas actualizadas: ${consolidated.length} registros`, {
+      addLog('success', 'Metrics', `Métricas actualizadas: ${consolidated?.length || 0} registros`, {
         storageType,
         responseTime
       });
@@ -527,7 +594,7 @@ export default function PersistentDevTools() {
                 onClick={() => setActiveTab('logs')}
               >
                 <Activity className="w-4 h-4 mr-2" />
-                Logs ({logs.length})
+                Logs ({logs?.length || 0})
               </Button>
               <Button
                 variant={activeTab === 'tools' ? 'default' : 'outline'}
@@ -543,7 +610,7 @@ export default function PersistentDevTools() {
                 onClick={() => setActiveTab('feedback')}
               >
                 <MessageSquare className="w-4 h-4 mr-2" />
-                Feedback ({feedback.length})
+                Feedback ({feedback?.length || 0})
               </Button>
             </div>
 
@@ -634,7 +701,7 @@ export default function PersistentDevTools() {
                       className="w-full"
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
-                      Limpiar Sesiones ({sessions.length})
+                      Limpiar Sesiones ({(sessions?.length || 0)})
                     </Button>
                   </div>
 
@@ -718,7 +785,7 @@ export default function PersistentDevTools() {
                 
                 <div className="text-xs text-gray-500 dark:text-gray-400">
                   <p><strong>Estado actual:</strong> {storageType}</p>
-                  <p><strong>Sesiones pendientes:</strong> {sessions.length}</p>
+                  <p><strong>Sesiones pendientes:</strong> {sessions?.length || 0}</p>
                   <p><strong>Última acción:</strong> {isLoading ? 'Procesando...' : 'Listo'}</p>
                 </div>
               </div>
@@ -727,7 +794,7 @@ export default function PersistentDevTools() {
             {/* Tab: Logs */}
             {activeTab === 'logs' && (
               <div className="space-y-2 max-h-96 overflow-y-auto">
-                {logs.length === 0 ? (
+                {(logs?.length || 0) === 0 ? (
                   <p className="text-center text-gray-500 py-8">No hay logs disponibles</p>
                 ) : (
                   logs.map((log) => (
@@ -808,7 +875,7 @@ export default function PersistentDevTools() {
 
                 {/* Lista de feedback */}
                 <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {feedback.length === 0 ? (
+                  {(feedback?.length || 0) === 0 ? (
                     <p className="text-center text-gray-500 py-8">No hay feedback disponible</p>
                   ) : (
                     feedback.map((item) => (
@@ -938,7 +1005,7 @@ export default function PersistentDevTools() {
           cancelText="Cancelar"
           variant="destructive"
           details={[
-            `${sessions.length} sesiones pendientes`,
+            `${sessions?.length || 0} sesiones pendientes`,
             'Se perderá el progreso de subidas incompletas',
             'Esta acción es IRREVERSIBLE'
           ]}

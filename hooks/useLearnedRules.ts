@@ -69,8 +69,6 @@ export function useLearnedRules() {
   const findApplicableRule = (fileName: string): { empresa?: string; periodo?: string } | null => {
     const pattern = extractPattern(fileName);
     
-    console.log('🧠 Buscando regla para archivo:', { fileName, pattern, totalRules: rules.length });
-    console.log('🧠 Reglas disponibles:', rules.map(r => ({ pattern: r.pattern, empresa: r.empresa, periodo: r.periodo })));
     
     // Buscar regla exacta
     const exactMatch = rules.find(rule => rule.pattern === pattern);

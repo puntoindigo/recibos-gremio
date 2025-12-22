@@ -2,6 +2,7 @@
 
 // Importar directamente las implementaciones
 import { getSupabaseManager } from '@/lib/supabase-manager';
+import { getSupabaseClient } from '@/lib/supabase-client';
 // import { db } from '@/lib/db'; // REMOVIDO - IndexedDB está roto
 import { setCurrentStorageType, validateDataSource } from '@/lib/validate-data-source';
 
@@ -92,7 +93,7 @@ export interface DataManager {
   getConsolidatedByLegajo(legajo: string): Promise<any[]>;
   getConsolidatedByKey(key: string): Promise<any | null>;
   addConsolidated(data: any): Promise<void>;
-  updateConsolidated(key: string, data: any): Promise<void>;
+  updateConsolidated(key: string, data: any): Promise<any | null>;
   deleteConsolidated(key: string): Promise<void>;
   deleteConsolidatedByEmpresa(empresa: string): Promise<void>;
   clearConsolidated(): Promise<void>;
@@ -139,6 +140,12 @@ export interface DataManager {
   // Métodos para sesiones de upload
   getUploadSessions(): Promise<any[]>;
   countUploadSessions(): Promise<number>;
+  
+  // Métodos para configuración de aplicación
+  getAppConfig(key: string, forceRefresh?: boolean): Promise<any>;
+  setAppConfig(key: string, value: any): Promise<void>;
+  getAllAppConfigs(): Promise<any[]>;
+  deleteAppConfig(key: string): Promise<void>;
 }
 
 /**
@@ -169,7 +176,7 @@ class IndexedDBDataManager implements DataManager {
     throw new Error('🚨 INDEXEDDB ROTO - Usa el sistema centralizado');
   }
 
-  async updateConsolidated(key: string, data: any): Promise<void> {
+  async updateConsolidated(key: string, data: any): Promise<any | null> {
     console.error('🚨 INDEXEDDB ROTO - updateConsolidated');
     throw new Error('🚨 INDEXEDDB ROTO - Usa el sistema centralizado');
   }
@@ -308,18 +315,11 @@ class IndexedDBDataManager implements DataManager {
 
 class SupabaseDataManager implements DataManager {
   async getConsolidated(): Promise<any[]> {
-    console.log('SUPABASE| getConsolidated() - Iniciando consulta...');
     
     // Validar que se esté usando el sistema centralizado
     validateDataSource('SupabaseDataManager.getConsolidated', 'SUPABASE');
     
     const result = await getSupabaseManager().getConsolidated();
-    console.log('SUPABASE| getConsolidated() - Resultado:', result.length, 'items');
-    console.log('SUPABASE| getConsolidated() - Primeros 3 items:', result.slice(0, 3).map(item => ({
-      legajo: item.legajo,
-      empresa: item.data?.EMPRESA,
-      created_at: item.created_at
-    })));
     return result;
   }
 
@@ -340,8 +340,8 @@ class SupabaseDataManager implements DataManager {
     console.log('SUPABASE| addConsolidated() - Inserción completada');
   }
 
-  async updateConsolidated(key: string, data: any): Promise<void> {
-    await getSupabaseManager().updateConsolidated(key, data);
+  async updateConsolidated(key: string, data: any): Promise<any | null> {
+    return await getSupabaseManager().updateConsolidated(key, data);
   }
 
   async deleteConsolidated(key: string): Promise<void> {
@@ -350,7 +350,7 @@ class SupabaseDataManager implements DataManager {
 
   async getReceipts(): Promise<any[]> {
     console.log('SUPABASE| getReceipts() - Iniciando consulta...');
-    const result = await getSupabaseManager().getAllRecibos();
+    const result = await getSupabaseManager().getAllReceipts();
     console.log('SUPABASE| getReceipts() - Resultado:', result.length, 'items');
     return result;
   }
@@ -368,7 +368,30 @@ class SupabaseDataManager implements DataManager {
   }
 
   async getEmpresas(): Promise<any[]> {
-    return await getSupabaseManager().getAllEmpresas();
+    // getAllEmpresas() devuelve strings, pero necesitamos objetos completos
+    // Obtener empresas completas desde Supabase
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .from('empresas')
+      .select('id, nombre, logo_url, created_at, updated_at')
+      .not('nombre', 'is', null);
+    
+    if (error) {
+      console.error('Error obteniendo empresas:', error);
+      // Fallback: devolver array vacío o usar método alternativo
+      return [];
+    }
+    
+    // Convertir a formato esperado
+    return (data || []).map((emp: any) => ({
+      id: emp.id,
+      nombre: emp.nombre,
+      logo: emp.logo_url,
+      logoUrl: emp.logo_url,
+      createdAt: emp.created_at ? new Date(emp.created_at).getTime() : Date.now(),
+      updatedAt: emp.updated_at ? new Date(emp.updated_at).getTime() : Date.now(),
+      descripcion: emp.descripcion || ''
+    }));
   }
 
   async addEmpresa(data: any): Promise<void> {
@@ -433,8 +456,9 @@ class SupabaseDataManager implements DataManager {
   }
 
   async countConsolidated(): Promise<number> {
+    // Obtener datos frescos (el método getConsolidated ya maneja el cache)
     const data = await getSupabaseManager().getConsolidated();
-    return data.length;
+    return data?.length || 0;
   }
 
   async getReceiptsByLegajo(legajo: string): Promise<any[]> {
@@ -466,8 +490,9 @@ class SupabaseDataManager implements DataManager {
   }
 
   async countReceipts(): Promise<number> {
-    const data = await getSupabaseManager().getAllRecibos();
-    return data.length;
+    // Obtener datos frescos (el método getAllReceipts ya maneja el cache)
+    const data = await getSupabaseManager().getAllReceipts();
+    return data?.length || 0;
   }
 
   async getSavedControlByFilterKey(filterKey: string): Promise<any | null> {
@@ -476,15 +501,30 @@ class SupabaseDataManager implements DataManager {
     return null;
   }
 
+  // Métodos para configuración de aplicación
+  async getAppConfig(key: string, forceRefresh?: boolean): Promise<any> {
+    return await getSupabaseManager().getAppConfig(key, forceRefresh);
+  }
+
+  async setAppConfig(key: string, value: any): Promise<void> {
+    await getSupabaseManager().setAppConfig(key, value);
+  }
+
+  async getAllAppConfigs(): Promise<any[]> {
+    return await getSupabaseManager().getAllAppConfigs();
+  }
+
+  async deleteAppConfig(key: string): Promise<void> {
+    await getSupabaseManager().deleteAppConfig(key);
+  }
+
   async deleteSavedControl(id: string): Promise<void> {
     console.log('SUPABASE| deleteSavedControl() - Implementación pendiente');
     // TODO: Implementar deleteSavedControl en getSupabaseManager()
   }
 
   async clearSavedControls(): Promise<void> {
-    console.log('SUPABASE| clearSavedControls() - Implementación pendiente');
-    // TODO: Implementar clearSavedControls en getSupabaseManager()
-    throw new Error('clearSavedControls no implementado en Supabase');
+    await getSupabaseManager().clearSavedControls();
   }
 
   async countSavedControls(): Promise<number> {
@@ -604,7 +644,7 @@ class DataManagerSingleton {
     // Retornar función para remover el listener
     return () => {
       this.listeners.delete(listener);
-      console.log('🔍 DataManagerSingleton - Listener removido, total:', this.listeners.size);
+      // Log removido - no necesario para el usuario
     };
   }
 
@@ -691,10 +731,20 @@ export function useDataManagerSingleton(): {
 
   React.useEffect(() => {
     // Registrar listener para cambios
+    // Usar requestIdleCallback para no bloquear el render inicial
     const removeListener = dataManagerSingleton.addListener(() => {
-      console.log('🔍 useDataManagerSingleton - DataManager cambió, actualizando estado');
-      setDataManager(dataManagerSingleton.getDataManager());
-      setStorageTypeState(dataManagerSingleton.getStorageType());
+      // Actualizar estado de forma asíncrona para no bloquear
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        requestIdleCallback(() => {
+          setDataManager(dataManagerSingleton.getDataManager());
+          setStorageTypeState(dataManagerSingleton.getStorageType());
+        }, { timeout: 100 });
+      } else {
+        setTimeout(() => {
+          setDataManager(dataManagerSingleton.getDataManager());
+          setStorageTypeState(dataManagerSingleton.getStorageType());
+        }, 0);
+      }
     });
 
     return removeListener;

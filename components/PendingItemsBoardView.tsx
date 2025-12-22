@@ -299,12 +299,23 @@ export default function PendingItemsBoardView({
 
   // Agrupar items por estado y ordenar por prioridad
   const itemsByStatus = items.reduce((acc, item) => {
-    if (!acc[item.status]) {
-      acc[item.status] = [];
+    // Asegurar que el status sea válido
+    const status = item.status || 'pending';
+    if (!acc[status]) {
+      acc[status] = [];
     }
-    acc[item.status].push(item);
+    acc[status].push(item);
     return acc;
   }, {} as Record<string, PendingItem[]>);
+  
+  // Debug: Log de items agrupados
+  console.log('📊 Items en tablero:', {
+    total: items.length,
+    porEstado: Object.keys(itemsByStatus).map(status => ({
+      estado: status,
+      cantidad: itemsByStatus[status].length
+    }))
+  });
 
   // Ordenar cada columna por prioridad o por orden personalizado
   Object.keys(itemsByStatus).forEach(status => {

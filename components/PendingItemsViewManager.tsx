@@ -65,12 +65,12 @@ export default function PendingItemsViewManager() {
         // Convertir de SupabasePendingItem a PendingItem
         const convertedItems: PendingItem[] = allItems.map(item => ({
           id: item.id,
-          title: item.title,
-          description: item.description,
-          category: item.category,
-          priority: item.priority,
-          status: item.status,
-          order: item.order,
+          title: item.title || item.description || 'Sin título',
+          description: item.description || item.title || 'Sin descripción',
+          category: item.category || 'Sin categoría',
+          priority: item.priority || 'medium',
+          status: item.status || 'pending',
+          order: item.order || 0,
           color: item.color,
           proposedSolution: item.proposed_solution,
           feedback: item.feedback,
@@ -80,6 +80,13 @@ export default function PendingItemsViewManager() {
           updatedAt: item.updated_at,
           tags: [] // La tabla no tiene tags, usar array vacío
         }));
+        
+        console.log('📋 Items cargados:', convertedItems.length);
+        console.log('📋 Items por estado:', {
+          pending: convertedItems.filter(i => i.status === 'pending').length,
+          'in-progress': convertedItems.filter(i => i.status === 'in-progress').length,
+          completed: convertedItems.filter(i => i.status === 'completed').length
+        });
         
         setItems(convertedItems);
       } catch (error) {
@@ -424,14 +431,27 @@ export default function PendingItemsViewManager() {
 
   // Filtrar items
   const filteredItems = items.filter(item => {
-    const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const description = item.description || item.title || '';
+    const category = item.category || '';
+    
+    const matchesSearch = !searchTerm || 
+                         description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'all' || item.category === filterCategory;
     const matchesPriority = filterPriority === 'all' || item.priority === filterPriority;
     const matchesStatus = filterStatus === 'all' || item.status === filterStatus;
     
     return matchesSearch && matchesCategory && matchesPriority && matchesStatus;
   });
+  
+  // Debug: Log de items filtrados
+  if (filteredItems.length !== items.length) {
+    console.log('🔍 Items filtrados:', {
+      total: items.length,
+      filtrados: filteredItems.length,
+      filtros: { searchTerm, filterCategory, filterPriority, filterStatus }
+    });
+  }
 
   // Obtener categorías únicas, filtrando las vacías
   const categories = Array.from(new Set(items.map(item => item.category).filter(cat => cat && cat.trim() !== '')));

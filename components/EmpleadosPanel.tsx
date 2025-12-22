@@ -73,13 +73,6 @@ export default function EmpleadosPanel({ empresaFiltro }: EmpleadosPanelProps) {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showEmpresaModal, setShowEmpresaModal] = useState<boolean>(false);
 
-  // Debug: verificar por qué se abre el modal
-  useEffect(() => {
-    console.log('🔍 Debug EmpresasPanel - showEmpresaModal:', showEmpresaModal);
-  }, [showEmpresaModal]);
-
-  // Debug: verificar renderizado
-  console.log('🔍 Debug EmpresasPanel - renderizando con showEmpresaModal:', showEmpresaModal);
   const [selectedEmpleado, setSelectedEmpleado] = useState<EmpleadoData | null>(null);
   const [selectedLegajo, setSelectedLegajo] = useState<string>('');
   const [empleadoToDelete, setEmpleadoToDelete] = useState<EmpleadoData | null>(null);
@@ -87,12 +80,10 @@ export default function EmpleadosPanel({ empresaFiltro }: EmpleadosPanelProps) {
 
   const canManage = session?.user ? canManageUsers(session.user) : false;
 
-  // Debug: verificar permisos
+  // Verificar permisos
   useEffect(() => {
     if (session?.user) {
-      console.log("🔍 Debug EmpleadosPanel - Usuario:", {
-        email: session.user.email,
-        role: session.user.role,
+      // Usuario autenticado
         permissions: session.user.permissions,
         canManage
       });
@@ -149,12 +140,7 @@ export default function EmpleadosPanel({ empresaFiltro }: EmpleadosPanelProps) {
   };
 
   const handleEditEmpleado = (empleado: EmpleadoData) => {
-    console.log('🔍 Debug editando empleado:', {
-      legajo: empleado.legajo,
-      nombre: empleado.nombre,
-      empresa: empleado.empresa,
-      data: empleado.data
-    });
+
     setSelectedEmpleado(empleado);
     setShowModal(true);
   };

@@ -301,6 +301,118 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     data["NRO. DE CUIL"] = cuilMatch[1];
   }
 
+  // Extraer CATEGORIA
+  // En los PDFs de LIME, la categoría aparece después de "Sección DD/MM/YYYY"
+  // Formato típico en el texto: "Sección 1/03/2015 PEON GRAL.BARRIDO Y LIMP GABOTO Y FELIPE MORE 0 PAS C.P.:2000"
+  // La categoría es "PEON GRAL.BARRIDO Y LIMP" - termina antes del nombre de la calle (dirección)
+  
+  // Patrón principal: Buscar "Sección DD/MM/YYYY" seguido de palabras en MAYÚSCULAS
+  // La categoría termina cuando encontramos un nombre propio (Mayúscula+minúsculas) o números grandes
+  const categoriaPattern1 = /Sección\s+\d+\/\d+\/\d+\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s\.\d\-]+?)(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]|C\.P\.|\d{4}|\s+\d+\s+[A-Z]{2,4})/;
+  const match1 = rawText.match(categoriaPattern1);
+  
+  if (match1) {
+    let categoria = match1[1].trim();
+    
+    if (debug) console.log("🔍 Debug LIME - Texto capturado después de Sección:", categoria);
+    
+    // Procesar palabra por palabra para detectar dónde termina la categoría
+    const palabras = categoria.split(/\s+/);
+    const categoriaPalabras = [];
+    
+    for (const palabra of palabras) {
+      // Detener si encontramos algo que NO es parte de la categoría:
+      
+      // 1. Palabra que empieza con mayúscula seguida de minúscula (nombre de calle: "GABOTO", "FELIPE")
+      if (/^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]/.test(palabra)) {
+        if (debug) console.log("🔍 Debug LIME - Deteniendo en nombre propio:", palabra);
+        break;
+      }
+      
+      // 2. Números solos de 2+ dígitos (probablemente número de calle, excepto "0" que puede ser válido)
+      if (/^\d{2,}$/.test(palabra)) {
+        if (debug) console.log("🔍 Debug LIME - Deteniendo en número:", palabra);
+        break;
+      }
+      
+      // 3. Palabras muy largas (probablemente direcciones completas)
+      if (palabra.length > 25) {
+        if (debug) console.log("🔍 Debug LIME - Deteniendo en palabra muy larga:", palabra);
+        break;
+      }
+      
+      // 4. Palabras que sabemos que NO son categoría
+      if (['Modo', 'de', 'contratación', 'Obra', 'Social', 'Antig', 'Recon', 'Conformado', 'Domicilio'].includes(palabra)) {
+        if (debug) console.log("🔍 Debug LIME - Deteniendo en palabra excluida:", palabra);
+        break;
+      }
+      
+      categoriaPalabras.push(palabra);
+    }
+    
+    categoria = categoriaPalabras.join(' ').trim();
+    
+    // Validar que sea una categoría válida
+    if (categoria && categoria.length >= 5 && categoria.length < 80 &&
+        /[A-ZÁÉÍÓÚÑ]/.test(categoria) &&
+        !categoria.includes('Modo') && 
+        !categoria.includes('Obra') &&
+        !categoria.includes('Social') &&
+        !categoria.includes('Domicilio') &&
+        !categoria.match(/^\d+$/)) {
+      data["CATEGORIA"] = categoria;
+      if (debug) console.log("✅ Debug LIME - Categoría detectada:", categoria);
+    } else if (debug) {
+      console.log("⚠️ Debug LIME - Categoría rechazada:", categoria);
+    }
+  }
+  
+  // Patrón alternativo: Buscar en la estructura de tabla
+  // Buscar líneas que tienen "Ingreso" y "Categoria" como headers
+  if (!data["CATEGORIA"]) {
+    const lines = rawText.split(/\r?\n/).map(l => l.trim());
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Buscar línea que contiene "Ingreso" y "Categoria" como headers de columna
+      if ((line.includes('Ingreso') && line.includes('Categoria')) ||
+          (line.includes('Ingreso') && line.includes('Categoría'))) {
+        // Buscar en las siguientes líneas el valor de categoría
+        for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+          const valueLine = lines[j];
+          
+          // Buscar fecha seguida de categoría en mayúsculas
+          const categoriaMatch = valueLine.match(/\d+\/\d+\/\d+\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s\.\d\-]{5,50}?)(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]|Modo|Obra|$)/);
+          if (categoriaMatch) {
+            let categoria = categoriaMatch[1].trim();
+            
+            // Limpiar palabra por palabra
+            const palabras = categoria.split(/\s+/);
+            const categoriaPalabras = [];
+            for (const palabra of palabras) {
+              if (/^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]/.test(palabra) || 
+                  palabra === 'Modo' || 
+                  palabra === 'Obra' ||
+                  /^\d{3,}$/.test(palabra)) {
+                break;
+              }
+              categoriaPalabras.push(palabra);
+            }
+            categoria = categoriaPalabras.join(' ').trim();
+            
+            if (categoria && categoria.length >= 5 && categoria.length < 80) {
+              data["CATEGORIA"] = categoria;
+              if (debug) console.log("✅ Debug LIME - Categoría detectada (tabla):", categoria);
+              break;
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+
   // Extraer conceptos básicos de LIME
   const jornal = extraerConceptoLIME(rawText, "JORNAL") || extraerConceptoLIME(rawText, "JORNALES");
   const horasExtras = extraerConceptoLIME(rawText, "HORAS EXTRAS") || extraerConceptoLIME(rawText, "H.EXTRA");

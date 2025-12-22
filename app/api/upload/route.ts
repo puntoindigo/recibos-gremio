@@ -59,30 +59,29 @@ export async function POST(req: Request) {
 
       // --- guardar el PDF en /public/recibos ---
       const rawName = file.name || 'recibo.pdf';
-      const safeName = sanitizeName(rawName);
-      
-      // Verificar si el archivo ya existe (por nombre)
-      const tempPath = path.join(DEST_DIR, safeName);
-      
-      try {
-        await fs.access(tempPath);
-        console.log(`⚠️ Archivo ya existe: ${safeName}`);
-        return NextResponse.json({ 
-          error: 'El archivo ya existe en el servidor',
-          duplicate: true,
-          existingFile: safeName
-        }, { status: 409 });
-      } catch {
-        // Archivo no existe, continuar con la subida
-        console.log(`✅ Archivo nuevo: ${safeName}`);
-      }
+      // Primero normalizar (eliminar paréntesis) y luego sanitizar (limpiar caracteres peligrosos)
+      // Esto asegura que el nombre físico coincida con el nombre en la BD
+      const { normalizeFileName } = await import('@/lib/simple-pdf-processor');
+      const normalizedName = normalizeFileName(rawName);
+      const safeName = sanitizeName(normalizedName);
     
     await fs.mkdir(DEST_DIR, { recursive: true });
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const destPath = await ensureUniqueFilePath(DEST_DIR, safeName);
+    // Permitir sobrescribir archivos físicos - la verificación de duplicados real
+    // se hace en processSingleFile que verifica la base de datos.
+    // Si el usuario borró los registros pero los archivos físicos existen, debe poder reprocesarlos.
+    // Usar el nombre original directamente - si existe físicamente, se sobrescribirá.
+    const destPath = path.join(DEST_DIR, safeName);
+    
+    try {
+      await fs.access(destPath);
+      console.log(`⚠️ Archivo físico ya existe: ${safeName} - Se sobrescribirá (verificación de duplicados en BD)`);
+    } catch {
+      console.log(`✅ Archivo nuevo: ${safeName}`);
+    }
     
     await fs.writeFile(destPath, buffer);
 

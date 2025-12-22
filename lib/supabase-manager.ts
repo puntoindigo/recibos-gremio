@@ -82,10 +82,14 @@ export class SupabaseManager {
   }
   
   // Métodos de recibos
-  async getAllReceipts(): Promise<SupabaseReceipt[]> {
+  async getAllReceipts(forceRefresh: boolean = false): Promise<SupabaseReceipt[]> {
     const cacheKey = 'receipts_all';
-    const cached = dataCache.get(cacheKey);
-    if (cached) return cached;
+    
+    // Si no se fuerza refresh, verificar cache
+    if (!forceRefresh) {
+      const cached = dataCache.get(cacheKey);
+      if (cached) return cached;
+    }
     
     loadingState.setLoading('receipts', true);
     
@@ -97,8 +101,9 @@ export class SupabaseManager {
       
       if (error) throw error;
       
-      dataCache.set(cacheKey, data);
-      return data || [];
+      const result = data || [];
+      dataCache.set(cacheKey, result);
+      return result;
     } finally {
       loadingState.setLoading('receipts', false);
     }
@@ -190,10 +195,14 @@ export class SupabaseManager {
   }
   
   // Métodos de datos consolidados
-  async getConsolidated(): Promise<SupabaseConsolidated[]> {
+  async getConsolidated(forceRefresh: boolean = false): Promise<SupabaseConsolidated[]> {
     const cacheKey = 'consolidated_all';
-    const cached = dataCache.get(cacheKey);
-    if (cached) return cached;
+    
+    // Si no se fuerza refresh, verificar cache
+    if (!forceRefresh) {
+      const cached = dataCache.get(cacheKey);
+      if (cached) return cached;
+    }
     
     loadingState.setLoading('consolidated', true);
     
@@ -205,8 +214,9 @@ export class SupabaseManager {
       
       if (error) throw error;
       
-      dataCache.set(cacheKey, data);
-      return data || [];
+      const result = data || [];
+      dataCache.set(cacheKey, result);
+      return result;
     } finally {
       loadingState.setLoading('consolidated', false);
     }
@@ -528,24 +538,42 @@ export class SupabaseManager {
   }
   
   // Métodos de configuración de aplicación
-  async getAppConfig(key: string): Promise<any> {
+  async getAppConfig(key: string, forceRefresh: boolean = false): Promise<any> {
     const cacheKey = `app_config_${key}`;
-    const cached = dataCache.get(cacheKey);
-    if (cached) return cached;
+    
+    // Si se fuerza refresh, limpiar caché primero
+    if (forceRefresh) {
+      dataCache.delete(cacheKey);
+    } else {
+      const cached = dataCache.get(cacheKey);
+      if (cached) return cached;
+    }
     
     loadingState.setLoading('app_config', true);
     
     try {
       const { data, error } = await this.client
         .from('app_config')
-        .select('value')
+        .select('value, created_at, updated_at')
         .eq('key', key)
-        .single();
+        .maybeSingle(); // Usar maybeSingle() en lugar de single() para evitar 406
       
-      if (error) throw error;
+      if (error) {
+        // Si el error es "no encontrado", retornar null en lugar de lanzar error
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        throw error;
+      }
       
-      dataCache.set(cacheKey, data?.value);
-      return data?.value;
+      const result = data?.value || null;
+      if (result) {
+        dataCache.set(cacheKey, result);
+      }
+      return result;
+    } catch (error) {
+      console.error(`Error obteniendo app_config para key "${key}":`, error);
+      return null;
     } finally {
       loadingState.setLoading('app_config', false);
     }
@@ -555,9 +583,71 @@ export class SupabaseManager {
     loadingState.setLoading('app_config', true);
     
     try {
+      // Verificar si ya existe un registro con este key para obtener su id
+      const { data: existing } = await this.client
+        .from('app_config')
+        .select('id, created_at')
+        .eq('key', key)
+        .maybeSingle();
+      
+      const now = new Date().toISOString();
+      const record: any = {
+        id: existing?.id || key, // Usar id existente o el key como id
+        key,
+        value,
+        updated_at: now
+      };
+      
+      // Si es un registro nuevo, incluir created_at
+      if (!existing) {
+        record.created_at = now;
+      }
+      
+      // Usar upsert con onConflict en 'key' para manejar tanto creación como actualización
       const { error } = await this.client
         .from('app_config')
-        .upsert([{ key, value, updated_at: new Date().toISOString() }]);
+        .upsert(record, { onConflict: 'key' });
+      
+      if (error) throw error;
+      
+      // Limpiar cache relacionado
+      dataCache.delete(`app_config_${key}`);
+    } finally {
+      loadingState.setLoading('app_config', false);
+    }
+  }
+
+  async getAllAppConfigs(): Promise<Array<{key: string; value: any; created_at: string; updated_at: string}>> {
+    loadingState.setLoading('app_config', true);
+    
+    try {
+      const { data, error } = await this.client
+        .from('app_config')
+        .select('key, value, created_at, updated_at')
+        .order('updated_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error obteniendo todas las app_configs:', error);
+        return [];
+      }
+      
+      return data || [];
+    } catch (error) {
+      console.error('Error en getAllAppConfigs:', error);
+      return [];
+    } finally {
+      loadingState.setLoading('app_config', false);
+    }
+  }
+
+  async deleteAppConfig(key: string): Promise<void> {
+    loadingState.setLoading('app_config', true);
+    
+    try {
+      const { error } = await this.client
+        .from('app_config')
+        .delete()
+        .eq('key', key);
       
       if (error) throw error;
       
@@ -679,23 +769,51 @@ export class SupabaseManager {
     }
   }
   
-  async updateConsolidated(key: string, updates: Partial<SupabaseConsolidated>): Promise<SupabaseConsolidated> {
+  async updateConsolidated(key: string, updates: Partial<SupabaseConsolidated>): Promise<SupabaseConsolidated | null> {
     loadingState.setLoading('consolidated', true);
     
     try {
-      const { data, error } = await this.client
+      // Intentar primero con id
+      let { data, error } = await this.client
         .from('consolidated')
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', key)
         .select()
-        .single();
+        .maybeSingle();
       
-      if (error) throw error;
+      // Si no encontramos por id, intentar con key
+      if (error || !data) {
+        console.log(`⚠️ No se encontró registro con id="${key}", intentando por key...`);
+        const result = await this.client
+          .from('consolidated')
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq('key', key)
+          .select()
+          .maybeSingle();
+        
+        if (result.error) {
+          console.error(`❌ Error actualizando consolidated con key="${key}":`, result.error);
+          throw result.error;
+        }
+        
+        if (!result.data) {
+          console.error(`❌ No se encontró registro consolidated con key="${key}"`);
+          return null;
+        }
+        
+        data = result.data;
+        console.log(`✅ Registro actualizado exitosamente por key="${key}"`);
+      } else {
+        console.log(`✅ Registro actualizado exitosamente por id="${key}"`);
+      }
       
       // Limpiar cache relacionado
       dataCache.clear();
       
       return data;
+    } catch (error) {
+      console.error(`❌ Error en updateConsolidated para key="${key}":`, error);
+      throw error;
     } finally {
       loadingState.setLoading('consolidated', false);
     }
@@ -888,16 +1006,46 @@ export class SupabaseManager {
     loadingState.setLoading('receipts', true);
     
     try {
-      const { data, error } = await this.client
-        .from('recibos')
-        .select('*')
-        .eq('filename', filename)
-        .order('created_at', { ascending: false });
+      // filename está en data->>'filename' o en el array archivos (JSONB)
+      // Intentar buscar primero con filtro JSONB
+      let data: any[] = [];
+      let error: any = null;
       
-      if (error) throw error;
+      try {
+        // Opción 1: Buscar en data->>filename
+        const result1 = await this.client
+          .from('recibos')
+          .select('*')
+          .filter('data->>filename', 'eq', filename)
+          .order('created_at', { ascending: false });
+        
+        if (result1.error) throw result1.error;
+        data = result1.data || [];
+      } catch (err1) {
+        error = err1;
+      }
+      
+      // Si no encontró nada o hubo error, buscar en archivos array
+      if (data.length === 0) {
+        try {
+          // Opción 2: Buscar en el array archivos
+          const allReceipts = await this.getAllReceipts(false);
+          data = allReceipts.filter((r: any) => {
+            const dataFilename = r.data?.filename;
+            const archivosArray = Array.isArray(r.archivos) ? r.archivos : [];
+            return dataFilename === filename || archivosArray.includes(filename);
+          });
+        } catch (err2) {
+          error = err2;
+        }
+      }
+      
+      if (error && data.length === 0) {
+        console.warn(`⚠️ Error buscando receipt por filename:`, error);
+      }
       
       dataCache.set(cacheKey, data);
-      return data || [];
+      return data;
     } finally {
       loadingState.setLoading('receipts', false);
     }

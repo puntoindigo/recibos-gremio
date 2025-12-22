@@ -48,6 +48,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
+    "pdf-parse": "^2.4.5",
     "tailwindcss": "^3.4.17",
     "ts-prune": "^0.10.3",
     "tw-animate-css": "^1.3.6",

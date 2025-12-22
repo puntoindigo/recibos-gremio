@@ -21,6 +21,7 @@ import {
 // import { UploadSessionManager, type UploadSessionState } from '@/lib/upload-session-manager'; // ELIMINADO
 import { useUploadResume } from '@/hooks/useUploadResume';
 import type { SimpleProcessingResult } from '@/lib/simple-pdf-processor';
+import type { UploadSessionDB } from '@/lib/db';
 
 interface PersistentUploadProgressProps {
   sessionId?: string;
@@ -28,6 +29,8 @@ interface PersistentUploadProgressProps {
   onSessionError?: (sessionId: string, error: string) => void;
   showDetails?: boolean;
 }
+
+type UploadSessionState = UploadSessionDB;
 
 export default function PersistentUploadProgress({ 
   sessionId,
@@ -53,13 +56,16 @@ export default function PersistentUploadProgress({
     
     try {
       setLoading(true);
-      const state = await UploadSessionManager.getSessionState(sessionId);
-      setSessionState(state);
+      // TODO: Implementar obtención de estado de sesión desde dataManager
+      // Por ahora, retornar null para evitar errores
+      // const state = await UploadSessionManager.getSessionState(sessionId);
+      // setSessionState(state);
       
       // Reset auto-resume flag when session changes
-      if (state?.status !== 'active' || state?.pendingFiles === 0) {
-        hasAutoResumed.current = false;
-      }
+      // if (state?.status !== 'active' || state?.pendingFiles === 0) {
+      //   hasAutoResumed.current = false;
+      // }
+      setSessionState(null);
     } catch (error) {
       console.error('Error loading session state:', error);
     } finally {
@@ -132,18 +138,7 @@ export default function PersistentUploadProgress({
     }
   }, [sessionState, sessionId, isProcessing, isResuming, resumeUpload, showDetails, onSessionComplete, onSessionError, loadSessionState]);
 
-  // Actualizar estado periódicamente si la sesión está activa
-  useEffect(() => {
-    if (!sessionState || sessionState.status !== 'active') return;
-
-    const interval = setInterval(() => {
-      loadSessionState();
-    }, 2000); // Actualizar cada 2 segundos
-
-    return () => clearInterval(interval);
-  }, [sessionState, loadSessionState]);
-
-  // Retomar subida automáticamente si hay archivos pendientes
+  // Retomar subida manualmente
   const handleResumeUpload = useCallback(async () => {
     if (!sessionState || !sessionId) return;
     
@@ -180,6 +175,17 @@ export default function PersistentUploadProgress({
       setAutoResuming(false);
     }
   }, [sessionState, sessionId, resumeUpload, showDetails, onSessionComplete, onSessionError, loadSessionState]);
+
+  // Actualizar estado periódicamente si la sesión está activa
+  useEffect(() => {
+    if (!sessionState || sessionState.status !== 'active') return;
+
+    const interval = setInterval(() => {
+      loadSessionState();
+    }, 2000); // Actualizar cada 2 segundos
+
+    return () => clearInterval(interval);
+  }, [sessionState, loadSessionState]);
 
   // Retomar automáticamente si hay archivos pendientes
   useEffect(() => {
@@ -225,7 +231,7 @@ export default function PersistentUploadProgress({
     // Si hay archivos pendientes y la sesión está activa, retomar automáticamente después de 2 segundos
     if (sessionState.status === 'active' && sessionState.pendingFiles > 0) {
       // Verificar que realmente hay archivos pendientes en el array
-      const actualPendingFiles = sessionState.files.filter(f => f.status === 'pending');
+      const actualPendingFiles = (sessionState.files || []).filter(f => f.status === 'pending');
       
       if (actualPendingFiles.length > 0) {
         console.log('🔄 Subida pendiente detectada, retomando automáticamente en 2 segundos...');
@@ -252,7 +258,7 @@ export default function PersistentUploadProgress({
         pendingFiles: sessionState.pendingFiles
       });
     }
-  }, [sessionState?.status, sessionState?.pendingFiles, sessionId]);
+  }, [sessionState?.status, sessionState?.pendingFiles, sessionId, handleResumeUpload]);
 
   // Reset hasAutoResumed cuando la sesión cambia o se completa
   useEffect(() => {
@@ -331,146 +337,96 @@ export default function PersistentUploadProgress({
     }
   };
 
+  // Después de verificar que sessionState no es null, podemos usarlo directamente
   const progressPercentage = sessionState.totalFiles > 0 
     ? ((sessionState.completedFiles + sessionState.failedFiles + sessionState.skippedFiles) / sessionState.totalFiles) * 100 
     : 0;
 
-  const currentFile = sessionState.files.find(f => f.status === 'processing') || 
-                     sessionState.files[sessionState.currentFileIndex];
+  const currentFile = (sessionState.files && sessionState.files.length > 0)
+    ? (sessionState.files.find(f => f.status === 'processing') || 
+       (sessionState.files[sessionState.currentFileIndex] ?? null))
+    : null;
 
   return (
-    <Card className="mb-6">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              {sessionState.status === 'active' ? 'Procesando Archivos' : 
-               sessionState.status === 'completed' ? 'Subida Completada' :
-               sessionState.status === 'failed' ? 'Subida Fallida' : 'Subida Cancelada'}
-            </CardTitle>
-            <p className="text-sm text-gray-600 mt-1">
-              {sessionState.completedFiles + sessionState.failedFiles + sessionState.skippedFiles} de {sessionState.totalFiles} archivos procesados
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button 
-              onClick={() => setExpandedDetails(!expandedDetails)}
-              variant="outline"
-              size="sm"
-            >
-              {expandedDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              {expandedDetails ? 'Ocultar' : 'Detalles'}
-            </Button>
-            {sessionState.status === 'active' && sessionState.pendingFiles > 0 && (
-              <>
-                <Button onClick={handleResumeUpload} variant="outline" size="sm" disabled={isResuming || autoResuming}>
-                  {isResuming ? (
-                    <>
-                      <RotateCcw className="h-4 w-4 mr-2 animate-spin" />
-                      Retomando...
-                    </>
-                  ) : autoResuming ? (
-                    <>
-                      <RotateCcw className="h-4 w-4 mr-2 animate-spin" />
-                      Iniciando...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Retomar Manual
-                    </>
-                  )}
-                </Button>
-                <Button 
-                  onClick={() => sessionId && cancelUpload(sessionId)} 
-                  variant="outline" 
-                  size="sm"
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                >
-                  Cancelar
-                </Button>
-                <Button 
-                  onClick={() => {
-                    hasAutoResumed.current = false;
-                    setAutoResuming(false);
-                    setIsProcessing(false);
-                    console.log('🔄 Forzando reset de estados para retomar');
-                  }} 
-                  variant="outline" 
-                  size="sm"
-                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                >
-                  Reset
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {/* Barra de progreso */}
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Progreso</span>
-            <span>{Math.round(progressPercentage)}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className="h-2 rounded-full transition-all duration-500"
-              style={{ 
-                width: `${progressPercentage}%`,
-                background: sessionState.status === 'completed' ? '#10b981' : // Verde para completado
-                           sessionState.status === 'failed' ? '#ef4444' : // Rojo para fallido
-                           `linear-gradient(90deg, 
-                             hsl(${Math.max(120, 120 - (progressPercentage * 0.6))}, 75%, 65%) 0%, 
-                             hsl(${Math.min(240, 240 - (progressPercentage * 0.4))}, 75%, 65%) 100%)`
-              }}
+    <div className="fixed bottom-0 right-0 z-50 p-4 max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)]">
+      <Card className="w-96 max-w-[calc(100vw-2rem)] shadow-lg border-2 border-blue-200">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-blue-600">
+            <FileText className="h-5 w-5" />
+            {sessionState.status === 'active' ? 'Subiendo Archivos' : 
+             sessionState.status === 'completed' ? 'Subida Completada' :
+             sessionState.status === 'failed' ? 'Subida Fallida' : 'Subida Cancelada'}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Progreso:</span>
+              <span className="font-medium">
+                {sessionState.completedFiles + sessionState.failedFiles + sessionState.skippedFiles} / {sessionState.totalFiles}
+              </span>
+            </div>
+            <Progress 
+              value={progressPercentage} 
+              className="h-2"
             />
           </div>
-        </div>
 
-        {/* Estadísticas */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-green-600">{sessionState.completedFiles}</div>
-            <div className="text-xs text-gray-600">Completados</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-red-600">{sessionState.failedFiles}</div>
-            <div className="text-xs text-gray-600">Errores</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-yellow-600">{sessionState.skippedFiles}</div>
-            <div className="text-xs text-gray-600">Omitidos</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-blue-600">{sessionState.pendingFiles}</div>
-            <div className="text-xs text-gray-600">Pendientes</div>
-          </div>
-        </div>
+          {/* Archivo actual */}
+          {currentFile && sessionState.status === 'active' && (
+            <div className="text-sm text-gray-500 truncate">
+              Procesando: {currentFile.fileName}
+            </div>
+          )}
 
-        {/* Debug info */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="text-xs text-gray-500 bg-gray-100 p-2 rounded">
-            <div>Debug Info:</div>
-            <div>Status: {sessionState?.status || 'undefined'}</div>
-            <div>Pending: {sessionState?.pendingFiles || 'undefined'}</div>
-            <div>Total: {sessionState?.totalFiles || 'undefined'}</div>
-            <div>Completed: {sessionState?.completedFiles || 'undefined'}</div>
-            <div>ShowButton: {(sessionState?.status === 'failed' || sessionState?.status === 'completed') && sessionState?.pendingFiles > 0 ? 'YES' : 'NO'}</div>
+          {/* Estadísticas compactas */}
+          <div className="flex justify-between text-xs text-gray-600">
+            <span>✅ {sessionState.completedFiles}</span>
+            <span>❌ {sessionState.failedFiles}</span>
+            <span>⏭️ {sessionState.skippedFiles}</span>
+            <span>⏳ {sessionState.pendingFiles}</span>
           </div>
-        )}
 
-        {/* Botón Reanudar para sesiones fallidas o completadas con archivos pendientes */}
-        {(sessionState?.status === 'failed' || sessionState?.status === 'completed') && sessionState?.pendingFiles > 0 && (
-          <div className="flex justify-center">
+          {/* Botones de acción compactos */}
+          {sessionState.status === 'active' && sessionState.pendingFiles > 0 && (
+            <div className="flex gap-2">
+              <Button 
+                onClick={handleResumeUpload} 
+                variant="outline" 
+                size="sm" 
+                disabled={isResuming || autoResuming}
+                className="flex-1 text-xs"
+              >
+                {isResuming || autoResuming ? (
+                  <>
+                    <RotateCcw className="h-3 w-3 mr-1 animate-spin" />
+                    Retomando...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3 w-3 mr-1" />
+                    Retomar
+                  </>
+                )}
+              </Button>
+              <Button 
+                onClick={() => sessionId && cancelUpload(sessionId)} 
+                variant="outline" 
+                size="sm"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs"
+              >
+                Cancelar
+              </Button>
+            </div>
+          )}
+
+          {/* Botón Reanudar para sesiones fallidas o completadas con archivos pendientes */}
+          {(sessionState?.status === 'failed' || sessionState?.status === 'completed') && sessionState?.pendingFiles > 0 && (
             <Button
               onClick={handleResumeUpload}
               disabled={isResuming || autoResuming}
               size="sm"
-              className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1 h-7"
+              className="w-full bg-green-600 hover:bg-green-700 text-white text-xs"
             >
               {isResuming ? (
                 <>
@@ -484,111 +440,58 @@ export default function PersistentUploadProgress({
                 </>
               )}
             </Button>
-          </div>
-        )}
+          )}
 
-        {/* Notificación de retomar automático */}
-        {autoResuming && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-            <div className="flex items-center gap-2">
-              <RotateCcw className="h-4 w-4 text-green-600 animate-spin" />
-              <span className="text-sm font-medium text-green-900">
-                Retomando subida automáticamente en 2 segundos...
-              </span>
+          {/* Notificación de retomar automático */}
+          {autoResuming && (
+            <div className="text-xs text-green-600 flex items-center gap-1">
+              <RotateCcw className="h-3 w-3 animate-spin" />
+              Retomando automáticamente...
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Archivo actual */}
-        {currentFile && sessionState.status === 'active' && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-blue-600" />
-              <span className="text-sm font-medium text-blue-900">
-                Procesando: {currentFile.fileName}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Lista detallada */}
-        {expandedDetails && (
-          <div className="space-y-2 max-h-60 overflow-y-auto">
-            <div className="text-sm font-medium text-gray-700 mb-2">Detalles por archivo:</div>
-            {sessionState.files.map((file, index) => (
-              <div 
-                key={index}
-                className={`flex items-center justify-between p-2 rounded-lg border ${
-                  file.status === 'processing' ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
-                }`}
-              >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  {getStatusIcon(file.status)}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{file.fileName}</div>
-                    {file.errorMessage && (
-                      <div className="text-xs text-red-600 truncate">{file.errorMessage}</div>
-                    )}
-                    {file.processingResult?.validation && (
-                      <div className="text-xs text-gray-500">
-                        {file.processingResult.validation.warnings?.length > 0 && (
-                          <span className="text-yellow-600">
-                            {file.processingResult.validation.warnings.length} advertencias
-                          </span>
-                        )}
-                      </div>
-                    )}
+          {/* Lista detallada (colapsable) */}
+          {expandedDetails && sessionState.files && sessionState.files.length > 0 && (
+            <div className="space-y-1 max-h-40 overflow-y-auto border-t pt-2 mt-2">
+              <div className="text-xs font-medium text-gray-700 mb-1">Detalles:</div>
+              {sessionState.files.map((file, index) => (
+                <div 
+                  key={index}
+                  className={`flex items-center justify-between p-1.5 rounded text-xs ${
+                    file.status === 'processing' ? 'bg-blue-50' : 'bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {getStatusIcon(file.status)}
+                    <div className="flex-1 min-w-0 truncate">{file.fileName}</div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
                   {getStatusBadge(file.status)}
-                  {file.status === 'processing' && (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                  )}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Información de debug */}
-        {showDetails && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <Info className="h-4 w-4 text-gray-600 mt-0.5" />
-              <div className="text-xs text-gray-600">
-                <p className="font-medium mb-1">Estado de la sesión:</p>
-                <ul className="space-y-1">
-                  <li>• ID: {sessionId}</li>
-                  <li>• Estado: {sessionState.status}</li>
-                  <li>• Archivos pendientes: {sessionState.pendingFiles}</li>
-                  <li>• Auto-retomar: {autoResuming ? 'Sí' : 'No'}</li>
-                  <li>• Ya retomado: {hasAutoResumed.current ? 'Sí' : 'No'}</li>
-                  <li>• Procesando: {isProcessing || isResuming ? 'Sí' : 'No'}</li>
-                </ul>
-              </div>
+              ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Información adicional */}
-        {showDetails && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <Info className="h-4 w-4 text-gray-600 mt-0.5" />
-              <div className="text-xs text-gray-600">
-                <p className="font-medium mb-1">Información del procesamiento:</p>
-                <ul className="space-y-1">
-                  <li>• Los archivos duplicados se omiten automáticamente</li>
-                  <li>• Se validan los datos antes de guardar</li>
-                  <li>• Los errores se muestran en la columna de detalles</li>
-                  <li>• El progreso se guarda automáticamente</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          {/* Botón para expandir/colapsar detalles */}
+          <Button
+            onClick={() => setExpandedDetails(!expandedDetails)}
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs h-7"
+          >
+            {expandedDetails ? (
+              <>
+                <ChevronUp className="h-3 w-3 mr-1" />
+                Ocultar detalles
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3 w-3 mr-1" />
+                Mostrar detalles
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

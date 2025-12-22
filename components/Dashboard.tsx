@@ -4,7 +4,7 @@ import { useState, useEffect, useImperativeHandle, forwardRef, useCallback } fro
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, FileText, CreditCard, Building2, TrendingUp, Calendar, Plus } from 'lucide-react';
+import { Users, FileText, CreditCard, Building2, TrendingUp, Calendar, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { useConfiguration } from '@/contexts/ConfigurationContext';
 import { getEstadisticasDescuentos } from '@/lib/descuentos-manager';
@@ -70,6 +70,11 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
   const [error, setError] = useState<string | null>(null);
   const [showUploadManager, setShowUploadManager] = useState(false);
   const [showCreateEmployee, setShowCreateEmployee] = useState(false);
+  const [expandedCompany, setExpandedCompany] = useState<string | null>(null);
+  const [employeesByCategory, setEmployeesByCategory] = useState<Record<string, Array<{
+    categoria: string;
+    count: number;
+  }>>>({});
   
   const loadDashboardData = useCallback(async () => {
     try {
@@ -78,8 +83,7 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
       // Obtener todos los datos consolidados
       const allConsolidated = await dataManager.getConsolidated();
       
-      console.log('🔍 Debug Dashboard - Total consolidated items:', allConsolidated.length);
-      console.log('🔍 Debug Dashboard - Storage type:', config.enableSupabaseStorage ? 'Supabase' : 'IndexedDB');
+      // Logs de debug removidos
       
       // Calcular estadísticas básicas
       const totalEmployees = allConsolidated.length;
@@ -87,8 +91,7 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
       // Contar recibos reales (no empleados manuales)
       const totalReceipts = allConsolidated.filter(item => item.data?.MANUAL !== 'true').length;
       
-      console.log('🔍 Debug Dashboard - Total employees:', totalEmployees);
-      console.log('🔍 Debug Dashboard - Total receipts (non-manual):', totalReceipts);
+      // Logs de debug removidos
       
       // Obtener estadísticas de descuentos desde la base de datos
       const descuentosStats = await getEstadisticasDescuentos(dataManager);
@@ -108,7 +111,11 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
         try {
           const empresas = await dataManager.getEmpresas();
           empresas.forEach(empresa => {
-            companyCounts[empresa.nombre] = 0; // 0 empleados pero empresa existe
+            // Manejar tanto strings como objetos con propiedad nombre
+            const nombreEmpresa = typeof empresa === 'string' ? empresa : (empresa?.nombre || empresa);
+            if (nombreEmpresa && nombreEmpresa !== 'undefined' && nombreEmpresa.trim() !== '') {
+              companyCounts[nombreEmpresa] = 0; // 0 empleados pero empresa existe
+            }
           });
         } catch (error) {
           console.error('Error obteniendo empresas para dashboard:', error);
@@ -116,15 +123,23 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
       }
 
       const employeesByCompany = Object.entries(companyCounts)
+        .filter(([company]) => {
+          // Filtrar valores inválidos pero mantener "Sin nombre" si hay registros con esa empresa
+          if (!company || company === 'undefined' || company.trim() === '') return false;
+          // Si es "Sin nombre", solo incluirlo si hay registros con esa empresa (count > 0)
+          if (company === 'Sin nombre' || company.trim() === 'Sin nombre') {
+            return companyCounts[company] > 0;
+          }
+          return true;
+        })
         .map(([company, count]) => ({
-          company,
+          company: company.trim(),
           count,
           percentage: totalEmployees > 0 ? Math.round((count / totalEmployees) * 100) : 0
         }))
         .sort((a, b) => b.count - a.count);
       
-      console.log('🔍 Debug Dashboard - Total empresas con empleados:', employeesByCompany.length);
-      console.log('🔍 Debug Dashboard - Empresas:', employeesByCompany.map(e => `${e.company} (${e.count} empleados)`));
+      // Logs de debug removidos
 
       // Recibos por período - contar empleados reales, no archivos
       const periodCounts: Record<string, number> = {};
@@ -177,6 +192,48 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
       setLoading(false);
     }
   }, [dataManager, config.enableSupabaseStorage]);
+
+  // Función para obtener empleados por categoría de una empresa
+  const loadEmployeesByCategory = useCallback(async (company: string) => {
+    try {
+      const allConsolidated = await dataManager.getConsolidated();
+      const empresaEmployees = allConsolidated.filter(item => item.data?.EMPRESA === company);
+      
+      // Buscar campos que puedan ser categorías
+      const categoryFields = ['CATEGORIA', 'PUESTO', 'CLASIFICACION', 'CARGO', 'FUNCION', 'CATEGORÍA'];
+      let categoryField: string | null = null;
+      
+      // Detectar qué campo de categoría se usa (si existe)
+      for (const field of categoryFields) {
+        const hasField = empresaEmployees.some(emp => emp.data?.[field]);
+        if (hasField) {
+          categoryField = field;
+          break;
+        }
+      }
+      
+      // Agrupar por categoría
+      const categoryCounts: Record<string, number> = {};
+      empresaEmployees.forEach(emp => {
+        const categoria = categoryField 
+          ? (emp.data?.[categoryField] || 'Sin categoría')
+          : 'Sin categoría';
+        categoryCounts[categoria] = (categoryCounts[categoria] || 0) + 1;
+      });
+      
+      // Convertir a array y ordenar
+      const categories = Object.entries(categoryCounts)
+        .map(([categoria, count]) => ({ categoria, count }))
+        .sort((a, b) => b.count - a.count);
+      
+      setEmployeesByCategory(prev => ({
+        ...prev,
+        [company]: categories
+      }));
+    } catch (error) {
+      console.error('Error cargando empleados por categoría:', error);
+    }
+  }, [dataManager]);
 
   // Debug: monitorear cambios en showCreateEmployee
   useEffect(() => {
@@ -434,32 +491,82 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {stats.employeesByCompany.slice(0, 8).map((item, index) => (
-                <div 
-                  key={item.company} 
-                  className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors"
-                  onClick={() => {
-                    onNavigateToTab?.('recibos');
-                    onFilterByCompany?.(item.company);
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                    <span className="text-sm font-medium truncate max-w-[200px]">
-                      {item.company}
-                    </span>
+            <div className="space-y-2">
+              {stats.employeesByCompany.slice(0, 8).map((item, index) => {
+                const isExpanded = expandedCompany === item.company;
+                const categories = employeesByCategory[item.company] || [];
+                
+                return (
+                  <div key={item.company} className="border rounded-lg">
+                    <div 
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (isExpanded) {
+                          setExpandedCompany(null);
+                        } else {
+                          setExpandedCompany(item.company);
+                          if (!employeesByCategory[item.company]) {
+                            await loadEmployeesByCategory(item.company);
+                          }
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-2 flex-1">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <span className="text-sm font-medium truncate max-w-[200px]">
+                          {item.company}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2" onClick={(e) => {
+                        e.stopPropagation();
+                        onNavigateToTab?.('recibos');
+                        onFilterByCompany?.(item.company);
+                      }}>
+                        <span className="text-sm text-muted-foreground">
+                          {item.percentage}%
+                        </span>
+                        <Badge variant="secondary" className="text-xs">
+                          {item.count}
+                        </Badge>
+                      </div>
+                    </div>
+                    {isExpanded && (
+                      <div className="px-4 pb-3 pt-1 border-t bg-gray-50/50">
+                        {categories.length > 0 ? (
+                          <div className="space-y-2 mt-2">
+                            {categories.map((cat, idx) => (
+                              <div 
+                                key={idx}
+                                className="flex items-center justify-between text-xs py-1.5 px-2 rounded hover:bg-gray-100 transition-colors"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>
+                                  <span className="text-muted-foreground">
+                                    {cat.categoria}
+                                  </span>
+                                </div>
+                                <Badge variant="outline" className="text-xs">
+                                  {cat.count}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground py-2 text-center">
+                            Cargando categorías...
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">
-                      {item.percentage}%
-                    </span>
-                    <Badge variant="secondary" className="text-xs">
-                      {item.count}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {stats.employeesByCompany.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No hay datos disponibles

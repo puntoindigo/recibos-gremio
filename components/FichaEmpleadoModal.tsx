@@ -250,15 +250,15 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
                     <div key={descuento.id} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
-                          <Badge className={getTipoBadgeColor(descuento.tipoDescuento)}>
-                            {descuento.tipoDescuento.replace('_', ' ')}
+                          <Badge className={getTipoBadgeColor(descuento.tipoDescuento || '')}>
+                            {(descuento.tipoDescuento || '').replace('_', ' ')}
                           </Badge>
-                          <Badge className={getEstadoBadgeColor(descuento.estado)}>
-                            {descuento.estado}
+                          <Badge className={getEstadoBadgeColor(descuento.estado || '')}>
+                            {descuento.estado || 'N/A'}
                           </Badge>
                         </div>
                         <span className="text-lg font-semibold">
-                          ${descuento.monto.toLocaleString()}
+                          ${(descuento.monto || 0).toLocaleString()}
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 mb-2">{descuento.descripcion}</p>
@@ -293,15 +293,15 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
                     <div key={descuento.id} className="border rounded-lg p-4 bg-gray-50">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
-                          <Badge className={getTipoBadgeColor(descuento.tipoDescuento)}>
-                            {descuento.tipoDescuento.replace('_', ' ')}
+                          <Badge className={getTipoBadgeColor(descuento.tipoDescuento || '')}>
+                            {(descuento.tipoDescuento || '').replace('_', ' ')}
                           </Badge>
-                          <Badge className={getEstadoBadgeColor(descuento.estado)}>
-                            {descuento.estado}
+                          <Badge className={getEstadoBadgeColor(descuento.estado || '')}>
+                            {descuento.estado || 'N/A'}
                           </Badge>
                         </div>
                         <span className="text-lg font-semibold text-green-600">
-                          ${descuento.monto.toLocaleString()}
+                          ${(descuento.monto || 0).toLocaleString()}
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 mb-2">{descuento.descripcion}</p>
@@ -340,7 +340,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
                         <div>
                           <span className="font-medium">Período: {recibo.periodo}</span>
                           <p className="text-sm text-gray-600">
-                            Archivos: {recibo.archivos.join(', ')}
+                            Archivos: {(recibo.archivos || []).filter((a: any) => a).join(', ')}
                           </p>
                         </div>
                         <Badge variant="outline">

@@ -8,14 +8,6 @@ export type Parsed = {
 
 // Función para detectar la empresa del recibo con patrones mejorados
 function detectarEmpresa(texto: string, debug: boolean = false): string {
-  if (debug) {
-    console.log(`🔍 Detectando empresa en texto:`, {
-      textoLength: texto.length,
-      textoPreview: texto.substring(0, 500) + "...",
-      nombreArchivo: texto.includes(".") ? texto.split(" ").pop() : "N/A"
-    });
-  }
-
   // Patrones de detección de empresas (ordenados por prioridad)
   const empresaPatterns = [
     { 
@@ -48,42 +40,13 @@ function detectarEmpresa(texto: string, debug: boolean = false): string {
     }
   ];
   
-  if (debug) {
-    console.log(`🔍 Total de patrones de empresa cargados: ${empresaPatterns.length}`, {
-      empresas: empresaPatterns.map(ep => ep.empresa)
-    });
-  }
-  
   // Probar cada patrón de empresa
   for (const { patterns, empresa } of empresaPatterns) {
     for (const pattern of patterns) {
-      if (debug) {
-        console.log(`🔍 Probando patrón para ${empresa}:`, {
-          patron: pattern.source,
-          testResult: pattern.test(texto),
-          textoRelevante: texto.substring(0, 200)
-        });
-      }
       if (pattern.test(texto)) {
-        if (debug) {
-          console.log(`✅ Empresa detectada: ${empresa}`, {
-            patronUsado: pattern.source,
-            textoRelevante: texto.substring(0, 500) + "..."
-          });
-        }
         return empresa;
       }
     }
-  }
-  
-  if (debug) {
-    console.log("❌ Empresa NO detectada, usando fallback inteligente", {
-      textoCompleto: texto.substring(0, 1000) + "...",
-      patronesProbados: empresaPatterns.map(ep => ({
-        empresa: ep.empresa,
-        patrones: ep.patterns.map(p => p.source)
-      }))
-    });
   }
   
   // Fallback inteligente: usar LIMPAR por defecto en lugar de DESCONOCIDA
@@ -95,9 +58,6 @@ function detectarEmpresa(texto: string, debug: boolean = false): string {
 
 // Función principal que detecta la empresa y usa el parser correspondiente
 export async function parsePdfReceiptToRecord(file: File, debug: boolean = false): Promise<Parsed> {
-  if (debug) {
-    console.log(`🔍 PDF Parser - INICIO para ${file.name}`);
-  }
   
   try {
     // Verificar si el archivo tiene metadata de recibo (división por texto)
@@ -124,14 +84,6 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
         debugLines: []
       };
       
-      if (debug) {
-        console.log(`🔍 Debug PDF Parser - Usando texto de recibo específico:`, {
-          filename: file.name,
-          receiptNumber: receiptNumber,
-          textoCompletoLength: textoCompleto.length,
-          primerasLineasLength: primerasLineas.length
-        });
-      }
     } else if (pageText && pageNumber) {
       // Usar el texto extraído de la página específica (método anterior)
       textoCompleto = pageText;
@@ -146,37 +98,14 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
         debugLines: []
       };
       
-      if (debug) {
-        console.log(`🔍 Debug PDF Parser - Usando texto de página específica:`, {
-          filename: file.name,
-          pageNumber: pageNumber,
-          textoCompletoLength: textoCompleto.length,
-          primerasLineasLength: primerasLineas.length
-        });
-      }
     } else {
       // Usar el parser genérico normal con import dinámico
-      if (debug) {
-        console.log(`🔍 PDF Parser - Usando parser genérico para ${file.name}`);
-      }
-      
       try {
         const { parsePdfReceiptToRecord: parseGeneric } = await import("./pdf-parser-generic");
         resultadoGenerico = await parseGeneric(file);
         textoCompleto = resultadoGenerico.data["TEXTO_COMPLETO"] || "";
         primerasLineas = resultadoGenerico.data["PRIMERAS_LINEAS"] || "";
-        
-        if (debug) {
-          console.log(`🔍 PDF Parser - Parser genérico completado para ${file.name}:`, {
-            textoCompletoLength: textoCompleto.length,
-            primerasLineasLength: primerasLineas.length,
-            primerasLineas: primerasLineas.substring(0, 200) + "..."
-          });
-        }
       } catch (genericError) {
-        if (debug) {
-          console.error(`❌ PDF Parser - Error en parser genérico para ${file.name}:`, genericError);
-        }
         
         // Fallback: usar solo el nombre del archivo para detección
         textoCompleto = "";
@@ -193,32 +122,7 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     }
 
   // Detectar la empresa
-  const empresa = detectarEmpresa(textoCompleto + " " + primerasLineas + " " + file.name, debug);
-  
-  if (debug) {
-    console.log(`🔍 Empresa detectada para ${file.name}: "${empresa}"`);
-    console.log(`🔍 Texto usado para detección:`, {
-      nombreArchivo: file.name,
-      textoCompletoLength: textoCompleto.length,
-      primerasLineasLength: primerasLineas.length,
-      textoCombinado: (textoCompleto + " " + primerasLineas + " " + file.name).substring(0, 300) + "..."
-    });
-  }
-
-  // Debug: mostrar qué empresa se detectó
-  if (debug) {
-    console.log("🔍 Debug PDF Parser - Detección de empresa:", {
-      filename: file.name,
-      empresaDetectada: empresa,
-      textoCompletoLength: textoCompleto.length,
-      primerasLineasLength: primerasLineas.length,
-      contieneLIMP: /LIMP/i.test(textoCompleto + " " + primerasLineas),
-      contieneAR: /AR/i.test(textoCompleto + " " + primerasLineas),
-      contieneLIMPAR: /LIMPAR/i.test(textoCompleto + " " + primerasLineas),
-      textoCompleto: textoCompleto.substring(0, 200) + "...",
-      primerasLineas: primerasLineas.substring(0, 200) + "..."
-    });
-  }
+  const empresa = detectarEmpresa(textoCompleto + " " + primerasLineas + " " + file.name, false);
 
   if (empresa === "LIMPAR") {
     // Usar el parser de LIMPAR con import dinámico

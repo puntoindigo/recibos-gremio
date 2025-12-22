@@ -21,13 +21,15 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // Sanitizar el nombre del archivo para seguridad
-    const sanitizedFilename = filename.replace(/[/\\]/g, '').replace(/[^\w.\- ]+/g, '');
+    // Sanitizar el nombre del archivo para seguridad (permitir caracteres comunes en nombres de archivo)
+    // Solo eliminar path traversal attempts, no caracteres válidos como espacios, guiones, paréntesis, etc.
+    const sanitizedFilename = filename.replace(/[/\\]/g, '').replace(/\.\./g, '');
     
-    if (sanitizedFilename !== filename) {
+    // Verificar que no es una ruta absoluta o con caracteres peligrosos
+    if (path.isAbsolute(sanitizedFilename) || sanitizedFilename.includes('..')) {
       return NextResponse.json({ 
         success: false, 
-        error: 'Nombre de archivo inválido' 
+        error: 'Nombre de archivo inválido: ruta no permitida' 
       }, { status: 400 });
     }
 
@@ -55,9 +57,16 @@ export async function POST(req: Request) {
     
   } catch (error) {
     console.error('❌ Error eliminando archivo:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorDetails = error instanceof Error ? { 
+      message: error.message, 
+      stack: error.stack 
+    } : { error };
+    
     return NextResponse.json({ 
       success: false, 
-      error: 'Error eliminando archivo' 
+      error: errorMessage || 'Error eliminando archivo',
+      details: errorDetails
     }, { status: 500 });
   }
 }

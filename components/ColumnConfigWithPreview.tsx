@@ -91,17 +91,23 @@ export default function ColumnConfigWithPreview({
       return acc;
     }, {} as Record<string, string>);
 
-    // Guardar configuración en la base de datos
+    // Guardar configuración en la base de datos usando setAppConfig
     try {
-      await dataManager.addColumnConfig({
-        userId: 'default', // Por ahora usar un usuario por defecto
-        tableType: 'recibos',
+      const configKey = 'column_config_recibos';
+      const configValue = {
         visibleColumns,
         columnAliases: aliases,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      });
-      console.log('Configuración de columnas guardada:', { visibleColumns, aliases });
+        updatedAt: new Date().toISOString()
+      };
+      
+      if (dataManager.setAppConfig) {
+        await dataManager.setAppConfig(configKey, configValue);
+        console.log('Configuración de columnas guardada:', { visibleColumns, aliases });
+      } else {
+        // Fallback: localStorage
+        localStorage.setItem(configKey, JSON.stringify(configValue));
+        console.log('Configuración de columnas guardada (localStorage):', { visibleColumns, aliases });
+      }
     } catch (error) {
       console.error('Error guardando configuración de columnas:', error);
     }

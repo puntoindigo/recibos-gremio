@@ -1,4 +1,50 @@
-import { supabase, PendingItem, PendingItemDB } from './supabase';
+import { getSupabaseClient } from './supabase-client';
+
+// Tipo para la app (formato de la aplicación)
+export interface PendingItem {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  priority: 'high' | 'medium' | 'low';
+  status: 'pending' | 'open' | 'in-progress' | 'verifying' | 'completed';
+  order: number;
+  color?: string;
+  proposedSolution?: string;
+  feedback?: Array<{
+    id: string;
+    text: string;
+    createdAt: string;
+    resolved: boolean;
+  }>;
+  resolution?: string;
+  resolvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Tipos para la base de datos (formato DB)
+export interface PendingItemDB {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  priority: 'high' | 'medium' | 'low';
+  status: 'pending' | 'open' | 'in-progress' | 'verifying' | 'completed';
+  order: number;
+  color?: string;
+  proposed_solution?: string;
+  feedback?: Array<{
+    id: string;
+    text: string;
+    created_at: string;
+    resolved: boolean;
+  }>;
+  resolution?: string;
+  resolved_at?: string;
+  created_at: string;
+  updated_at: string;
+}
 
 // Convertir de formato DB a formato de la app
 const dbToApp = (dbItem: PendingItemDB): PendingItem => ({
@@ -47,10 +93,14 @@ const appToDb = (appItem: PendingItem): PendingItemDB => ({
 });
 
 export class SupabasePendingItemsManager {
+  private get client() {
+    return getSupabaseClient();
+  }
+
   // Obtener todos los items
   async getAllItems(): Promise<PendingItem[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await this.client
         .from('pending_items')
         .select('*')
         .order('order', { ascending: true });
@@ -70,7 +120,7 @@ export class SupabasePendingItemsManager {
   // Obtener item por ID
   async getItemById(id: string): Promise<PendingItem | null> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await this.client
         .from('pending_items')
         .select('*')
         .eq('id', id)
@@ -100,7 +150,7 @@ export class SupabasePendingItemsManager {
       };
 
       const dbItem = appToDb(newItem);
-      const { data, error } = await supabase
+      const { data, error } = await this.client
         .from('pending_items')
         .insert([dbItem])
         .select()
@@ -140,7 +190,7 @@ export class SupabasePendingItemsManager {
 
       console.log('🔍 DB updates:', dbUpdates);
 
-      const { error } = await supabase
+      const { error } = await this.client
         .from('pending_items')
         .update(dbUpdates)
         .eq('id', id);
@@ -163,7 +213,7 @@ export class SupabasePendingItemsManager {
     try {
       console.log('🔍 Eliminando item:', id);
       
-      const { error } = await supabase
+      const { error } = await this.client
         .from('pending_items')
         .delete()
         .eq('id', id);
@@ -184,7 +234,7 @@ export class SupabasePendingItemsManager {
   // Obtener categorías únicas
   async getCategories(): Promise<string[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await this.client
         .from('pending_items')
         .select('category')
         .order('category');

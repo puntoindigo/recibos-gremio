@@ -59,13 +59,12 @@ export const testSupabaseConnection = async (): Promise<{ success: boolean; erro
 // Tipos de datos
 export interface SupabaseReceipt {
   id: string;
-  filename: string;
-  empresa: string;
+  key: string;
   legajo: string;
   nombre: string;
   periodo: string;
-  cuil: string;
-  data: any;
+  archivos?: any; // JSONB array
+  data: any; // empresa, filename, cuil, etc. van aquí dentro
   created_at: string;
   updated_at: string;
 }

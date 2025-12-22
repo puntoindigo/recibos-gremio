@@ -28,19 +28,31 @@ export function useEmpresasFromReceipts() {
           }
         });
         
-        // Agregar empresas creadas manualmente
+        // Agregar empresas creadas manualmente (solo si tienen nombre válido)
         empresasFromDB.forEach(empresa => {
-          if (empresa.nombre && empresa.nombre.trim()) {
-            empresasSet.add(empresa.nombre);
+          // Manejar tanto strings como objetos
+          const nombre = typeof empresa === 'string' ? empresa : (empresa?.nombre || empresa);
+          if (nombre && typeof nombre === 'string' && nombre.trim() && nombre !== 'undefined') {
+            empresasSet.add(nombre);
           }
         });
         
-        // Debug: Log todas las empresas encontradas
-        console.log('🔍 Debug useEmpresasFromReceipts - Empresas encontradas:', Array.from(empresasSet));
-        console.log('🔍 Debug useEmpresasFromReceipts - Total registros:', allConsolidated.length);
+        // Verificar si hay registros con "Sin nombre" como empresa en los datos consolidados
+        const registrosSinNombre = allConsolidated.filter(item => 
+          item.data?.EMPRESA === 'Sin nombre'
+        );
         
-        // Convertir a array y ordenar
-        const empresasArray = Array.from(empresasSet).sort();
+        // Convertir a array y ordenar (incluir "Sin nombre" solo si hay registros consolidados con esa empresa)
+        const empresasArray = Array.from(empresasSet)
+          .filter(emp => {
+            if (!emp || !emp.trim() || emp === 'undefined') return false;
+            // Incluir "Sin nombre" solo si hay registros consolidados con esa empresa (no solo si está en la BD)
+            if (emp === 'Sin nombre' || emp.trim() === 'Sin nombre') {
+              return registrosSinNombre.length > 0;
+            }
+            return true;
+          })
+          .sort();
         setEmpresas(empresasArray);
         
       } catch (error) {
