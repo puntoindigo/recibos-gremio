@@ -91,24 +91,23 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
     async redirect({ url, baseUrl }) {
-      console.log('NextAuth Redirect:', { url, baseUrl });
-      
-      // Determinar el puerto correcto basado en la URL actual
-      const currentPort = typeof window !== 'undefined' ? window.location.port : '8000';
-      const correctBaseUrl = `http://localhost:${currentPort}`;
-      
       // Evitar bucles de redirección
-      if (url === baseUrl + '/auth/signin') {
-        return correctBaseUrl;
+      if (url === baseUrl + '/auth/signin' || url === '/auth/signin') {
+        return baseUrl;
       }
-      // Si la URL es relativa, agregar baseUrl correcto
-      if (url.startsWith("/")) return `${correctBaseUrl}${url}`;
-      // Si la URL es del mismo dominio, permitirla pero corregir puerto
-      if (url.startsWith('http://localhost:')) {
-        return url.replace(/localhost:\d+/, `localhost:${currentPort}`);
+      
+      // Si la URL es relativa, usar baseUrl
+      if (url.startsWith("/")) {
+        return `${baseUrl}${url}`;
       }
-      // Por defecto, redirigir a la página principal con puerto correcto
-      return correctBaseUrl;
+      
+      // Si la URL es absoluta y del mismo dominio, permitirla
+      if (url.startsWith(baseUrl)) {
+        return url;
+      }
+      
+      // Por defecto, redirigir a la página principal
+      return baseUrl;
     }
   },
   pages: {
@@ -120,16 +119,5 @@ export const authOptions: NextAuthOptions = {
     maxAge: 24 * 60 * 60 // 24 horas
   },
   secret: process.env.NEXTAUTH_SECRET || 'fallback-secret-key',
-  debug: true, // Habilitar debug siempre para diagnosticar
-  logger: {
-    error(code, metadata) {
-      console.error('NextAuth Error:', code, metadata);
-    },
-    warn(code) {
-      console.warn('NextAuth Warning:', code);
-    },
-    debug(code, metadata) {
-      console.log('NextAuth Debug:', code, metadata);
-    }
-  }
+  debug: process.env.NODE_ENV === 'development',
 };
