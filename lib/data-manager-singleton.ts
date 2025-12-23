@@ -554,25 +554,6 @@ class DataManagerSingleton {
     
     // Actualizar el sistema de validación inmediatamente
     setCurrentStorageType('SUPABASE');
-    
-    console.log('🔍 DataManagerSingleton - Inicializado con Supabase (IndexedDB está roto)');
-    
-    // Verificar si hay configuración específica en localStorage (solo en el cliente)
-    if (typeof window !== 'undefined') {
-      try {
-        const enableSupabase = localStorage.getItem('enableSupabaseStorage');
-        if (enableSupabase === 'false') {
-          console.log('🔍 DataManagerSingleton - Configuración forzada a IndexedDB, pero IndexedDB está roto');
-          console.log('🔍 DataManagerSingleton - Manteniendo Supabase para evitar errores');
-        } else {
-          console.log('🔍 DataManagerSingleton - Usando Supabase por defecto');
-        }
-      } catch (error) {
-        console.log('🔍 DataManagerSingleton - Error accediendo a localStorage:', error instanceof Error ? error.message : String(error));
-      }
-    } else {
-      console.log('🔍 DataManagerSingleton - Ejecutándose en servidor, usando Supabase por defecto');
-    }
   }
 
   public static getInstance(): DataManagerSingleton {
@@ -608,11 +589,9 @@ class DataManagerSingleton {
     // console.log('🔍 DataManagerSingleton - DataManager actual:', this.currentDataManager.constructor.name);
     
     if (this.storageType === type) {
-      console.log('🔍 DataManagerSingleton - Storage type ya es:', type);
       return;
     }
 
-    console.log('🔍 DataManagerSingleton - Cambiando storage de', this.storageType, 'a', type);
     
     this.storageType = type;
     
@@ -622,13 +601,9 @@ class DataManagerSingleton {
     // Crear nueva instancia del DataManager
     if (type === 'SUPABASE') {
       this.currentDataManager = new SupabaseDataManager();
-      console.log('🔍 DataManagerSingleton - Creado SupabaseDataManager');
     } else {
       this.currentDataManager = new IndexedDBDataManager();
-      console.log('🔍 DataManagerSingleton - Creado IndexedDBDataManager');
     }
-
-    console.log('🔍 DataManagerSingleton - Nuevo DataManager:', this.currentDataManager.constructor.name);
 
     // Notificar a todos los listeners
     this.notifyListeners();
@@ -666,7 +641,6 @@ class DataManagerSingleton {
    * Fuerza la recreación del DataManager actual
    */
   public forceRecreate(): void {
-    console.log('🔍 DataManagerSingleton - Forzando recreación del DataManager');
     this.setStorageType(this.storageType);
   }
 
@@ -675,23 +649,18 @@ class DataManagerSingleton {
    */
   public initializeOnClient(): void {
     if (typeof window === 'undefined') {
-      console.log('🔍 DataManagerSingleton - initializeOnClient llamado en servidor, ignorando');
       return;
     }
 
-    console.log('🔍 DataManagerSingleton - Inicializando en cliente...');
-    
     try {
       const enableSupabase = localStorage.getItem('enableSupabaseStorage') === 'true';
-      console.log('🔍 DataManagerSingleton - enableSupabaseStorage en localStorage:', enableSupabase);
       
       if (enableSupabase && this.storageType !== 'SUPABASE') {
-        console.log('🔍 DataManagerSingleton - Cambiando a Supabase en cliente...');
         this.setStorageType('SUPABASE');
       }
-        } catch (error) {
-          console.error('🔍 DataManagerSingleton - Error en initializeOnClient:', error instanceof Error ? error.message : String(error));
-        }
+    } catch (error) {
+      console.error('Error en initializeOnClient:', error instanceof Error ? error.message : String(error));
+    }
   }
 
   /**

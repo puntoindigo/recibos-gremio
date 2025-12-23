@@ -9,7 +9,6 @@ let currentStorageType: 'IndexedDB' | 'SUPABASE' = 'SUPABASE';
 
 export function setCurrentStorageType(type: 'IndexedDB' | 'SUPABASE') {
   currentStorageType = type;
-  console.log('🔍 validate-data-source - Storage type cambiado a:', type);
 }
 
 export function getCurrentStorageType(): 'IndexedDB' | 'SUPABASE' {

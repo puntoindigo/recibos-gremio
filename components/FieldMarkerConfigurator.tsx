@@ -22,7 +22,6 @@ if (typeof window !== 'undefined') {
     // unpkg tiene todas las versiones de npm
     pdfjsLib.GlobalWorkerOptions.workerSrc = 
       `https://unpkg.com/pdfjs-dist@${version}/build/pdf.worker.min.mjs`;
-    console.log(`✅ Worker de PDF.js configurado desde unpkg (versión ${version})`);
   } catch (error) {
     console.error('Error configurando worker de PDF.js:', error);
     // Fallback: usar archivo local

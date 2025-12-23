@@ -6,6 +6,7 @@ import AuthProvider from "@/components/AuthProvider";
 import { ConfigurationProvider } from "@/contexts/ConfigurationContext";
 import { DataManagerProvider } from "@/contexts/DataManagerContext";
 import PersistentDevTools from "@/components/PersistentDevTools";
+import ConsoleFilter from "@/components/ConsoleFilter";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,6 +33,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <ConsoleFilter />
         <AuthProvider>
           <ConfigurationProvider>
             <DataManagerProvider>

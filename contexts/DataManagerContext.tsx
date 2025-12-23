@@ -23,36 +23,25 @@ export function DataManagerProvider({ children }: { children: React.ReactNode })
 
   // Inicializar una sola vez
   useEffect(() => {
-    console.log('🔍 DataManagerProvider - Inicializando...');
-    
     // Inicializar el singleton en el cliente
     dataManagerSingleton.initializeOnClient();
     
     // Obtener el DataManager actual
     setDataManager(dataManagerSingleton.getDataManager());
     setIsConfigReady(true);
-    
-    console.log('🔍 DataManagerProvider - Inicialización completada');
   }, []); // Solo ejecutar una vez
 
   // Manejar cambios de configuración
   useEffect(() => {
     if (!isConfigReady) return;
     
-    console.log('🔍 DataManagerProvider - Configuración recibida, enableSupabaseStorage:', config.enableSupabaseStorage);
-    
     // Cambiar el tipo de storage en el singleton
     const storageType = config.enableSupabaseStorage ? 'SUPABASE' : 'IndexedDB';
     
     // Verificar si IndexedDB está roto antes de cambiar el tipo
-    if (storageType === 'IndexedDB') {
-      console.log('🔍 DataManagerProvider - IndexedDB está roto, manteniendo Supabase');
-      console.log('🔍 DataManagerProvider - No se puede cambiar a IndexedDB');
-    } else {
+    if (storageType !== 'IndexedDB') {
       dataManagerSingleton.setStorageType(storageType);
     }
-    
-    console.log('🔍 DataManagerProvider - Storage configurado a:', dataManagerSingleton.getStorageType());
   }, [config.enableSupabaseStorage, isConfigReady]);
 
   // Registrar listener para cambios en el singleton (solo una vez)
@@ -60,7 +49,6 @@ export function DataManagerProvider({ children }: { children: React.ReactNode })
     if (!isConfigReady) return;
     
     const removeListener = dataManagerSingleton.addListener(() => {
-      console.log('🔍 DataManagerProvider - Singleton cambió, actualizando estado');
       setDataManager(dataManagerSingleton.getDataManager());
     });
 
@@ -68,14 +56,12 @@ export function DataManagerProvider({ children }: { children: React.ReactNode })
   }, [isConfigReady]); // Solo cuando esté listo
 
   const refresh = () => {
-    console.log('🔍 DataManagerProvider - Refrescando DataManager');
     // Forzar recreación del DataManager en el singleton
     dataManagerSingleton.forceRecreate();
     setDataManager(dataManagerSingleton.getDataManager());
   };
 
   const forceReload = () => {
-    console.log('🔍 DataManagerProvider - Forzando recarga completa');
     // Forzar recarga de la página para limpiar todas las instancias
     window.location.reload();
   };
