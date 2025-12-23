@@ -1,38 +1,232 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sistema de Gestión de Recibos - Módulo Base
 
-## Getting Started
+## 🚀 Descripción del Proyecto
 
-First, run the development server:
+Sistema modular de gestión empresarial desarrollado con Next.js 15, diseñado como base para integrar múltiples módulos especializados. Actualmente implementa un sistema completo de gestión de recibos con funcionalidades avanzadas de procesamiento de documentos, análisis de datos y gestión de items pendientes.
 
+## ✨ Características Principales
+
+### 🎨 Interfaz Moderna
+- **Sidebar colapsable** con navegación intuitiva
+- **Header con login** y barra de búsqueda
+- **Layout responsive** que se adapta a diferentes dispositivos
+- **Cards compactas** optimizadas para visualización eficiente
+- **Estructura de columnas** para mejor organización del contenido
+
+### 📄 Gestión de Recibos
+- **Procesamiento automático** de documentos PDF
+- **Extracción de datos** mediante OCR avanzado
+- **Validación inteligente** de información
+- **Gestión de empresas** y empleados
+- **Sistema de categorización** automática
+
+### 📊 Items Pendientes
+- **Gestión de tareas** con estados personalizables
+- **Vistas múltiples**: Lista, Cards y Tablero
+- **Drag & Drop** para reorganización
+- **Filtros avanzados** y búsqueda
+- **Seguimiento de progreso** con estadísticas
+
+### 🔧 Funcionalidades Técnicas
+- **Base de datos Supabase** para persistencia
+- **Autenticación NextAuth** integrada
+- **Procesamiento de archivos** en tiempo real
+- **Sistema de notificaciones** con toast
+- **Backup automático** de datos
+
+## 🏗️ Arquitectura Modular
+
+El sistema está diseñado como una base sólida para integrar módulos especializados:
+
+### 📦 Módulos Planificados
+- **Gestión de Clientes** - CRM completo
+- **Catálogo de Productos** - Inventario y stock
+- **Sistema de Pagos** - Procesamiento de transacciones
+- **Catálogo Online** - E-commerce integrado
+- **Reportes Avanzados** - Analytics y BI
+
+### 🔌 Arquitectura de Integración
+- **API REST** para comunicación entre módulos
+- **Sistema de eventos** para sincronización
+- **Base de datos compartida** con esquemas modulares
+- **Autenticación centralizada** para todos los módulos
+
+## 🛠️ Tecnologías Utilizadas
+
+### Frontend
+- **Next.js 15** con App Router
+- **React 18** con hooks modernos
+- **TypeScript** para tipado estático
+- **Tailwind CSS** para estilos
+- **Lucide React** para iconografía
+
+### Backend
+- **Next.js API Routes** para endpoints
+- **Supabase** como base de datos
+- **NextAuth.js** para autenticación
+- **PDF-lib** para procesamiento de PDFs
+- **Tesseract.js** para OCR
+
+### Herramientas de Desarrollo
+- **ESLint** para linting
+- **Prettier** para formateo
+- **TypeScript** para verificación de tipos
+- **Git** para control de versiones
+
+## 🚀 Instalación y Configuración
+
+### Prerrequisitos
+- Node.js 18+ 
+- npm o yarn
+- Cuenta de Supabase
+- Variables de entorno configuradas
+
+### Instalación
 ```bash
+# Clonar el repositorio
+git clone <repository-url>
+cd recibos-gremio
+
+# Instalar dependencias
+npm install
+
+# Configurar variables de entorno
+cp .env.example .env.local
+# Editar .env.local con tus credenciales
+
+# Ejecutar en desarrollo
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Variables de Entorno
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+# NextAuth
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your_secret_key
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Base de datos
+DATABASE_URL=your_database_url
+```
 
-## Learn More
+## 📁 Estructura del Proyecto
 
-To learn more about Next.js, take a look at the following resources:
+```
+recibos-gremio/
+├── app/                    # App Router de Next.js
+│   ├── api/               # API Routes
+│   ├── auth/              # Páginas de autenticación
+│   └── page.tsx           # Página principal
+├── components/            # Componentes React
+│   ├── ui/               # Componentes base (shadcn/ui)
+│   ├── MainLayout.tsx    # Layout principal
+│   └── PendingItems*/    # Componentes de items pendientes
+├── hooks/                # Custom hooks
+├── lib/                  # Utilidades y configuraciones
+├── types/                # Definiciones de TypeScript
+└── public/               # Archivos estáticos
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🎯 Funcionalidades por Módulo
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Módulo de Recibos
+- ✅ Procesamiento de PDFs
+- ✅ Extracción de datos OCR
+- ✅ Gestión de empresas
+- ✅ Validación de información
+- ✅ Exportación de datos
 
-## Deploy on Vercel
+### Módulo de Items Pendientes
+- ✅ Gestión de tareas
+- ✅ Estados personalizables
+- ✅ Vistas múltiples
+- ✅ Drag & Drop
+- ✅ Filtros y búsqueda
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Módulos Futuros
+- 🔄 Gestión de Clientes (CRM)
+- 🔄 Catálogo de Productos
+- 🔄 Sistema de Pagos
+- 🔄 Catálogo Online
+- 🔄 Reportes Avanzados
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🔧 Scripts Disponibles
 
-<!-- Test commit for Vercel deployment - $(date) -->
+```bash
+# Desarrollo
+npm run dev          # Servidor de desarrollo
+npm run build        # Build de producción
+npm run start        # Servidor de producción
+
+# Calidad de código
+npm run lint         # Ejecutar ESLint
+npm run type-check   # Verificar tipos TypeScript
+
+# Base de datos
+npm run db:setup     # Configurar base de datos
+npm run db:migrate   # Ejecutar migraciones
+```
+
+## 📊 Estado del Desarrollo
+
+### ✅ Completado
+- Sistema base de gestión de recibos
+- Interfaz moderna con sidebar colapsable
+- Gestión de items pendientes
+- Autenticación y autorización
+- Base de datos Supabase
+- Procesamiento de documentos
+
+### 🔄 En Desarrollo
+- Optimización de rendimiento
+- Mejoras en la interfaz de usuario
+- Integración de módulos adicionales
+
+### 📋 Próximos Pasos
+- Integración del módulo de clientes
+- Desarrollo del catálogo de productos
+- Implementación del sistema de pagos
+- Creación del catálogo online
+
+## 🤝 Contribución
+
+### Flujo de Trabajo
+1. Fork del repositorio
+2. Crear rama feature (`git checkout -b feature/nueva-funcionalidad`)
+3. Commit de cambios (`git commit -m 'Agregar nueva funcionalidad'`)
+4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
+5. Crear Pull Request
+
+### Estándares de Código
+- Usar TypeScript para todo el código
+- Seguir las convenciones de ESLint
+- Escribir tests para nuevas funcionalidades
+- Documentar APIs y componentes
+
+## 📝 Licencia
+
+Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
+
+## 📞 Soporte
+
+Para soporte técnico o consultas sobre el proyecto:
+- Crear un issue en GitHub
+- Contactar al equipo de desarrollo
+- Revisar la documentación técnica
+
+## 🔗 Enlaces Útiles
+
+- [Documentación de Next.js](https://nextjs.org/docs)
+- [Documentación de Supabase](https://supabase.com/docs)
+- [Documentación de Tailwind CSS](https://tailwindcss.com/docs)
+- [shadcn/ui Components](https://ui.shadcn.com/)
+
+---
+
+**Versión**: 2.0.0  
+**Última actualización**: Enero 2025  
+**Estado**: En desarrollo activo

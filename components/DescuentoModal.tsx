@@ -33,8 +33,8 @@ import { toast } from 'sonner';
 import { EmployeeSelector } from './EmployeeSelector';
 import { CuotasSelector } from './CuotasSelector';
 import { TagsSelector } from './TagsSelector';
-import CreateEmployeeModal from './CreateEmployeeModal';
-import type { ConsolidatedEntity } from '@/lib/db';
+import EmpleadoModal from './EmpleadoModal';
+import type { ConsolidatedEntity } from '@/lib/data-manager-singleton';
 
 interface DescuentoModalProps {
   descuento?: Descuento | null;
@@ -290,6 +290,7 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
   };
 
   const handleCreateEmployee = () => {
+    console.log('👤 DescuentoModal - handleCreateEmployee llamado, abriendo modal de empleado');
     setShowCreateEmployee(true);
   };
 
@@ -316,8 +317,8 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
   return (
     <>
       <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6">
+        <DialogHeader className="pt-6">
         <DialogTitle>
           {descuento ? 'Editar Descuento' : 'Nuevo Descuento'}
         </DialogTitle>
@@ -326,6 +327,8 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
         </DialogDescription>
         </DialogHeader>
 
+        <div className="px-6 py-4">
+        <div className="space-y-4 modal-content-fix">
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Selector de Empresa - Ocupa el ancho total del modal */}
           <div className="space-y-2">
@@ -593,15 +596,18 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
             </Button>
           </div>
         </form>
+        </div>
+        </div>
       </DialogContent>
     </Dialog>
 
-    <CreateEmployeeModal
-      open={showCreateEmployee}
-      onClose={() => setShowCreateEmployee(false)}
-      onSave={handleEmployeeCreated}
-      initialNombre={employeeSearchValue}
-    />
+    {showCreateEmployee && (
+      <EmpleadoModal
+        empleado={null}
+        onClose={() => setShowCreateEmployee(false)}
+        onSave={handleEmployeeCreated}
+      />
+    )}
     </>
   );
 }

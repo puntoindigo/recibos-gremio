@@ -22,18 +22,55 @@ import {
   Database,
   FileText,
   Users,
+  UserCheck,
+  Building2,
   Shield,
   BarChart3,
   ChevronDown,
   Check,
-  X
+  X,
+  Wrench
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useConfiguration } from '@/hooks/useConfiguration';
-import DropdownStylePreview from '@/components/DropdownStylePreview';
+import { useConfiguration } from '@/contexts/ConfigurationContext';
+import ConceptUnificationModal from './ConceptUnificationModal';
 
 const ConfigurationPanel: React.FC = () => {
   const { config, saveConfiguration, resetConfiguration } = useConfiguration();
+  const [showConceptUnification, setShowConceptUnification] = useState(false);
+
+  const handleStorageToggle = async (checked: boolean) => {
+    if (checked) {
+      // Verificar si Supabase está configurado
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        toast.error('❌ Supabase no configurado', {
+          description: 'Falta configurar NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en .env.local',
+          duration: 5000
+        });
+        return;
+      }
+      
+      // Verificar si hay datos migrados
+      try {
+        // Aquí podrías verificar si hay datos en Supabase
+        toast.warning('⚠️ Verificación requerida', {
+          description: 'Asegúrate de haber migrado los datos a Supabase antes de activar',
+          duration: 4000
+        });
+      } catch (error) {
+        toast.error('❌ Error de conexión', {
+          description: 'No se pudo conectar con Supabase. Verifica la configuración.',
+          duration: 5000
+        });
+        return;
+      }
+    }
+    
+    handleSaveConfiguration({ enableSupabaseStorage: checked });
+  };
 
   const handleSaveConfiguration = (newConfig: Partial<typeof config>) => {
     saveConfiguration(newConfig);
@@ -128,68 +165,47 @@ const ConfigurationPanel: React.FC = () => {
         }
       });
     } else if (newConfig.colorScheme !== undefined) {
-      const schemeNames = {
-        'default': '🎨 Por Defecto',
-        'dark': '🌙 Oscuro',
-        'matrix': '🔮 Matrix',
-        'cyber': '⚡ Cyber',
-        'holographic': '✨ Holográfico'
-      };
-      toast.success('🌈 Esquema de Colores Cambiado', {
-        duration: 3000,
-        description: `Nuevo esquema: ${schemeNames[newConfig.colorScheme] || newConfig.colorScheme}`,
-        action: {
-          label: 'Aplicar',
-          onClick: () => {
-            // Aplicar el esquema de colores
-            document.documentElement.setAttribute('data-theme', newConfig.colorScheme);
-            document.body.className = document.body.className.replace(/theme-\w+/g, '');
-            document.body.classList.add(`theme-${newConfig.colorScheme}`);
-          }
-        }
-      });
+      // Aplicar el esquema de colores inmediatamente
+      document.documentElement.setAttribute('data-theme', newConfig.colorScheme);
+      document.body.className = document.body.className.replace(/theme-\w+/g, '');
+      document.body.classList.add(`theme-${newConfig.colorScheme}`);
+      
+      // Aplicar estilos CSS dinámicamente según el esquema
+      const root = document.documentElement;
+      switch (newConfig.colorScheme) {
+        case 'dark':
+          root.style.setProperty('--background', '#0f0f0f');
+          root.style.setProperty('--foreground', '#f0f0f0');
+          root.style.setProperty('--primary', '#3b82f6');
+          root.style.setProperty('--secondary', '#64748b');
+          break;
+        case 'matrix':
+          root.style.setProperty('--background', '#000000');
+          root.style.setProperty('--foreground', '#00ff00');
+          root.style.setProperty('--primary', '#00ff00');
+          root.style.setProperty('--secondary', '#008000');
+          break;
+        case 'cyber':
+          root.style.setProperty('--background', '#0a0a0a');
+          root.style.setProperty('--foreground', '#00ffff');
+          root.style.setProperty('--primary', '#00ffff');
+          root.style.setProperty('--secondary', '#0080ff');
+          break;
+        case 'holographic':
+          root.style.setProperty('--background', 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)');
+          root.style.setProperty('--foreground', '#ffffff');
+          root.style.setProperty('--primary', '#ff6b6b');
+          root.style.setProperty('--secondary', '#4ecdc4');
+          break;
+        default:
+          root.style.removeProperty('--background');
+          root.style.removeProperty('--foreground');
+          root.style.removeProperty('--primary');
+          root.style.removeProperty('--secondary');
+      }
     } else if (Object.keys(newConfig).some(key => key.startsWith('enable'))) {
-      const systemTools = Object.keys(newConfig).filter(key => key.startsWith('enable'));
-      const enabledTools = systemTools.filter(key => newConfig[key] === true);
-      const disabledTools = systemTools.filter(key => newConfig[key] === false);
-      
-      if (enabledTools.length > 0) {
-        toast.success('✅ Herramientas del Sistema ACTIVADAS', {
-          duration: 3000,
-          description: `${enabledTools.length} herramienta(s) habilitada(s)`,
-          action: {
-            label: 'Ver Cambios',
-            onClick: () => {
-              // Scroll to system tools
-              const systemTools = document.querySelector('[data-system-tools]');
-              if (systemTools) {
-                systemTools.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                systemTools.classList.add('animate-bounce');
-                setTimeout(() => systemTools.classList.remove('animate-bounce'), 2000);
-              }
-            }
-          }
-        });
-      }
-      
-      if (disabledTools.length > 0) {
-        toast.warning('❌ Herramientas del Sistema DESACTIVADAS', {
-          duration: 3000,
-          description: `${disabledTools.length} herramienta(s) deshabilitada(s)`,
-          action: {
-            label: 'Ver Cambios',
-            onClick: () => {
-              // Scroll to system tools
-              const systemTools = document.querySelector('[data-system-tools]');
-              if (systemTools) {
-                systemTools.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                systemTools.classList.add('animate-pulse');
-                setTimeout(() => systemTools.classList.remove('animate-pulse'), 2000);
-              }
-            }
-          }
-        });
-      }
+      // No mostrar toasts para otros cambios de herramientas del sistema
+      // Los cambios se aplican automáticamente y el menú se actualiza
     } else {
       toast.success('⚙️ Configuración actualizada', {
         duration: 2000,
@@ -267,12 +283,6 @@ const ConfigurationPanel: React.FC = () => {
     { value: 'holographic', label: 'Holográfico', icon: '✨' }
   ];
 
-  const dropdownStyleOptions = [
-    { value: 'matrix', label: 'Matrix Glitch', icon: '🔮', description: 'Efectos glitch, colores verde matrix' },
-    { value: 'cyber', label: 'Cyber Neon', icon: '⚡', description: 'Neon cyan, efectos de pulso' },
-    { value: 'holographic', label: 'Holographic Glass', icon: '✨', description: 'Glass morphism, colores rainbow' },
-    { value: 'tech', label: 'Tech Minimal', icon: '⚙️', description: 'Diseño minimalista y tecnológico' }
-  ];
 
           // Componente para mostrar paneles de debug dinámicamente
           const DebugPanel = ({ title, isActive, children }: { title: string; isActive: boolean; children: React.ReactNode }) => {
@@ -294,7 +304,7 @@ const ConfigurationPanel: React.FC = () => {
 
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto" data-config-panel>
+    <div className="p-6 space-y-6 max-w-7xl mx-auto" data-config-panel>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Settings className="h-8 w-8 text-blue-600" />
@@ -303,9 +313,6 @@ const ConfigurationPanel: React.FC = () => {
             <p className="text-gray-600">Personaliza la apariencia y funcionalidades de la aplicación</p>
           </div>
         </div>
-        <Button onClick={handleResetConfiguration} variant="outline">
-          Restablecer
-        </Button>
       </div>
 
               {/* HERRAMIENTAS DEL SISTEMA - PRIMERA SECCIÓN */}
@@ -320,13 +327,15 @@ const ConfigurationPanel: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
                     {createAnimatedSwitch(
                       <FileText className="h-5 w-5" />,
                       "Items Pendientes",
                       "Gestión de tareas pendientes",
-                      config.enablePendingItems,
-                      (checked) => handleSaveConfiguration({ enablePendingItems: checked }),
+            config.enablePendingItems,
+            (checked) => {
+              handleSaveConfiguration({ enablePendingItems: checked });
+            },
                       "text-blue-600"
                     )}
 
@@ -338,6 +347,25 @@ const ConfigurationPanel: React.FC = () => {
               (checked) => handleSaveConfiguration({ enableUserManagement: checked }),
               "text-purple-600"
             )}
+
+            {createAnimatedSwitch(
+              <UserCheck className="h-5 w-5" />,
+              "Gestión de Empleados",
+              "Administración de empleados",
+              config.enableEmployeeManagement,
+              (checked) => handleSaveConfiguration({ enableEmployeeManagement: checked }),
+              "text-emerald-600"
+            )}
+
+            {createAnimatedSwitch(
+              <Building2 className="h-5 w-5" />,
+              "Gestión de Empresas",
+              "Administración de empresas",
+              config.enableCompanyManagement,
+              (checked) => handleSaveConfiguration({ enableCompanyManagement: checked }),
+              "text-orange-600"
+            )}
+
 
             <div className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-3">
@@ -409,33 +437,6 @@ const ConfigurationPanel: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <BarChart3 className="h-5 w-5 text-pink-600" />
-                <div>
-                  <Label className="text-base font-medium">Analytics</Label>
-                  <p className="text-sm text-gray-500">Análisis y estadísticas</p>
-                </div>
-              </div>
-              <Switch
-                checked={config.enableAnalytics}
-                onCheckedChange={(checked) => handleSaveConfiguration({ enableAnalytics: checked })}
-              />
-            </div>
-
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <Shield className="h-5 w-5 text-yellow-600" />
-                <div>
-                  <Label className="text-base font-medium">Características de Seguridad</Label>
-                  <p className="text-sm text-gray-500">Funciones de seguridad</p>
-                </div>
-              </div>
-              <Switch
-                checked={config.enableSecurityFeatures}
-                onCheckedChange={(checked) => handleSaveConfiguration({ enableSecurityFeatures: checked })}
-              />
-            </div>
 
             <div className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-3">
@@ -451,6 +452,46 @@ const ConfigurationPanel: React.FC = () => {
               />
             </div>
           </div>
+          
+          {/* Botón para unificación de conceptos */}
+          <div className="mt-6 pt-4 border-t">
+            <Button
+              onClick={() => setShowConceptUnification(true)}
+              variant="outline"
+              className="w-full flex items-center gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Unificar Conceptos entre Empresas
+            </Button>
+          </div>
+          
+        {/* Botón para limpieza de archivos huérfanos */}
+        <div className="mt-4">
+          <Button
+            onClick={async () => {
+              if (typeof window.cleanOrphanedFiles === 'function') {
+                try {
+                  const result = await window.cleanOrphanedFiles();
+                  if (result && result.total > 0) {
+                    toast.success(`✅ Limpieza completada: ${result.total} archivos procesados`);
+                  } else {
+                    toast.info('ℹ️ No se encontraron archivos huérfanos para limpiar');
+                  }
+                } catch (error) {
+                  toast.error('❌ Error en limpieza de archivos');
+                  console.error('Error:', error);
+                }
+              } else {
+                toast.error('❌ Función de limpieza no disponible');
+              }
+            }}
+            variant="outline"
+            className="w-full flex items-center gap-2"
+          >
+            <Database className="h-4 w-4" />
+            Limpieza de Archivos Huérfanos
+          </Button>
+        </div>
         </CardContent>
       </Card>
 
@@ -562,12 +603,12 @@ const ConfigurationPanel: React.FC = () => {
           <DebugPanel title="Métricas de Rendimiento" isActive={config.showPerformanceMetrics}>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="font-medium">CPU: <Badge variant="outline">23%</Badge></p>
-                <p className="font-medium">Memoria: <Badge variant="outline">156 MB</Badge></p>
+                <div className="font-medium">CPU: <Badge variant="outline">23%</Badge></div>
+                <div className="font-medium">Memoria: <Badge variant="outline">156 MB</Badge></div>
               </div>
               <div>
-                <p className="font-medium">Tiempo de respuesta: <Badge variant="outline">45ms</Badge></p>
-                <p className="font-medium">Peticiones/min: <Badge variant="outline">12</Badge></p>
+                <div className="font-medium">Tiempo de respuesta: <Badge variant="outline">45ms</Badge></div>
+                <div className="font-medium">Peticiones/min: <Badge variant="outline">12</Badge></div>
               </div>
             </div>
           </DebugPanel>
@@ -586,106 +627,71 @@ const ConfigurationPanel: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Estilo de Dropdowns */}
-                  <div className="space-y-3" data-dropdown-preview>
-            <Label className="text-base font-semibold">Estilo de Dropdowns</Label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {dropdownStyleOptions.map((option) => (
+          {/* Fuente y Tamaño - Una sola línea con muestra */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <Label className="text-base font-semibold">Fuente</Label>
+              <Select
+                value={config.fontFamily}
+                onValueChange={(value) => handleSaveConfiguration({ fontFamily: value as any })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {fontOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      <div className="flex items-center gap-2">
+                        <span>{option.icon}</span>
+                        <span>{option.label}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Muestra de fuente */}
+              <div className="mt-2 p-2 bg-gray-50 rounded border text-sm" style={{ fontFamily: config.fontFamily === 'inter' ? 'Inter, sans-serif' : config.fontFamily === 'mono' ? 'monospace' : config.fontFamily === 'serif' ? 'serif' : 'system-ui' }}>
+                <span className="text-gray-600">Muestra:</span> <span className="font-medium">AaBbCc 123</span>
+              </div>
+            </div>
+            <div className="flex-1">
+              <Label className="text-base font-semibold">Tamaño</Label>
+              <Select
+                value={config.fontSize}
+                onValueChange={(value) => handleSaveConfiguration({ fontSize: value as any })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {fontSizeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Muestra de tamaño */}
+              <div className={`mt-2 p-2 bg-gray-50 rounded border ${config.fontSize === 'sm' ? 'text-sm' : config.fontSize === 'lg' ? 'text-lg' : config.fontSize === 'xl' ? 'text-xl' : 'text-base'}`}>
+                <span className="text-gray-600">Muestra:</span> <span className="font-medium">Texto de ejemplo</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Esquema de Colores */}
+          <div className="space-y-3">
+            <Label className="text-base font-semibold">Esquema de Colores</Label>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3">
+              {colorSchemeOptions.map((option) => (
                 <div
                   key={option.value}
-                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-105 hover:shadow-lg ${
-                    config.dropdownStyle === option.value
-                      ? 'border-blue-500 bg-blue-50 shadow-lg scale-105'
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
-                  onClick={() => handleSaveConfiguration({ dropdownStyle: option.value as any })}
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-2xl">{option.icon}</span>
-                    <div>
-                      <div className="font-medium">{option.label}</div>
-                      <div className="text-sm text-gray-500">{option.description}</div>
-                    </div>
-                  </div>
-                  <DropdownStylePreview style={option.value} />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Fuente */}
-          <div className="space-y-3">
-            <Label className="text-base font-semibold">Familia de Fuente</Label>
-            <Select
-              value={config.fontFamily}
-              onValueChange={(value) => handleSaveConfiguration({ fontFamily: value as any })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {fontOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    <div className="flex items-center gap-2">
-                      <span>{option.icon}</span>
-                      <span>{option.label}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {/* Preview de fuente */}
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-600 mb-2">Vista previa:</p>
-              <div className={`text-lg ${config.fontFamily === 'mono' ? 'font-mono' : config.fontFamily === 'serif' ? 'font-serif' : 'font-sans'}`}>
-                {fontOptions.find(f => f.value === config.fontFamily)?.preview}
-              </div>
-            </div>
-          </div>
-
-          {/* Tamaño de Fuente */}
-          <div className="space-y-3">
-            <Label className="text-base font-semibold">Tamaño de Fuente</Label>
-            <Select
-              value={config.fontSize}
-              onValueChange={(value) => handleSaveConfiguration({ fontSize: value as any })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {fontSizeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {/* Preview de tamaño */}
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-600 mb-2">Vista previa:</p>
-              <div className={`${config.fontSize === 'sm' ? 'text-sm' : config.fontSize === 'lg' ? 'text-lg' : config.fontSize === 'xl' ? 'text-xl' : 'text-base'}`}>
-                {fontSizeOptions.find(f => f.value === config.fontSize)?.preview}
-              </div>
-            </div>
-          </div>
-
-                  {/* Esquema de Colores */}
-                  <div className="space-y-3">
-                    <Label className="text-base font-semibold">Esquema de Colores</Label>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                      {colorSchemeOptions.map((option) => (
-                        <div
-                          key={option.value}
                           className={`p-3 border-2 rounded-lg cursor-pointer transition-all duration-300 text-center transform hover:scale-110 hover:shadow-lg ${
-                            config.colorScheme === option.value
+                    config.colorScheme === option.value
                               ? 'border-blue-500 bg-blue-50 shadow-lg scale-110'
                               : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                          }`}
+                  }`}
                           onClick={() => handleSaveConfiguration({ colorScheme: option.value as any })}
-                        >
+                >
                   <div className="text-2xl mb-1">{option.icon}</div>
                   <div className="text-sm font-medium">{option.label}</div>
                 </div>
@@ -694,6 +700,41 @@ const ConfigurationPanel: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+      
+      {/* Sección de Storage */}
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Database className="h-5 w-5 text-blue-600" />
+          Storage
+        </h3>
+        
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-4 border border-blue-200 rounded-lg bg-blue-50">
+            <div className="flex items-center gap-3">
+              <Database className="h-5 w-5 text-blue-600" />
+              <div>
+                <Label className="text-base font-medium text-blue-800">Storage Supabase</Label>
+                <p className="text-sm text-blue-600">Usar Supabase en lugar de IndexedDB</p>
+                {config.enableSupabaseStorage && (
+                  <p className="text-xs text-red-600 mt-1">
+                    ⚠️ Requiere migración de datos y configuración de Supabase
+                  </p>
+                )}
+              </div>
+            </div>
+            <Switch
+              checked={config.enableSupabaseStorage}
+              onCheckedChange={handleStorageToggle}
+            />
+          </div>
+        </div>
+      </div>
+      
+      {/* Modal de unificación de conceptos */}
+      <ConceptUnificationModal
+        open={showConceptUnification}
+        onClose={() => setShowConceptUnification(false)}
+      />
     </div>
   );
 };

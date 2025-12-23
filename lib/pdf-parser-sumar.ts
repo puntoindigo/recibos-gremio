@@ -31,18 +31,82 @@ function extraerConceptoSUMAR(texto: string, concepto: string): string {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (conceptRegex.test(line)) {
-      const afterConcept = line.substring(line.search(conceptRegex) + concepto.length);
+      let afterConcept = line.substring(line.search(conceptRegex) + concepto.length);
+      
+      // Filtrar porcentajes del concepto (ej: "HORAS EXTRAS 100%" -> quitar "100%")
+      // Remover porcentajes que aparecen inmediatamente después del concepto
+      afterConcept = afterConcept.replace(/^\s*\d+\s*%/, '').trim();
       
       // Buscar valores con formato argentino: 27,640.12 o 27,640
-      const argentineValues = afterConcept.match(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+[.,]\d+|\d+)/g);
+      // Para JORNAL y HORAS_EXTRAS, necesitamos excluir valores pequeños (días/cantidad) y tomar solo valores monetarios grandes
+      const isJornalOrHorasExtras = concepto.includes("JORNAL") || concepto.includes("HORAS EXTRAS") || concepto.includes("H.EXTRA");
       
-      if (argentineValues && argentineValues.length > 0) {
-        // Para CUOTA GREMIAL y SEG. SEPELIO, tomar el segundo valor
-        // Para CUOTA APORT., tomar el primer valor
-        if (concepto.includes("CUOTA GREMIAL") || concepto.includes("SEG. SEPELIO")) {
-          return argentineValues.length > 1 ? argentineValues[1] : argentineValues[0];
+      // Buscar todos los números en la línea después del concepto
+      let allNumbers = afterConcept.match(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+[.,]\d+|\d+)/g);
+      
+      if (allNumbers && allNumbers.length > 0) {
+        if (isJornalOrHorasExtras) {
+          // Para JORNAL y HORAS_EXTRAS, filtrar valores pequeños (días/cantidad) y porcentajes
+          // Solo tomar valores monetarios grandes (>= 1000 o con formato monetario)
+          const monetaryValues = allNumbers.filter(val => {
+            // Verificar si está seguido de %
+            const valIndex = afterConcept.indexOf(val);
+            const afterVal = afterConcept.substring(valIndex + val.length).trim();
+            const isPercentage = /^\s*%/.test(afterVal);
+            
+            if (isPercentage) return false;
+            
+            // Normalizar el valor para comparar
+            const normalized = val.replace(/[^0-9.]/g, '');
+            const numValue = parseFloat(normalized);
+            
+            // Excluir números pequeños (probablemente días/cantidad) sin formato monetario
+            // Si tiene formato monetario (coma o punto como separador de miles) o es >= 1000, es válido
+            const hasMonetaryFormat = val.includes(',') || (val.includes('.') && val.split('.').length > 2);
+            
+            // Para JORNAL y HORAS_EXTRAS, solo aceptar valores >= 1000 o con formato monetario
+            // Valores pequeños como 23, 26, 29, 50, 76, 8, 16 son días/cantidad, no monetarios
+            if (hasMonetaryFormat || numValue >= 1000) {
+              return true;
+            }
+            
+            // Si es un número pequeño sin formato monetario, probablemente es días/cantidad
+            return false;
+          });
+          
+          // Si tenemos valores monetarios filtrados, tomar el último (tercera columna monetaria)
+          if (monetaryValues.length > 0) {
+            // Tomar el último valor monetario (tercera columna)
+            return monetaryValues[monetaryValues.length - 1];
+          }
+          
+          // Si no hay valores monetarios válidos, retornar 0.00 en lugar de tomar días/cantidad
+          // Esto permitirá que el OCR sobrescriba con el valor correcto
+          return "0.00";
         } else {
-          return argentineValues[0];
+          // Para otros conceptos, usar la lógica original
+          // Filtrar porcentajes
+          let argentineValues = allNumbers.filter(val => {
+            const valIndex = afterConcept.indexOf(val);
+            const afterVal = afterConcept.substring(valIndex + val.length).trim();
+            const isPercentage = /^\s*%/.test(afterVal);
+            
+            const numValue = parseFloat(val.replace(/[^0-9.]/g, ''));
+            if (isPercentage || (numValue <= 999 && numValue > 0 && !val.includes('.') && !val.includes(','))) {
+              return false;
+            }
+            return true;
+          });
+          
+          if (argentineValues && argentineValues.length > 0) {
+            if (concepto.includes("CUOTA GREMIAL") || concepto.includes("SEG. SEPELIO")) {
+              return argentineValues.length > 1 ? argentineValues[1] : argentineValues[0];
+            } else if (concepto.includes("5.3.10") || concepto.includes("5310")) {
+              return argentineValues.length > 2 ? argentineValues[2] : (argentineValues.length > 1 ? argentineValues[1] : argentineValues[0]);
+            } else {
+              return argentineValues[0];
+            }
+          }
         }
       }
       
@@ -66,9 +130,6 @@ function extraerConceptoSUMAR(texto: string, concepto: string): string {
 
 function toDotDecimal(raw: string): string {
   let t = raw.replace(/\s+/g, "");
-  
-  // Debug: mostrar el valor original
-  console.log("🔍 toDotDecimal - Valor original:", raw);
   
   // Detectar formato argentino: 27,640.12 -> 27640.12
   if (t.includes(",") && t.includes(".")) {
@@ -94,7 +155,6 @@ function toDotDecimal(raw: string): string {
   const [i, f = ""] = t.split(".");
   
   // Debug: mostrar el valor procesado
-  console.log("🔍 toDotDecimal - Valor procesado:", `${i}.${f}`);
   
   return `${i}.${f}`;
 }
@@ -117,14 +177,6 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     // Usar el texto extraído del recibo específico
     texto = receiptText;
     
-    if (debug) {
-      console.log(`🔍 Debug SUMAR - Usando texto de recibo específico:`, {
-        filename: file.name,
-        receiptNumber: receiptNumber,
-        textoLength: texto.length,
-        primerasLineas: texto.substring(0, 200) + "..."
-      });
-    }
     
     // Simular estructura de líneas para compatibilidad
     const lines = texto.split('\n');
@@ -134,14 +186,6 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     // Usar el texto extraído de la página específica (método anterior)
     texto = pageText;
     
-    if (debug) {
-      console.log(`🔍 Debug SUMAR - Usando texto de página específica:`, {
-        filename: file.name,
-        pageNumber: pageNumber,
-        textoLength: texto.length,
-        primerasLineas: texto.substring(0, 200) + "..."
-      });
-    }
     
     // Simular estructura de líneas para compatibilidad
     const lines = texto.split('\n');
@@ -215,9 +259,6 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
 
   const rawText = texto;
   
-  // Debug: mostrar las primeras líneas para ver qué se está capturando
-  if (debug) console.log("🔍 Debug SUMAR - Primeras líneas:", rawText.substring(0, 500));
-  
   const data: Record<string, string> = { 
     ARCHIVO: file.name, 
     LEGAJO: "-", 
@@ -249,8 +290,6 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     }
   }
   
-  // Debug: mostrar qué período se detectó
-  if (debug) console.log("🔍 Debug SUMAR - Período detectado:", data.PERIODO);
 
   // Extraer legajo (buscar patrones como "Legajo 00022")
   const legajoMatch = rawText.match(/Legajo\s*(\d+)/i);
@@ -287,8 +326,6 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     }
   }
   
-  // Debug: mostrar qué nombre se detectó
-  if (debug) console.log("🔍 Debug SUMAR - Nombre detectado:", data.NOMBRE);
 
   // Extraer CUIL
   const cuilMatch = rawText.match(/C\.U\.I\.L\.\s*(\d{2}-\d{8}-\d{1})/i);
@@ -304,6 +341,36 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     // NO sobrescribir LEGAJO - mantener el legajo original para split en cascada
   }
 
+  // Extraer CATEGORIA
+  const categoriaPatterns = [
+    /Categoría\s*:?\s*([A-ZÁÉÍÓÚÑ\s\d\-]+)/i,
+    /CATEGORIA\s*:?\s*([A-ZÁÉÍÓÚÑ\s\d\-]+)/i,
+    /Categoría\s+([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s|$)/i,
+    /CATEGORIA\s+([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s|$)/i
+  ];
+  
+  for (const pattern of categoriaPatterns) {
+    const categoriaMatch = rawText.match(pattern);
+    if (categoriaMatch) {
+      const categoria = categoriaMatch[1].trim();
+      if (categoria && categoria.length > 0 && !categoria.match(/^[\s\-]+$/)) {
+        data["CATEGORIA"] = categoria;
+        break;
+      }
+    }
+  }
+
+  // Extraer conceptos básicos de SUMAR
+  const jornal = extraerConceptoSUMAR(rawText, "JORNAL") || extraerConceptoSUMAR(rawText, "JORNALES");
+  const horasExtras = extraerConceptoSUMAR(rawText, "HORAS EXTRAS") || extraerConceptoSUMAR(rawText, "H.EXTRA");
+  const antiguedad = extraerConceptoSUMAR(rawText, "ANTIGUEDAD");
+  const adicionales = extraerConceptoSUMAR(rawText, "ADICIONALES") || extraerConceptoSUMAR(rawText, "ADICIONAL");
+  const inasistencias = extraerConceptoSUMAR(rawText, "INASISTENCIAS") || extraerConceptoSUMAR(rawText, "INASISTENCIA");
+  const sueldoBasico = extraerConceptoSUMAR(rawText, "SUELDO BASICO") || extraerConceptoSUMAR(rawText, "SUELDO BÁSICO");
+  const sueldoBruto = extraerConceptoSUMAR(rawText, "SUELDO BRUTO");
+  const total = extraerConceptoSUMAR(rawText, "TOTAL") || extraerConceptoSUMAR(rawText, "TOTAL A COBRAR");
+  const descuentos = extraerConceptoSUMAR(rawText, "DESCUENTOS") || extraerConceptoSUMAR(rawText, "TOTAL DESCUENTOS");
+
   // Extraer conceptos específicos de SUMAR y mapearlos a códigos estándar
   const cuotaGremial = extraerConceptoSUMAR(rawText, "CUOTA GREMIAL");
   const segSepelio = extraerConceptoSUMAR(rawText, "SEG. SEPELIO");
@@ -312,17 +379,20 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   const descMutual = extraerConceptoSUMAR(rawText, "DESCUENTO MUTUAL");
   const item5310 = extraerConceptoSUMAR(rawText, "CODIGO 5.3.10") || 
                    extraerConceptoSUMAR(rawText, "5.3.10") ||
-                   extraerConceptoSUMAR(rawText, "ITEM 5.3.10");
+                   extraerConceptoSUMAR(rawText, "ITEM 5.3.10") ||
+                   extraerConceptoSUMAR(rawText, "5310");
 
-  // Debug: mostrar los valores extraídos antes de toDotDecimal
-  if (debug) console.log("🔍 Debug SUMAR - Valores extraídos:", {
-    cuotaGremial,
-    segSepelio,
-    cuotaAport,
-    resguardoMutuo,
-    descMutual,
-    item5310
-  });
+
+  // Mapear conceptos básicos
+  data["JORNAL"] = toDotDecimal(jornal);
+  data["HORAS_EXTRAS"] = toDotDecimal(horasExtras);
+  data["ANTIGUEDAD"] = toDotDecimal(antiguedad);
+  data["ADICIONALES"] = toDotDecimal(adicionales);
+  data["INASISTENCIAS"] = toDotDecimal(inasistencias);
+  data["SUELDO_BASICO"] = toDotDecimal(sueldoBasico);
+  data["SUELDO_BRUTO"] = toDotDecimal(sueldoBruto);
+  data["TOTAL"] = toDotDecimal(total);
+  data["DESCUENTOS"] = toDotDecimal(descuentos);
 
   // Mapear a códigos estándar (corregido según la especificación)
   data["20540"] = toDotDecimal(cuotaGremial);  // CONTRIBUCION SOLIDARIA (CUOTA GREMIAL)
@@ -332,15 +402,6 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   data["20620"] = toDotDecimal(descMutual);    // DESC. MUTUAL (DESCUENTO MUTUAL)
   data["5310"] = toDotDecimal(item5310);       // ITEM 5.3.10
 
-  // Debug: mostrar los valores después de toDotDecimal
-  if (debug) console.log("🔍 Debug SUMAR - Valores finales:", {
-    "20540": data["20540"],
-    "20590": data["20590"],
-    "20595": data["20595"],
-    "20610": data["20610"],
-    "20620": data["20620"],
-    "5310": data["5310"]
-  });
 
   // Configurar empresa
   data["EMPRESA"] = "SUMAR";

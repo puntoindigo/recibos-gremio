@@ -27,7 +27,7 @@ export default function ReceiptsFilters({
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground min-w-16">Empresa</span>
-        <Select value={valueEmpresa ?? ALL} onValueChange={(v) => onEmpresa(v === ALL ? null : v)} disabled={empresas.length === 0}>
+        <Select value={valueEmpresa === "Todas" || !valueEmpresa ? ALL : valueEmpresa} onValueChange={(v) => onEmpresa(v === ALL ? "Todas" : v)} disabled={empresas.length === 0}>
           <SelectTrigger className="w-56"><SelectValue placeholder={empresas.length ? 'Todas' : 'Sin datos'} /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Todas</SelectItem>
@@ -38,7 +38,7 @@ export default function ReceiptsFilters({
       </div>
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground min-w-16">Periodo</span>
-        <Select value={valuePeriodo ?? ALL} onValueChange={(v) => onPeriodo(v === ALL ? null : v)}>
+        <Select value={valuePeriodo === "Todos" || !valuePeriodo ? ALL : valuePeriodo} onValueChange={(v) => onPeriodo(v === ALL ? "Todos" : v)}>
           <SelectTrigger className="w-44"><SelectValue placeholder="Todos" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Todos</SelectItem>

@@ -39,3 +39,4 @@ export function cleanItem(item: any) {
 export function cleanItems(items: any[]) {
   return items.map(cleanItem);
 }
+

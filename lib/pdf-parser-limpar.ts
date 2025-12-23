@@ -500,6 +500,107 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
     }
   }
 
+  // Extraer CATEGORIA
+  // En LIMPAR el formato es: "Categoría : RECOLECTOR"
+  // Está en la misma línea que "Sueldo / Jornal :" e "Ingreso :"
+  // Ejemplo: "Sueldo / Jornal : 851,269.55 Categoría : RECOLECTOR Ingreso : 27/05/20"
+  
+  // Patrón principal: Buscar "Categoría :" o "Categoria :" seguido de la categoría
+  // La categoría es una palabra o varias palabras en MAYÚSCULAS que terminan antes de "Ingreso" u otro campo
+  const categoriaPattern1 = /Categor[ií]a\s*:\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]*?)(?:\s+Ingreso|\s+[a-záéíóúñ]|\s*\d+\/\d+\/\d+|$)/i;
+  const match1 = rawText.match(categoriaPattern1);
+  
+  if (match1) {
+    let categoria = match1[1].trim();
+    
+    if (debug) console.log("🔍 Debug LIMPAR - Texto capturado después de Categoría:", categoria);
+    
+    // Limpiar: mantener solo palabras completamente en mayúsculas
+    const palabras = categoria.split(/\s+/);
+    const categoriaPalabras = [];
+    
+    for (const palabra of palabras) {
+      // Detener si encontramos algo que no es parte de la categoría
+      if (/^[a-záéíóúñ]/.test(palabra)) {
+        // Empieza con minúscula - probablemente parte del siguiente campo
+        if (debug) console.log("🔍 Debug LIMPAR - Deteniendo en minúscula:", palabra);
+        break;
+      }
+      if (/^\d+$/.test(palabra) && palabra.length > 2) {
+        // Número grande - probablemente parte de otro campo
+        if (debug) console.log("🔍 Debug LIMPAR - Deteniendo en número:", palabra);
+        break;
+      }
+      if (/^\d+\/\d+\/\d+/.test(palabra)) {
+        // Fecha - parte del siguiente campo
+        if (debug) console.log("🔍 Debug LIMPAR - Deteniendo en fecha:", palabra);
+        break;
+      }
+      if (palabra.includes('Ingreso') || palabra.includes('Sueldo') || palabra.includes('Jornal') || palabra.includes('Antig')) {
+        if (debug) console.log("🔍 Debug LIMPAR - Deteniendo en palabra excluida:", palabra);
+        break;
+      }
+      
+      // Agregar si es una palabra válida en mayúsculas
+      if (/^[A-ZÁÉÍÓÚÑ]+$/.test(palabra)) {
+        categoriaPalabras.push(palabra);
+      } else if (/^[A-ZÁÉÍÓÚÑ\.]+$/.test(palabra)) {
+        // Permitir puntos (ej: "GRAL." no aplica aquí pero por si acaso)
+        categoriaPalabras.push(palabra);
+      } else {
+        // Si contiene algo raro, detener
+        if (debug) console.log("🔍 Debug LIMPAR - Deteniendo en palabra con caracteres raros:", palabra);
+        break;
+      }
+    }
+    
+    categoria = categoriaPalabras.join(' ').trim();
+    
+    if (categoria && categoria.length > 0 && categoria.length < 50 && /^[A-ZÁÉÍÓÚÑ]+/.test(categoria)) {
+      data["CATEGORIA"] = categoria;
+      if (debug) console.log("✅ Debug LIMPAR - Categoría detectada:", categoria);
+    } else if (debug) {
+      console.log("⚠️ Debug LIMPAR - Categoría extraída pero rechazada:", categoria);
+    }
+  }
+  
+  // Patrón alternativo: Buscar sin los dos puntos
+  if (!data["CATEGORIA"]) {
+    const categoriaPattern2 = /Categor[ií]a\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]{2,30}?)(?:\s+Ingreso|\s+[a-z]|$)/i;
+    const match2 = rawText.match(categoriaPattern2);
+    if (match2) {
+      let categoria = match2[1].trim();
+      
+      // Filtrar solo palabras en mayúsculas
+      const palabras = categoria.split(/\s+/).filter(p => /^[A-ZÁÉÍÓÚÑ]+$/.test(p));
+      categoria = palabras.join(' ').trim();
+      
+      if (categoria && categoria.length > 0 && categoria.length < 50) {
+        data["CATEGORIA"] = categoria;
+        if (debug) console.log("✅ Debug LIMPAR - Categoría detectada (patrón alternativo):", categoria);
+      }
+    }
+  }
+  
+  // Patrón 3: Buscar en líneas individuales si el formato es diferente
+  if (!data["CATEGORIA"]) {
+    const lines = rawText.split(/\r?\n/).map(l => l.trim());
+    for (const line of lines) {
+      // Buscar línea que contiene "Categoría" y extraer el valor
+      if (line.match(/Categor[ií]a\s*:/i)) {
+        const categoriaMatch = line.match(/Categor[ií]a\s*:\s*([A-ZÁÉÍÓÚÑ]+(?:\s+[A-ZÁÉÍÓÚÑ]+)*)/i);
+        if (categoriaMatch) {
+          const categoria = categoriaMatch[1].trim();
+          if (categoria && categoria.length > 0 && categoria.length < 50) {
+            data["CATEGORIA"] = categoria;
+            if (debug) console.log("✅ Debug LIMPAR - Categoría detectada (línea):", categoria);
+            break;
+          }
+        }
+      }
+    }
+  }
+
   // ---------- NUEVO: Extraer conceptos específicos de LIMPAR ----------
   // Extraer conceptos específicos y mapearlos a códigos estándar
   // SOLO si no existen ya en data (para no sobrescribir códigos 20xxx extraídos por el parser genérico)
@@ -613,6 +714,28 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
       data["5310"] = toDotDecimal(item5310);
     }
   }
+
+  // Extraer conceptos básicos de LIMPAR
+  const jornal = extraerConceptoLimpar(rawText, "JORNAL", debug) || extraerConceptoLimpar(rawText, "JORNALES", debug);
+  const horasExtras = extraerConceptoLimpar(rawText, "HORAS EXTRAS", debug) || extraerConceptoLimpar(rawText, "H.EXTRA", debug);
+  const antiguedad = extraerConceptoLimpar(rawText, "ANTIGUEDAD", debug);
+  const adicionales = extraerConceptoLimpar(rawText, "ADICIONALES", debug) || extraerConceptoLimpar(rawText, "ADICIONAL", debug);
+  const inasistencias = extraerConceptoLimpar(rawText, "INASISTENCIAS", debug) || extraerConceptoLimpar(rawText, "INASISTENCIA", debug);
+  const sueldoBasico = extraerConceptoLimpar(rawText, "SUELDO BASICO", debug) || extraerConceptoLimpar(rawText, "SUELDO BÁSICO", debug);
+  const sueldoBruto = extraerConceptoLimpar(rawText, "SUELDO BRUTO", debug);
+  const total = extraerConceptoLimpar(rawText, "TOTAL", debug) || extraerConceptoLimpar(rawText, "TOTAL A COBRAR", debug);
+  const descuentos = extraerConceptoLimpar(rawText, "DESCUENTOS", debug) || extraerConceptoLimpar(rawText, "TOTAL DESCUENTOS", debug);
+
+  // Mapear conceptos básicos
+  if (jornal && jornal !== "0.00") data["JORNAL"] = toDotDecimal(jornal);
+  if (horasExtras && horasExtras !== "0.00") data["HORAS_EXTRAS"] = toDotDecimal(horasExtras);
+  if (antiguedad && antiguedad !== "0.00") data["ANTIGUEDAD"] = toDotDecimal(antiguedad);
+  if (adicionales && adicionales !== "0.00") data["ADICIONALES"] = toDotDecimal(adicionales);
+  if (inasistencias && inasistencias !== "0.00") data["INASISTENCIAS"] = toDotDecimal(inasistencias);
+  if (sueldoBasico && sueldoBasico !== "0.00") data["SUELDO_BASICO"] = toDotDecimal(sueldoBasico);
+  if (sueldoBruto && sueldoBruto !== "0.00") data["SUELDO_BRUTO"] = toDotDecimal(sueldoBruto);
+  if (total && total !== "0.00") data["TOTAL"] = toDotDecimal(total);
+  if (descuentos && descuentos !== "0.00") data["DESCUENTOS"] = toDotDecimal(descuentos);
 
   // Configurar empresa
   data["EMPRESA"] = "LIMPAR";

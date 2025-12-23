@@ -21,16 +21,22 @@ import {
   TrendingUp,
   TrendingDown,
   CheckCircle,
-  XCircle
+  XCircle,
+  X,
+  ArrowLeft
 } from 'lucide-react';
 import { getFichaEmpleado } from '@/lib/descuentos-manager';
-import { db } from '@/lib/db';
+// import { db } from '@/lib/db'; // Removido - usar dataManager en su lugar
+import { empleadoManager, type EmpleadoData } from '@/lib/empleado-manager';
+import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { formatTimestampForDisplay } from '@/lib/date-utils';
 
 interface FichaEmpleadoModalProps {
   legajo: string;
   empresa: string;
   onClose: () => void;
+  onBack?: () => void;
+  isFromEdit?: boolean;
 }
 
 interface FichaData {
@@ -45,7 +51,8 @@ interface FichaData {
   cuotasRestantes: number;
 }
 
-export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEmpleadoModalProps) {
+export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, isFromEdit }: FichaEmpleadoModalProps) {
+  const { dataManager } = useCentralizedDataManager();
   const [fichaData, setFichaData] = useState<FichaData | null>(null);
   const [recibos, setRecibos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,15 +64,31 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
   const loadFichaData = async () => {
     setIsLoading(true);
     try {
-      const ficha = await getFichaEmpleado(legajo, empresa);
-      setFichaData(ficha);
+      console.log('🔍 Debug cargando ficha para:', { legajo, empresa });
+      
+      // Usar EmpleadoManager para obtener datos consistentes
+      const empleadoData = await empleadoManager.getEmpleadoByLegajo(legajo, dataManager);
+      
+      if (!empleadoData) {
+        console.error('No se encontró el empleado');
+        return;
+      }
 
-      // Cargar recibos del empleado
-      const recibosData = await db.consolidated
-        .where('legajo')
-        .equals(legajo)
-        .toArray();
-      setRecibos(recibosData);
+      const ficha = {
+        legajo: empleadoData.legajo,
+        nombre: empleadoData.nombre,
+        empresa: empleadoData.empresa,
+        descuentosActivos: empleadoData.descuentosActivos,
+        descuentosPagados: empleadoData.descuentosPagados,
+        totalDescontar: empleadoData.totalDescontar,
+        totalPagado: empleadoData.totalPagado,
+        saldoPendiente: empleadoData.saldoPendiente,
+        cuotasRestantes: empleadoData.cuotasRestantes
+      };
+      
+      console.log('🔍 Debug ficha creada:', ficha);
+      setFichaData(ficha);
+      setRecibos(empleadoData.recibos);
     } catch (error) {
       console.error('Error cargando ficha del empleado:', error);
     } finally {
@@ -96,7 +119,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
   if (isLoading) {
     return (
       <Dialog open={true} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
           <div className="flex items-center justify-center p-8">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -111,7 +134,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
   if (!fichaData) {
     return (
       <Dialog open={true} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
           <div className="text-center p-8">
             <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">Empleado no encontrado</h3>
@@ -127,17 +150,28 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center space-x-2">
-            <User className="h-5 w-5" />
-            <span>Ficha del Empleado</span>
-          </DialogTitle>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0 pt-6">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center space-x-2">
+              <User className="h-5 w-5" />
+              <span>Ficha del Empleado</span>
+            </DialogTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="h-8 w-8 p-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
           <DialogDescription>
             Información completa de {fichaData.nombre} (Legajo: {fichaData.legajo})
           </DialogDescription>
         </DialogHeader>
 
+        <div className="flex-1 overflow-y-auto px-6 py-4 pt-6 modal-content-fix">
         <div className="space-y-6">
           {/* Resumen financiero */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -216,15 +250,15 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
                     <div key={descuento.id} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
-                          <Badge className={getTipoBadgeColor(descuento.tipoDescuento)}>
-                            {descuento.tipoDescuento.replace('_', ' ')}
+                          <Badge className={getTipoBadgeColor(descuento.tipoDescuento || '')}>
+                            {(descuento.tipoDescuento || '').replace('_', ' ')}
                           </Badge>
-                          <Badge className={getEstadoBadgeColor(descuento.estado)}>
-                            {descuento.estado}
+                          <Badge className={getEstadoBadgeColor(descuento.estado || '')}>
+                            {descuento.estado || 'N/A'}
                           </Badge>
                         </div>
                         <span className="text-lg font-semibold">
-                          ${descuento.monto.toLocaleString()}
+                          ${(descuento.monto || 0).toLocaleString()}
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 mb-2">{descuento.descripcion}</p>
@@ -259,15 +293,15 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
                     <div key={descuento.id} className="border rounded-lg p-4 bg-gray-50">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
-                          <Badge className={getTipoBadgeColor(descuento.tipoDescuento)}>
-                            {descuento.tipoDescuento.replace('_', ' ')}
+                          <Badge className={getTipoBadgeColor(descuento.tipoDescuento || '')}>
+                            {(descuento.tipoDescuento || '').replace('_', ' ')}
                           </Badge>
-                          <Badge className={getEstadoBadgeColor(descuento.estado)}>
-                            {descuento.estado}
+                          <Badge className={getEstadoBadgeColor(descuento.estado || '')}>
+                            {descuento.estado || 'N/A'}
                           </Badge>
                         </div>
                         <span className="text-lg font-semibold text-green-600">
-                          ${descuento.monto.toLocaleString()}
+                          ${(descuento.monto || 0).toLocaleString()}
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 mb-2">{descuento.descripcion}</p>
@@ -296,19 +330,21 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {recibos.length > 0 ? (
+              {recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0).length > 0 ? (
                 <div className="space-y-2">
-                  {recibos.map((recibo) => (
+                  {recibos
+                    .filter(recibo => recibo.archivos && recibo.archivos.length > 0)
+                    .map((recibo) => (
                     <div key={recibo.key} className="border rounded-lg p-3">
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="font-medium">Período: {recibo.periodo}</span>
                           <p className="text-sm text-gray-600">
-                            Archivos: {recibo.archivos.join(', ')}
+                            Archivos: {(recibo.archivos || []).filter((a: any) => a).join(', ')}
                           </p>
                         </div>
                         <Badge variant="outline">
-                          {recibo.empresa || 'Sin empresa'}
+                          {recibo.data?.EMPRESA || 'Sin empresa'}
                         </Badge>
                       </div>
                     </div>
@@ -320,11 +356,19 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose }: FichaEm
             </CardContent>
           </Card>
         </div>
+        </div>
 
-        <div className="flex justify-end pt-4">
-          <Button onClick={onClose}>
-            Cerrar
-          </Button>
+        <div className="flex justify-end gap-2 pt-4 border-t -mx-6 px-6 flex-shrink-0">
+          {isFromEdit && onBack ? (
+            <Button variant="outline" onClick={onBack}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Volver
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={onClose}>
+              Cerrar
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

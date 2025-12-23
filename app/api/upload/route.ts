@@ -4,6 +4,10 @@ import path from 'node:path';
 import { Buffer } from 'node:buffer';
 import { upsertArchivoEnTodos } from '@/lib/todos';
 
+// Límite de subidas simultáneas para evitar sobrecarga
+let activeUploads = 0;
+const MAX_CONCURRENT_UPLOADS = 5;
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -30,27 +34,55 @@ async function ensureUniqueFilePath(dir: string, fileName: string) {
   }
 }
 
+
 export async function POST(req: Request) {
   try {
-    const form = await req.formData();
-    const file = form.get('file') as File | null;
-    if (!file) return NextResponse.json({ error: 'Falta "file"' }, { status: 400 });
-
-    const type = file.type || 'application/octet-stream';
-    if (type !== 'application/pdf') {
-      return NextResponse.json({ error: 'Solo se permiten PDFs' }, { status: 415 });
+    // Control de límite de subidas simultáneas
+    if (activeUploads >= MAX_CONCURRENT_UPLOADS) {
+      return NextResponse.json({ 
+        error: 'Demasiadas subidas simultáneas. Intenta de nuevo en unos segundos.' 
+      }, { status: 429 });
     }
+    
+    activeUploads++;
+    console.log(`📤 Upload iniciado. Subidas activas: ${activeUploads}/${MAX_CONCURRENT_UPLOADS}`);
+    
+    try {
+      const form = await req.formData();
+      const file = form.get('file') as File | null;
+      if (!file) return NextResponse.json({ error: 'Falta "file"' }, { status: 400 });
 
-    // --- guardar el PDF en /public/recibos ---
-    const rawName = file.name || 'recibo.pdf';
-    const safeName = sanitizeName(rawName);
+      const type = file.type || 'application/octet-stream';
+      if (type !== 'application/pdf') {
+        return NextResponse.json({ error: 'Solo se permiten PDFs' }, { status: 415 });
+      }
+
+      // --- guardar el PDF en /public/recibos ---
+      const rawName = file.name || 'recibo.pdf';
+      // Primero normalizar (eliminar paréntesis) y luego sanitizar (limpiar caracteres peligrosos)
+      // Esto asegura que el nombre físico coincida con el nombre en la BD
+      const { normalizeFileName } = await import('@/lib/simple-pdf-processor');
+      const normalizedName = normalizeFileName(rawName);
+      const safeName = sanitizeName(normalizedName);
     
     await fs.mkdir(DEST_DIR, { recursive: true });
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const destPath = await ensureUniqueFilePath(DEST_DIR, safeName);
+    // Permitir sobrescribir archivos físicos - la verificación de duplicados real
+    // se hace en processSingleFile que verifica la base de datos.
+    // Si el usuario borró los registros pero los archivos físicos existen, debe poder reprocesarlos.
+    // Usar el nombre original directamente - si existe físicamente, se sobrescribirá.
+    const destPath = path.join(DEST_DIR, safeName);
+    
+    try {
+      await fs.access(destPath);
+      console.log(`⚠️ Archivo físico ya existe: ${safeName} - Se sobrescribirá (verificación de duplicados en BD)`);
+    } catch {
+      console.log(`✅ Archivo nuevo: ${safeName}`);
+    }
+    
     await fs.writeFile(destPath, buffer);
 
     const finalName = path.basename(destPath);
@@ -75,12 +107,16 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json({
-      id: finalName,
-      name: finalName,
-      link,
-      csv: csvResult
-    });
+      return NextResponse.json({
+        id: finalName,
+        name: finalName,
+        link,
+        csv: csvResult
+      });
+    } finally {
+      activeUploads--;
+      console.log(`📤 Upload completado. Subidas activas: ${activeUploads}/${MAX_CONCURRENT_UPLOADS}`);
+    }
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : 'Upload error';
     return NextResponse.json({ error: errorMessage }, { status: 500 });

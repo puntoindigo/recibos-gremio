@@ -16,7 +16,7 @@ import {
   Palette
 } from 'lucide-react';
 import { toast } from 'sonner';
-import PendingItemsViewManager from './PendingItemsViewManager';
+// PendingItemsViewManager removido - ahora es independiente
 
 interface DocumentInfo {
   name: string;
@@ -258,7 +258,14 @@ export default function DocumentationPanel() {
           </div>
 
           {docContent === 'PENDING_ITEMS_MANAGER' ? (
-            <PendingItemsViewManager />
+            <Card>
+              <CardContent className="p-6">
+                <div className="text-center text-gray-500">
+                  <p>Los Items Pendientes ahora son una sección independiente.</p>
+                  <p>Usa el menú principal para acceder a ellos.</p>
+                </div>
+              </CardContent>
+            </Card>
           ) : (
             <Card>
               <CardContent className="p-6">

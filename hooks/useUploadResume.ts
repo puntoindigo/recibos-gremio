@@ -1,7 +1,7 @@
 // hooks/useUploadResume.ts
 import { useCallback, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { UploadSessionManager, type UploadSessionState } from '@/lib/upload-session-manager';
+// import { UploadSessionManager, type UploadSessionState } from '@/lib/upload-session-manager'; // ELIMINADO
 import { processSingleFile } from '@/lib/simple-pdf-processor';
 import { useLearnedRules } from './useLearnedRules';
 

@@ -562,6 +562,25 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   
   data["EMPRESA"] = empresaDetectada;
   
+  // Extraer CATEGORIA
+  const categoriaPatterns = [
+    /Categoría\s*:?\s*([A-ZÁÉÍÓÚÑ\s\d\-]+)/i,
+    /CATEGORIA\s*:?\s*([A-ZÁÉÍÓÚÑ\s\d\-]+)/i,
+    /Categoría\s+([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s|$)/i,
+    /CATEGORIA\s+([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s|$)/i
+  ];
+  
+  for (const pattern of categoriaPatterns) {
+    const categoriaMatch = rawText.match(pattern);
+    if (categoriaMatch) {
+      const categoria = categoriaMatch[1].trim();
+      if (categoria && categoria.length > 0 && !categoria.match(/^[\s\-]+$/)) {
+        data["CATEGORIA"] = categoria;
+        break;
+      }
+    }
+  }
+  
   // Procesamiento específico por empresa
   if (empresaDetectada === "ESTRATEGIA AMBIENTAL") {
         
@@ -599,6 +618,36 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
         const antiguedadMatch = rawText.match(/ANTIGÜEDAD.*?(\d+[.,]\d+)/i);
         if (antiguedadMatch) {
           data["ANTIGUEDAD"] = antiguedadMatch[1].replace(/[^\d.,]/g, '');
+        }
+        
+        // Buscar jornal
+        const jornalMatch = rawText.match(/JORNAL.*?(\d+[.,]\d+)/i);
+        if (jornalMatch) {
+          data["JORNAL"] = jornalMatch[1].replace(/[^\d.,]/g, '');
+        }
+        
+        // Buscar horas extras
+        const horasExtrasMatch = rawText.match(/HORAS\s+EXTRAS.*?(\d+[.,]\d+)/i);
+        if (horasExtrasMatch) {
+          data["HORAS_EXTRAS"] = horasExtrasMatch[1].replace(/[^\d.,]/g, '');
+        }
+        
+        // Buscar adicionales
+        const adicionalesMatch = rawText.match(/ADICIONAL.*?(\d+[.,]\d+)/i);
+        if (adicionalesMatch) {
+          data["ADICIONALES"] = adicionalesMatch[1].replace(/[^\d.,]/g, '');
+        }
+        
+        // Buscar inasistencias
+        const inasistenciasMatch = rawText.match(/INASISTENCIA.*?(\d+[.,]\d+)/i);
+        if (inasistenciasMatch) {
+          data["INASISTENCIAS"] = inasistenciasMatch[1].replace(/[^\d.,]/g, '');
+        }
+        
+        // Buscar sueldo bruto
+        const sueldoBrutoMatch = rawText.match(/SUELDO\s+BRUTO.*?(\d+[.,]\d+)/i);
+        if (sueldoBrutoMatch) {
+          data["SUELDO_BRUTO"] = sueldoBrutoMatch[1].replace(/[^\d.,]/g, '');
         }
         
         // Debug: mostrar datos detectados

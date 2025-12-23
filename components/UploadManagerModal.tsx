@@ -21,9 +21,9 @@ import {
   Database
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { UploadSessionManager } from '@/lib/upload-session-manager';
+// import { UploadSessionManager } from '@/lib/upload-session-manager'; // ELIMINADO
 import { useUploadResume } from '@/hooks/useUploadResume';
-import type { UploadSessionDB } from '@/lib/db';
+import type { UploadSessionDB } from '@/lib/data-manager-singleton';
 
 interface UploadManagerModalProps {
   isOpen: boolean;

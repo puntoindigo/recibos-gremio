@@ -31,3 +31,4 @@ export function cleanPendingItems() {
   localStorage.removeItem('pendingItems');
   console.log('🧹 Datos de items pendientes limpiados');
 }
+

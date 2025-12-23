@@ -3,6 +3,10 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import AuthProvider from "@/components/AuthProvider";
+import { ConfigurationProvider } from "@/contexts/ConfigurationContext";
+import { DataManagerProvider } from "@/contexts/DataManagerContext";
+import PersistentDevTools from "@/components/PersistentDevTools";
+import ConsoleFilter from "@/components/ConsoleFilter";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,8 +33,16 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <ConsoleFilter />
         <AuthProvider>
-          {children}
+          <ConfigurationProvider>
+            <DataManagerProvider>
+              <PersistentDevTools />
+              <div className="pb-20">
+                {children}
+              </div>
+            </DataManagerProvider>
+          </ConfigurationProvider>
         </AuthProvider>
         <Toaster position="top-right" richColors closeButton />
       </body>

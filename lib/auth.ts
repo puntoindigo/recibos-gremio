@@ -16,16 +16,52 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          // Usuario por defecto para desarrollo
-          if (credentials.email === 'admin@recibos.com' && credentials.password === 'admin123') {
-            return {
-              id: 'superadmin_initial',
+          // Usuarios por defecto para desarrollo
+          const defaultUsers = [
+            {
+              email: 'superadmin@recibos.com',
+              password: 'super123',
+              user: {
+                id: 'superadmin_initial',
+                email: 'superadmin@recibos.com',
+                name: 'Super Administrador',
+                role: 'SUPERADMIN',
+                empresaId: undefined,
+                permissions: ['*']
+              }
+            },
+            {
               email: 'admin@recibos.com',
-              name: 'Super Administrador',
-              role: 'SUPERADMIN',
-              empresaId: undefined,
-              permissions: ['*']
-            };
+              password: 'admin123',
+              user: {
+                id: 'admin_initial',
+                email: 'admin@recibos.com',
+                name: 'Administrador Empresa',
+                role: 'ADMIN',
+                empresaId: 'empresa_limpar',
+                permissions: ['recibos', 'controles', 'descuentos', 'reportes']
+              }
+            },
+            {
+              email: 'usuario@recibos.com',
+              password: 'user123',
+              user: {
+                id: 'user_initial',
+                email: 'usuario@recibos.com',
+                name: 'Usuario Regular',
+                role: 'USER',
+                empresaId: 'empresa_limpar',
+                permissions: ['recibos', 'controles']
+              }
+            }
+          ];
+
+          const matchedUser = defaultUsers.find(
+            u => u.email === credentials.email && u.password === credentials.password
+          );
+
+          if (matchedUser) {
+            return matchedUser.user;
           }
 
           return null;
@@ -56,16 +92,23 @@ export const authOptions: NextAuthOptions = {
     },
     async redirect({ url, baseUrl }) {
       console.log('NextAuth Redirect:', { url, baseUrl });
+      
+      // Determinar el puerto correcto basado en la URL actual
+      const currentPort = typeof window !== 'undefined' ? window.location.port : '8000';
+      const correctBaseUrl = `http://localhost:${currentPort}`;
+      
       // Evitar bucles de redirección
       if (url === baseUrl + '/auth/signin') {
-        return baseUrl;
+        return correctBaseUrl;
       }
-      // Si la URL es relativa, agregar baseUrl
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      // Si la URL es del mismo dominio, permitirla
-      if (url.startsWith(baseUrl)) return url;
-      // Por defecto, redirigir a la página principal
-      return baseUrl;
+      // Si la URL es relativa, agregar baseUrl correcto
+      if (url.startsWith("/")) return `${correctBaseUrl}${url}`;
+      // Si la URL es del mismo dominio, permitirla pero corregir puerto
+      if (url.startsWith('http://localhost:')) {
+        return url.replace(/localhost:\d+/, `localhost:${currentPort}`);
+      }
+      // Por defecto, redirigir a la página principal con puerto correcto
+      return correctBaseUrl;
     }
   },
   pages: {

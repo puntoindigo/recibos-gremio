@@ -1,0 +1,270 @@
+[
+  {
+    "id": "1",
+    "title": "Probar modal de confirmación reutilizable",
+    "description": "Verificar que el nuevo ConfirmModal funcione correctamente en todas las situaciones",
+    "category": "test",
+    "priority": "high",
+    "status": "open",
+    "createdAt": "2025-01-22T03:55:00.000Z",
+    "tags": [
+      "modal",
+      "confirmacion",
+      "ux"
+    ],
+    "feedback": "sigue apareciendo el confirm de javascript en el boton que dice limpiar SUMAR"
+  },
+  {
+    "id": "2",
+    "title": "Probar log de subidas",
+    "description": "Verificar que el UploadLogModal muestre correctamente el historial de subidas",
+    "category": "test",
+    "priority": "medium",
+    "status": "verifying",
+    "createdAt": "2025-01-22T03:55:00.000Z",
+    "tags": [
+      "upload",
+      "log",
+      "historial"
+    ],
+    "resolution": "✅ Item resuelto automáticamente.",
+    "resolvedAt": "2025-10-22T04:05:57.681Z"
+  },
+  {
+    "id": "3",
+    "title": "Probar herramientas de test",
+    "description": "Verificar que el modal de herramientas temporales funcione correctamente",
+    "category": "test",
+    "priority": "medium",
+    "status": "verifying",
+    "createdAt": "2025-01-22T03:55:00.000Z",
+    "tags": [
+      "herramientas",
+      "test",
+      "desarrollo"
+    ],
+    "resolution": "✅ Item resuelto automáticamente.",
+    "resolvedAt": "2025-10-22T04:05:59.228Z"
+  },
+  {
+    "id": "4",
+    "title": "Verificar foco en toggles",
+    "description": "Confirmar que los toggles del DevToolbar no se enfoquen al activarse",
+    "category": "test",
+    "priority": "low",
+    "status": "verifying",
+    "createdAt": "2025-01-22T03:55:00.000Z",
+    "tags": [
+      "toggle",
+      "foco",
+      "ux"
+    ],
+    "resolution": "✅ Item resuelto automáticamente.",
+    "resolvedAt": "2025-10-22T04:06:02.323Z"
+  },
+  {
+    "id": "5",
+    "title": "Probar botón dinámico de limpiar",
+    "description": "Verificar que el botón cambie correctamente según la empresa seleccionada",
+    "category": "test",
+    "priority": "medium",
+    "status": "verifying",
+    "createdAt": "2025-01-22T03:55:00.000Z",
+    "tags": [
+      "boton",
+      "dinamico",
+      "empresa"
+    ],
+    "resolution": "✅ Item resuelto automáticamente.",
+    "resolvedAt": "2025-10-22T04:06:00.792Z"
+  },
+  {
+    "title": "el titulo y boton cerrar de la toolbar deben quedar siempre a la vista cuando se scrollea",
+    "description": "",
+    "category": "test",
+    "priority": "medium",
+    "status": "open",
+    "tags": [],
+    "id": "1761106061764",
+    "createdAt": "2025-10-22T04:07:41.764Z",
+    "expanded": false,
+    "feedback": "no resuelto"
+  },
+  {
+    "title": "PUNTO IDENTIFICABLE - Estado del Sistema Corregido",
+    "description": "Documentación completa del estado actual del sistema después de las correcciones realizadas. Incluye: filtros automáticos, DevToolbar sincronizado, errores de hidratación resueltos, botones duplicados eliminados, opciones de vista eliminadas, y servidor estable en puerto 3000.",
+    "category": "Directo",
+    "priority": "Alta",
+    "status": "Completado",
+    "id": "1761176847502",
+    "createdAt": "2025-10-22T23:47:27.502Z",
+    "expanded": false
+  },
+  {
+    "title": "Detalles Técnicos - Archivos Modificados",
+    "description": "Lista detallada de archivos modificados: app/page.tsx (reset automático filtros), components/DraggableDevToolbar.tsx (sincronización), components/ConfigurationPanel.tsx (hidratación), components/CreateEmployeeModal.tsx (botones duplicados), components/DescuentoModal.tsx (botones duplicados), components/PendingItemsCardsView.tsx (opciones vista). Todos los cambios funcionando correctamente.",
+    "category": "Directo",
+    "priority": "Media",
+    "status": "Completado",
+    "id": "1761176851213",
+    "createdAt": "2025-10-22T23:47:31.213Z",
+    "expanded": false
+  },
+  {
+    "title": "Estado del Servidor y Funcionalidades",
+    "description": "Servidor funcionando correctamente en puerto 3000. Funcionalidades activas: sistema de filtros reactivo, DevToolbar dinámico, modales sin duplicaciones, interfaz limpia en Items Pendientes. Listo para pruebas con ChatGPT desde este punto identificable.",
+    "category": "Directo",
+    "priority": "Alta",
+    "status": "Completado",
+    "id": "1761176854441",
+    "createdAt": "2025-10-22T23:47:34.441Z",
+    "expanded": false
+  },
+  {
+    "title": "PUNTO IDENTIFICABLE - Sistema Corregido",
+    "description": "Documentación completa del estado actual del sistema después de las correcciones realizadas. Incluye: filtros automáticos, DevToolbar sincronizado, errores de hidratación resueltos, botones duplicados eliminados, opciones de vista eliminadas, y servidor estable en puerto 3000.",
+    "category": "Documentacion",
+    "priority": "Alta",
+    "status": "Completado",
+    "solution": "Sistema completamente funcional con todas las correcciones aplicadas. Filtros se resetean automáticamente, DevToolbar sincronizado con filtros activos, errores de hidratación resueltos, botones duplicados eliminados en modales, opciones de vista eliminadas, servidor estable en puerto 3000.",
+    "feedback": "Estado del sistema documentado y listo para pruebas con ChatGPT desde este punto identificable.",
+    "id": "1761177062610",
+    "createdAt": "2025-10-22T23:51:02.610Z",
+    "expanded": false
+  },
+  {
+    "title": "Archivos Modificados - Detalles Técnicos",
+    "description": "Lista detallada de archivos modificados durante las correcciones: app/page.tsx (reset automático filtros), components/DraggableDevToolbar.tsx (sincronización), components/ConfigurationPanel.tsx (hidratación), components/CreateEmployeeModal.tsx (botones duplicados), components/DescuentoModal.tsx (botones duplicados), components/PendingItemsCardsView.tsx (opciones vista).",
+    "category": "Documentacion",
+    "priority": "Media",
+    "status": "Completado",
+    "solution": "Todos los archivos modificados funcionando correctamente. Reset automático de filtros implementado, DevToolbar sincronizado, errores de hidratación corregidos, botones duplicados eliminados, opciones de vista removidas.",
+    "feedback": "Cambios técnicos documentados y verificados. Sistema estable y funcional.",
+    "id": "1761177066775",
+    "createdAt": "2025-10-22T23:51:06.775Z",
+    "expanded": false
+  },
+  {
+    "title": "Estado del Servidor y Funcionalidades",
+    "description": "Servidor funcionando correctamente en puerto 3000. Funcionalidades activas: sistema de filtros reactivo, DevToolbar dinámico, modales sin duplicaciones, interfaz limpia en Items Pendientes. Listo para pruebas con ChatGPT desde este punto identificable.",
+    "category": "Documentacion",
+    "priority": "Alta",
+    "status": "Completado",
+    "solution": "Servidor estable en puerto 3000. Todas las funcionalidades operativas: filtros reactivos, DevToolbar sincronizado, modales corregidos, interfaz limpia. Sistema listo para pruebas.",
+    "feedback": "Estado del servidor y funcionalidades documentado. Punto de referencia establecido para pruebas con ChatGPT.",
+    "id": "1761177070328",
+    "createdAt": "2025-10-22T23:51:10.328Z",
+    "expanded": false
+  },
+  {
+    "title": "Probar ABM de Empleados - Crear empleado",
+    "description": "Crear un nuevo empleado desde el ABM de empleados. Verificar que se guarden todos los campos correctamente y que aparezca en la lista.",
+    "category": "Desarrollo",
+    "priority": "Alta",
+    "status": "open",
+    "tags": ["empleados", "abm", "crear"],
+    "id": "1761239000001",
+    "createdAt": "2025-01-22T12:00:00.000Z",
+    "expanded": false
+  },
+  {
+    "title": "Probar ABM de Empleados - Editar empleado",
+    "description": "Editar un empleado existente. Verificar que se carguen correctamente los datos actuales y que se guarden los cambios.",
+    "category": "Desarrollo",
+    "priority": "Alta",
+    "status": "open",
+    "tags": ["empleados", "abm", "editar"],
+    "id": "1761239000002",
+    "createdAt": "2025-01-22T12:00:00.000Z",
+    "expanded": false
+  },
+  {
+    "title": "Probar ABM de Empleados - Eliminar empleado",
+    "description": "Intentar eliminar un empleado. Verificar que aparezca la confirmación y que se valide si tiene recibos/descuentos vinculados.",
+    "category": "Desarrollo",
+    "priority": "Alta",
+    "status": "open",
+    "tags": ["empleados", "abm", "eliminar"],
+    "id": "1761239000003",
+    "createdAt": "2025-01-22T12:00:00.000Z",
+    "expanded": false
+  },
+  {
+    "title": "Probar ABM de Empresas - Crear empresa",
+    "description": "Crear una nueva empresa desde el ABM de empresas. Verificar que se pueda subir un logo y que se guarden todos los datos.",
+    "category": "Desarrollo",
+    "priority": "Alta",
+    "status": "open",
+    "tags": ["empresas", "abm", "crear", "logo"],
+    "id": "1761239000004",
+    "createdAt": "2025-01-22T12:00:00.000Z",
+    "expanded": false
+  },
+  {
+    "title": "Probar ABM de Empresas - Editar empresa existente",
+    "description": "Editar una empresa existente (especialmente las auto-generadas como SUMAR, LIMPAR). Verificar que se pueda agregar logo y modificar datos.",
+    "category": "Desarrollo",
+    "priority": "Alta",
+    "status": "open",
+    "tags": ["empresas", "abm", "editar", "logo"],
+    "id": "1761239000005",
+    "createdAt": "2025-01-22T12:00:00.000Z",
+    "expanded": false
+  },
+  {
+    "title": "Probar ABM de Empresas - Eliminar empresa",
+    "description": "Intentar eliminar una empresa. Verificar que se valide si tiene empleados vinculados y que se muestre el mensaje correspondiente.",
+    "category": "Desarrollo",
+    "priority": "Alta",
+    "status": "open",
+    "tags": ["empresas", "abm", "eliminar", "validacion"],
+    "id": "1761239000006",
+    "createdAt": "2025-01-22T12:00:00.000Z",
+    "expanded": false
+  },
+  {
+    "title": "Probar integración - Crear empresa desde empleado",
+    "description": "Desde el modal de empleado, crear una nueva empresa cuando no esté en la lista. Verificar que se cree correctamente y que se seleccione automáticamente.",
+    "category": "Desarrollo",
+    "priority": "Alta",
+    "status": "open",
+    "tags": ["integracion", "empleados", "empresas", "crear"],
+    "id": "1761239000007",
+    "createdAt": "2025-01-22T12:00:00.000Z",
+    "expanded": false
+  },
+  {
+    "title": "Probar integración - Asignar empresa a empleado",
+    "description": "Crear un empleado y asignarle una empresa existente. Verificar que se guarde la relación correctamente.",
+    "category": "Desarrollo",
+    "priority": "Alta",
+    "status": "open",
+    "tags": ["integracion", "empleados", "empresas", "asignar"],
+    "id": "1761239000008",
+    "createdAt": "2025-01-22T12:00:00.000Z",
+    "expanded": false
+  },
+  {
+    "title": "Probar contadores y estadísticas",
+    "description": "Verificar que los contadores de empleados por empresa se actualicen correctamente. Revisar las estadísticas en el dashboard y en el ABM de empresas.",
+    "category": "Desarrollo",
+    "priority": "Media",
+    "status": "open",
+    "tags": ["contadores", "estadisticas", "dashboard"],
+    "id": "1761239000009",
+    "createdAt": "2025-01-22T12:00:00.000Z",
+    "expanded": false
+  },
+  {
+    "title": "Probar toggle de Gestión de Empresas",
+    "description": "Ir a Herramientas del Sistema y habilitar/deshabilitar 'Gestión de Empresas'. Verificar que aparezca/desaparezca el item 'Empresas' del menú.",
+    "category": "Desarrollo",
+    "priority": "Media",
+    "status": "open",
+    "tags": ["toggle", "configuracion", "menu"],
+    "id": "1761239000010",
+    "createdAt": "2025-01-22T12:00:00.000Z",
+    "expanded": false
+  }
+]
+

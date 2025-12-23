@@ -24,32 +24,83 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Badge } from '@/components/ui/badge';
-import { GripVertical, CheckCircle, Circle, Clock, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
+import { 
+  GripVertical, 
+  Trash2, 
+  Play, 
+  MessageSquare, 
+  CheckCircle2, 
+  Clock, 
+  AlertTriangle,
+  Eye,
+  EyeOff,
+  X,
+  Edit3
+} from 'lucide-react';
 import { getPriorityColor } from '@/lib/priority-utils';
-import { getStatusIcon, getStatusColor, getStatusText } from '@/lib/status-utils';
 import { toast } from 'sonner';
-import ConfirmModal from './ConfirmModal';
+import { ConfirmModal } from './ConfirmModal';
 
 interface PendingItem {
   id: string;
   description: string;
   category: string;
   priority: 'high' | 'medium' | 'low';
-  status: 'pending' | 'in-progress' | 'completed';
+  status: 'pending' | 'open' | 'in-progress' | 'verifying' | 'completed';
   order: number;
   color?: string;
+  proposedSolution?: string;
+  feedback?: Array<{
+    id: string;
+    text: string;
+    createdAt: string;
+    resolved: boolean;
+  }>;
+  resolution?: string;
+  resolvedAt?: string;
 }
 
 interface SortableItemProps {
   item: PendingItem;
   isDragging?: boolean;
-  onToggleStatus: (itemId: string) => void;
-  onEdit?: (item: PendingItem) => void;
-  onExecute?: (item: PendingItem) => void;
+  onStatusChange: (itemId: string, status: 'pending' | 'open' | 'in-progress' | 'verifying' | 'completed') => void;
+  onPriorityChange: (itemId: string, priority: 'high' | 'medium' | 'low') => void;
+  onAddFeedback: (itemId: string, feedback: string) => void;
+  onResolveFeedback: (itemId: string, feedbackId: string) => void;
   onDelete?: (itemId: string, event: React.MouseEvent) => void;
+  onExecute?: (item: PendingItem) => void;
 }
 
-function SortableItem({ item, isDragging, onToggleStatus, onEdit, onExecute, onDelete }: SortableItemProps) {
+const STATUS_OPTIONS = [
+  { value: 'pending', label: 'Pendiente', color: 'bg-gray-100 text-gray-800', icon: Clock },
+  { value: 'open', label: 'Abierto', color: 'bg-blue-100 text-blue-800', icon: AlertTriangle },
+  { value: 'in-progress', label: 'En Progreso', color: 'bg-yellow-100 text-yellow-800', icon: Play },
+  { value: 'verifying', label: 'Verificando', color: 'bg-purple-100 text-purple-800', icon: Eye },
+  { value: 'completed', label: 'Completado', color: 'bg-green-100 text-green-800', icon: CheckCircle2 },
+];
+
+const PRIORITY_OPTIONS = [
+  { value: 'high', label: 'Alta', color: 'bg-red-100 text-red-800' },
+  { value: 'medium', label: 'Media', color: 'bg-yellow-100 text-yellow-800' },
+  { value: 'low', label: 'Baja', color: 'bg-green-100 text-green-800' },
+];
+
+function SortableItem({ 
+  item, 
+  isDragging, 
+  onStatusChange, 
+  onPriorityChange,
+  onAddFeedback, 
+  onResolveFeedback, 
+  onDelete,
+  onExecute 
+}: SortableItemProps) {
   const {
     attributes,
     listeners,
@@ -59,13 +110,54 @@ function SortableItem({ item, isDragging, onToggleStatus, onEdit, onExecute, onD
     isDragging: isSortableDragging,
   } = useSortable({ id: item.id });
 
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [newFeedback, setNewFeedback] = useState('');
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionProgress, setExecutionProgress] = useState(0);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const currentStatus = STATUS_OPTIONS.find(s => s.value === item.status);
+  const unresolvedFeedback = item.feedback?.filter(f => !f.resolved) || [];
+  const hasUnresolvedFeedback = unresolvedFeedback.length > 0;
 
+  const handleExecute = async () => {
+    if (!onExecute) return;
+    
+    setIsExecuting(true);
+    setExecutionProgress(0);
+    
+    // Simular progreso
+    const interval = setInterval(() => {
+      setExecutionProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsExecuting(false);
+          onExecute(item);
+          return 100;
+        }
+        return prev + 10;
+      });
+    }, 200);
+  };
+
+  const handleAddFeedback = () => {
+    if (newFeedback.trim()) {
+      onAddFeedback(item.id, newFeedback);
+      setNewFeedback('');
+      setShowFeedback(false);
+      toast.success('Feedback agregado');
+    }
+  };
+
+  const handleResolveFeedback = (feedbackId: string) => {
+    onResolveFeedback(item.id, feedbackId);
+    toast.success('Feedback marcado como resuelto');
+  };
 
   return (
     <div
@@ -84,9 +176,6 @@ function SortableItem({ item, isDragging, onToggleStatus, onEdit, onExecute, onD
           <GripVertical className="h-5 w-5" />
         </button>
         
-        <div className="flex items-center space-x-2">
-          {getStatusIcon(item.status)}
-        </div>
         
         <div className="flex-1">
           <div className="flex items-center justify-between mb-1">
@@ -94,22 +183,25 @@ function SortableItem({ item, isDragging, onToggleStatus, onEdit, onExecute, onD
               {item.category}
             </span>
             <div className="flex items-center space-x-2">
-              <div className="bg-gray-100 text-gray-700 text-xs font-bold px-2 py-1 rounded-full">
-                #{item.id}
-              </div>
+              {/* ID oculto - era muy largo */}
               <Badge 
                 variant="outline" 
-                className={`text-xs font-medium ${
-                  item.status === 'completed' 
-                    ? 'bg-green-100 text-green-800 border-green-300' 
-                    : item.status === 'in-progress'
-                    ? 'bg-blue-100 text-blue-800 border-blue-300'
-                    : 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                }`}
+                className={`text-xs font-medium ${currentStatus?.color || 'bg-gray-100 text-gray-800'}`}
               >
-                {item.status === 'completed' ? 'FINALIZADA' : 
-                 item.status === 'in-progress' ? 'ACTIVA' : 'PENDIENTE'}
+                {currentStatus?.label || item.status}
               </Badge>
+              {hasUnresolvedFeedback && (
+                <Badge variant="outline" className="text-xs bg-red-100 text-red-800 border-red-300">
+                  {unresolvedFeedback.length} feedback
+                </Badge>
+              )}
+              <button 
+                onClick={(e) => onEditItem(item)}
+                className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                title="Editar item"
+              >
+                <Edit3 className="h-4 w-4" />
+              </button>
               <button 
                 onClick={(e) => onDelete?.(item.id, e)}
                 className="p-1 text-gray-400 hover:text-red-600 transition-colors"
@@ -127,9 +219,164 @@ function SortableItem({ item, isDragging, onToggleStatus, onEdit, onExecute, onD
             <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
               {item.category}
             </Badge>
+            {item.proposedSolution && (
+              <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                Solución propuesta
+              </Badge>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Controles */}
+      <div className="flex items-center space-x-2">
+        <Select
+          value={item.priority}
+          onValueChange={(value: any) => onPriorityChange(item.id, value)}
+        >
+          <SelectTrigger className="w-24">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PRIORITY_OPTIONS.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                <div className="flex items-center space-x-2">
+                  <span className={option.color}>{option.label}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={item.status}
+          onValueChange={(value: any) => onStatusChange(item.id, value)}
+        >
+          <SelectTrigger className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                <div className="flex items-center space-x-2">
+                  <option.icon className="h-4 w-4" />
+                  <span className={option.color}>{option.label}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowFeedback(!showFeedback)}
+          className="text-blue-600 hover:text-blue-700"
+        >
+          <MessageSquare className="h-4 w-4 mr-1" />
+          Feedback
+          {hasUnresolvedFeedback && (
+            <Badge className="ml-1 bg-red-500 text-white text-xs">
+              {unresolvedFeedback.length}
+            </Badge>
+          )}
+        </Button>
+
+        {onExecute && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExecute}
+            disabled={isExecuting}
+            className="text-green-600 hover:text-green-700"
+          >
+            <Play className="h-4 w-4 mr-1" />
+            {isExecuting ? 'Ejecutando...' : 'Ejecutar'}
+          </Button>
+        )}
+      </div>
+
+      {/* Panel de Feedback */}
+      {showFeedback && (
+        <div className="absolute top-full left-0 right-0 bg-white border rounded-lg shadow-lg p-4 z-10 mt-2">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-medium">Feedback</h4>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowFeedback(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Lista de feedback existente */}
+          {item.feedback && item.feedback.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {item.feedback.map(feedback => (
+                <div key={feedback.id} className={`p-2 rounded border ${feedback.resolved ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">{feedback.text}</span>
+                    {!feedback.resolved && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleResolveFeedback(feedback.id)}
+                        className="text-green-600 hover:text-green-700"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {new Date(feedback.createdAt).toLocaleString()}
+                    {feedback.resolved && ' - Resuelto'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Nuevo feedback */}
+          <div className="space-y-2">
+            <Textarea
+              value={newFeedback}
+              onChange={(e) => setNewFeedback(e.target.value)}
+              placeholder="Agregar nuevo feedback..."
+              className="min-h-[60px]"
+            />
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFeedback(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleAddFeedback}
+                disabled={!newFeedback.trim()}
+              >
+                Agregar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Barra de progreso de ejecución */}
+      {isExecuting && (
+        <div className="absolute top-full left-0 right-0 bg-white border rounded-lg shadow-lg p-4 z-10 mt-2">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Ejecutando solución...</span>
+              <span className="text-sm text-gray-500">{executionProgress}%</span>
+            </div>
+            <Progress value={executionProgress} className="w-full" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -137,15 +384,23 @@ function SortableItem({ item, isDragging, onToggleStatus, onEdit, onExecute, onD
 interface PendingItemsListViewProps {
   items: PendingItem[];
   onItemsChange: (items: PendingItem[]) => void;
-  onToggleStatus: (itemId: string) => void;
+  onStatusChange: (itemId: string, status: 'pending' | 'open' | 'in-progress' | 'verifying' | 'completed') => void;
+  onPriorityChange: (itemId: string, priority: 'high' | 'medium' | 'low') => void;
+  onAddFeedback: (itemId: string, feedback: string) => void;
+  onResolveFeedback: (itemId: string, feedbackId: string) => void;
   onDeleteItem: (id: string) => void;
+  onEditItem: (item: PendingItem) => void;
 }
 
 export default function PendingItemsListView({ 
   items, 
   onItemsChange, 
-  onToggleStatus,
-  onDeleteItem
+  onStatusChange,
+  onPriorityChange,
+  onAddFeedback,
+  onResolveFeedback,
+  onDeleteItem,
+  onEditItem
 }: PendingItemsListViewProps) {
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -206,6 +461,17 @@ export default function PendingItemsListView({
     setItemToDelete(null);
   };
 
+  const handleExecute = (item: PendingItem) => {
+    // Simular ejecución de solución
+    toast.success(`Ejecutando: ${item.description}`);
+    
+    // Cambiar estado a "verifying" después de la ejecución
+    setTimeout(() => {
+      onStatusChange(item.id, 'verifying');
+      toast.success(`✅ Solución ejecutada: ${item.description}`);
+    }, 2000);
+  };
+
   const completedCount = items.filter(item => item.status === 'completed').length;
   const totalCount = items.length;
 
@@ -214,7 +480,7 @@ export default function PendingItemsListView({
       {/* Instrucciones compactas */}
       <div className="text-center mb-4">
         <p className="text-sm text-gray-500">
-          Arrastra para reordenar • Click para completar
+          Arrastra para reordenar • Cambia estado con el desplegable • Click en Feedback para agregar comentarios
         </p>
       </div>
 
@@ -231,18 +497,16 @@ export default function PendingItemsListView({
         >
           <div className="space-y-2">
             {items.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => onToggleStatus(item.id)}
-                className="cursor-pointer"
-              >
+              <div key={item.id} className="relative">
                 <SortableItem 
                   item={item} 
                   isDragging={activeId === item.id}
-                  onToggleStatus={onToggleStatus}
-                  onEdit={undefined}
-                  onExecute={undefined}
+                  onStatusChange={onStatusChange}
+                  onPriorityChange={onPriorityChange}
+                  onAddFeedback={onAddFeedback}
+                  onResolveFeedback={onResolveFeedback}
                   onDelete={handleDeleteClick}
+                  onExecute={handleExecute}
                 />
               </div>
             ))}
@@ -254,10 +518,12 @@ export default function PendingItemsListView({
             <SortableItem 
               item={items.find(item => item.id === activeId)!} 
               isDragging={true}
-              onToggleStatus={onToggleStatus}
-              onEdit={undefined}
-              onExecute={undefined}
+              onStatusChange={onStatusChange}
+              onPriorityChange={onPriorityChange}
+              onAddFeedback={onAddFeedback}
+              onResolveFeedback={onResolveFeedback}
               onDelete={undefined}
+              onExecute={handleExecute}
             />
           ) : null}
         </DragOverlay>

@@ -1,6 +1,23 @@
 // lib/db.ts
 import Dexie, { Table } from "dexie";
 
+// 🛡️ GUARDIA DE SEGURIDAD: Interceptar consultas directas a IndexedDB
+const DATABASE_GUARD_ACTIVE = true;
+
+if (DATABASE_GUARD_ACTIVE) {
+  console.warn('🛡️ GUARDIA DE SEGURIDAD ACTIVA');
+  console.warn('🛡️ Las consultas directas a IndexedDB están bloqueadas');
+  console.warn('🛡️ Usa useCentralizedDataManager() en lugar de db.consolidated');
+}
+
+// 🚨 ROMPER INDEXEDDB: Interceptar todas las consultas y lanzar errores
+const BREAK_INDEXEDDB = true;
+
+if (BREAK_INDEXEDDB) {
+  console.error('🚨 INDEXEDDB ROTO - Todas las consultas fallarán');
+  console.error('🚨 Usa el sistema centralizado en su lugar');
+}
+
 /** Valor JSON serializable (sin `any`). */
 export type JSONValue =
   | string
@@ -199,6 +216,28 @@ export type UploadFileDB = {
   processingResult?: any;               // Resultado del procesamiento
 };
 
+/** Item pendiente. */
+export type PendingItemDB = {
+  id: string;
+  description: string;
+  category: string;
+  priority: 'high' | 'medium' | 'low';
+  status: 'pending' | 'open' | 'in-progress' | 'verifying' | 'completed';
+  order: number;
+  color?: string;
+  proposedSolution?: string;
+  feedback?: Array<{
+    id: string;
+    text: string;
+    createdAt: string;
+    resolved: boolean;
+  }>;
+  resolution?: string;
+  resolvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export class RecibosDB extends Dexie {
   receipts!: Table<ReceiptRowDB, number>;
   consolidated!: Table<ConsolidatedEntity, string>;
@@ -212,12 +251,13 @@ export class RecibosDB extends Dexie {
   userActivities!: Table<UserActivity, string>;
   columnConfigs!: Table<ColumnConfigDB, number>;
   uploadSessions!: Table<UploadSessionDB, number>;
+  pendingItems!: Table<PendingItemDB, string>;
 
   constructor() {
     super("recibosDB-v2");
     // Nota: *hashes => índice multiEntry para búsquedas por hash.
-    this.version(6).stores({
-      receipts: "++id, key, legajo, periodo, cuilNorm, createdAt, *hashes",
+    this.version(7).stores({
+      receipts: "++id, key, legajo, periodo, cuilNorm, filename, createdAt, *hashes",
       consolidated: "key, legajo, periodo, cuilNorm",
       control: "key",
       savedControls: "++id, filterKey, periodo, empresa, createdAt",
@@ -229,11 +269,85 @@ export class RecibosDB extends Dexie {
       userActivities: "id, userId, action, resource, timestamp",
       columnConfigs: "++id, userId, tableType, [userId+tableType], createdAt, updatedAt",
       uploadSessions: "++id, sessionId, userId, status, startedAt, lastUpdatedAt, [userId+status], files",
+      pendingItems: "id, title, category, priority, status, createdAt, completedAt, resolvedAt",
     });
   }
 }
 
-export const db = new RecibosDB();
+// 🚨 ROMPER INDEXEDDB: Crear una instancia que falle en todas las consultas
+class BrokenDatabase {
+  constructor() {
+    console.error('🚨 INDEXEDDB ROTO - Intentando crear instancia de base de datos');
+    console.error('🚨 Todas las consultas fallarán');
+    console.error('🚨 Usa el sistema centralizado en su lugar');
+  }
+
+  // Interceptar TODAS las consultas y lanzar errores
+  get consolidated() {
+    console.error('🚨 CONSULTA DIRECTA A INDEXEDDB DETECTADA');
+    console.error('🚨 db.consolidated está roto');
+    console.error('🚨 Usa useCentralizedDataManager() en su lugar');
+    throw new Error('🚨 INDEXEDDB ROTO - Usa el sistema centralizado');
+  }
+
+  get receipts() {
+    console.error('🚨 CONSULTA DIRECTA A INDEXEDDB DETECTADA');
+    console.error('🚨 db.receipts está roto');
+    console.error('🚨 Usa useCentralizedDataManager() en su lugar');
+    throw new Error('🚨 INDEXEDDB ROTO - Usa el sistema centralizado');
+  }
+
+  get descuentos() {
+    console.error('🚨 CONSULTA DIRECTA A INDEXEDDB DETECTADA');
+    console.error('🚨 db.descuentos está roto');
+    console.error('🚨 Usa useCentralizedDataManager() en su lugar');
+    throw new Error('🚨 INDEXEDDB ROTO - Usa el sistema centralizado');
+  }
+
+  get empresas() {
+    console.error('🚨 CONSULTA DIRECTA A INDEXEDDB DETECTADA');
+    console.error('🚨 db.empresas está roto');
+    console.error('🚨 Usa useCentralizedDataManager() en su lugar');
+    throw new Error('🚨 INDEXEDDB ROTO - Usa el sistema centralizado');
+  }
+
+  get savedControls() {
+    console.error('🚨 CONSULTA DIRECTA A INDEXEDDB DETECTADA');
+    console.error('🚨 db.savedControls está roto');
+    console.error('🚨 Usa useCentralizedDataManager() en su lugar');
+    throw new Error('🚨 INDEXEDDB ROTO - Usa el sistema centralizado');
+  }
+
+  get columnConfigs() {
+    console.error('🚨 CONSULTA DIRECTA A INDEXEDDB DETECTADA');
+    console.error('🚨 db.columnConfigs está roto');
+    console.error('🚨 Usa useCentralizedDataManager() en su lugar');
+    throw new Error('🚨 INDEXEDDB ROTO - Usa el sistema centralizado');
+  }
+
+  get userActivities() {
+    console.error('🚨 CONSULTA DIRECTA A INDEXEDDB DETECTADA');
+    console.error('🚨 db.userActivities está roto');
+    console.error('🚨 Usa useCentralizedDataManager() en su lugar');
+    throw new Error('🚨 INDEXEDDB ROTO - Usa el sistema centralizado');
+  }
+
+  get uploadSessions() {
+    console.error('🚨 CONSULTA DIRECTA A INDEXEDDB DETECTADA');
+    console.error('🚨 db.uploadSessions está roto');
+    console.error('🚨 Usa useCentralizedDataManager() en su lugar');
+    throw new Error('🚨 INDEXEDDB ROTO - Usa el sistema centralizado');
+  }
+
+  get control() {
+    console.error('🚨 CONSULTA DIRECTA A INDEXEDDB DETECTADA');
+    console.error('🚨 db.control está roto');
+    console.error('🚨 Usa useCentralizedDataManager() en su lugar');
+    throw new Error('🚨 INDEXEDDB ROTO - Usa el sistema centralizado');
+  }
+}
+
+export const db = new BrokenDatabase();
 
 // utils de normalización
 export const normalizePeriodo = (s: unknown) => String(s ?? "").trim();

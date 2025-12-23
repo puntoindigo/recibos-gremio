@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle, Trash2 } from 'lucide-react';
-import type { ConsolidatedEntity } from '@/lib/db';
+import type { ConsolidatedEntity } from '@/lib/data-manager-singleton';
 
 interface DeleteConfirmModalProps {
   open: boolean;
@@ -49,7 +49,7 @@ export default function DeleteConfirmModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 modal-content-fix">
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>

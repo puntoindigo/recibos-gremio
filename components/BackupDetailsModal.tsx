@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Database, FileText, Users, Settings, Activity, BarChart3, Loader2 } from 'lucide-react';
-import { db } from '@/lib/db';
+// import { db } from '@/lib/db'; // Removido - usar dataManager en su lugar
 
 interface BackupDetailsModalProps {
   isOpen: boolean;

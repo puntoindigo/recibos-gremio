@@ -6,7 +6,7 @@ import { Check, ChevronsUpDown, Search, X, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import type { ConsolidatedEntity } from '@/lib/db';
+import type { ConsolidatedEntity } from '@/lib/data-manager-singleton';
 
 interface EmployeeSelectorProps {
   employees: ConsolidatedEntity[];
@@ -204,6 +204,7 @@ export const EmployeeSelector = forwardRef<HTMLInputElement, EmployeeSelectorPro
                     variant="outline"
                     size="sm"
                     onClick={() => {
+                      console.log('👤 BOTÓN "Crear empleado nuevo" clickeado en EmployeeSelector');
                       onCreateEmployee();
                       setOpen(false);
                     }}

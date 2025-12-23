@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useState, useEffect } from 'react';
-import ConfirmModal from '@/components/ConfirmModal';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import type { ConsolidatedEntity } from '@/lib/repo';
 
 interface ExcelExporterProps {

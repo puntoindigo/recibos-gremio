@@ -1,8 +1,9 @@
 // hooks/useEmpresasInUse.ts
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/db';
+import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 
 export function useEmpresasInUse() {
+  const { dataManager } = useCentralizedDataManager();
   const [empresas, setEmpresas] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -13,7 +14,7 @@ export function useEmpresasInUse() {
       setError(null);
       try {
         // Obtener empresas de la tabla consolidated
-        const consolidatedRecords = await db.consolidated.toArray();
+        const consolidatedRecords = await dataManager.getConsolidated();
         const empresasFromConsolidated = new Set<string>();
         
         consolidatedRecords.forEach(record => {
@@ -23,7 +24,7 @@ export function useEmpresasInUse() {
         });
 
         // Obtener empresas de la tabla receipts
-        const receiptRecords = await db.receipts.toArray();
+        const receiptRecords = await dataManager.getReceipts();
         const empresasFromReceipts = new Set<string>();
         
         receiptRecords.forEach(record => {
@@ -43,9 +44,7 @@ export function useEmpresasInUse() {
         ).sort();
 
         // Debug: Log todas las empresas encontradas
-        console.log('🔍 Debug useEmpresasInUse - Empresas encontradas:', empresasValidas);
-        console.log('🔍 Debug useEmpresasInUse - Total registros consolidated:', consolidatedRecords.length);
-        console.log('🔍 Debug useEmpresasInUse - Total registros receipts:', receiptRecords.length);
+        // Logs de debug removidos
 
         setEmpresas(empresasValidas);
       } catch (err) {
