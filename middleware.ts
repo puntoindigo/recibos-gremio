@@ -8,13 +8,20 @@ export default withAuth(
   {
     callbacks: {
       authorized: ({ token, req }) => {
-        // Permitir acceso a páginas públicas
-        if (req.nextUrl.pathname.startsWith('/auth/')) {
+        const pathname = req.nextUrl.pathname;
+        
+        // Permitir acceso a páginas públicas sin autenticación
+        if (pathname.startsWith('/auth/')) {
           return true;
         }
         
         // Permitir acceso a documentación sin autenticación
-        if (req.nextUrl.pathname.startsWith('/docs')) {
+        if (pathname.startsWith('/docs')) {
+          return true;
+        }
+        
+        // Permitir acceso a API routes sin autenticación (se manejan internamente)
+        if (pathname.startsWith('/api/')) {
           return true;
         }
         
