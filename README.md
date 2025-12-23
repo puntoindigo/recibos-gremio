@@ -95,6 +95,11 @@ cp .env.example .env.local
 # Editar .env.local con tus credenciales
 # IMPORTANTE: Genera un NEXTAUTH_SECRET seguro con: openssl rand -base64 32
 
+# Para importar variables a Vercel:
+# 1. Edita .env.vercel y actualiza NEXTAUTH_URL con tu dominio de Vercel
+# 2. En Vercel Dashboard → Settings → Environment Variables → Import
+# 3. O usa el script: ./scripts/update-vercel-env.sh
+
 # Ejecutar en desarrollo
 npm run dev
 ```
