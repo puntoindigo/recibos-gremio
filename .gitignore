@@ -10,6 +10,13 @@ dist/
 .env.*
 !.env.example
 
+# Secretos y claves
+**/*secret*
+**/*key*
+**/*password*
+**/*token*
+**/*credential*
+
 # Sistema/IDE
 .DS_Store
 *.log

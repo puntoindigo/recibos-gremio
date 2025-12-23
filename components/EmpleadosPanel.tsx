@@ -84,9 +84,6 @@ export default function EmpleadosPanel({ empresaFiltro }: EmpleadosPanelProps) {
   useEffect(() => {
     if (session?.user) {
       // Usuario autenticado
-        permissions: session.user.permissions,
-        canManage
-      });
     }
   }, [session, canManage]);
 

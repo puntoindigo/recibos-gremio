@@ -1,8 +1,13 @@
 // test-supabase.js
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://gtfbwschnxhcxctsnxep.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0ZmJ3c2Nobnh4Y3hjdHNueGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyMjk2MjksImV4cCI6MjA3MTg4NTYyOX0.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0ZmJ3c2Nobnh4Y3hjdHNueGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyMjk2MjksImV4cCI6MjA3MTg4NTYyOX0';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Error: Se requieren las variables de entorno NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  process.exit(1);
+}
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 

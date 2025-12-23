@@ -1,4 +1,4 @@
-'use client';
+o'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
