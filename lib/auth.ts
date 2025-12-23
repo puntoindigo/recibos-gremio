@@ -2,6 +2,27 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
+// Detectar NEXTAUTH_URL automáticamente según el entorno
+function getNextAuthUrl(): string {
+  // En Vercel, usar la variable de entorno o detectar automáticamente
+  if (process.env.NEXTAUTH_URL) {
+    return process.env.NEXTAUTH_URL;
+  }
+  
+  // En Vercel, usar VERCEL_URL si está disponible
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  
+  // En desarrollo local, usar localhost:3000
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:3000';
+  }
+  
+  // Fallback
+  return 'http://localhost:3000';
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
