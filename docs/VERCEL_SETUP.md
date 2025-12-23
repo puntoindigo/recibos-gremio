@@ -12,6 +12,20 @@ Esta guía te ayudará a configurar las variables de entorno en Vercel para que 
 
 ### 2. Agregar Variables de Entorno
 
+#### Opción A: Importar desde archivo (Recomendado)
+
+1. En tu proyecto local, edita el archivo `.env.vercel` y actualiza:
+   - `NEXTAUTH_URL` con tu dominio real de Vercel (ej: `https://recibos-gremio.vercel.app`)
+   - `SUPABASE_SERVICE_ROLE_KEY` con tu service role key de Supabase
+
+2. En Vercel Dashboard:
+   - Ve a **Settings** → **Environment Variables**
+   - Haz clic en **"Import"** o **"Add"**
+   - Copia y pega el contenido de `.env.vercel`
+   - Selecciona los ambientes: **Production**, **Preview** y **Development**
+
+#### Opción B: Agregar manualmente
+
 Agrega las siguientes variables para **Production**, **Preview** y **Development**:
 
 #### Supabase
@@ -73,4 +87,12 @@ Después del deploy, verifica que:
 - Si cambias `NEXTAUTH_SECRET`, todos los usuarios deberán iniciar sesión nuevamente
 - El `NEXTAUTH_URL` debe coincidir exactamente con tu dominio de Vercel (incluyendo `https://`)
 - En Vercel, puedes usar variables diferentes para Production, Preview y Development
+- El archivo `.env.vercel` está en `.gitignore` y **NO** se sube al repositorio
+
+## 🔄 Actualizar Variables
+
+Si necesitas actualizar las variables:
+1. Edita `.env.vercel` localmente
+2. Ve a Vercel Dashboard → Settings → Environment Variables
+3. Elimina las variables antiguas y vuelve a importar desde `.env.vercel`
 
