@@ -93,12 +93,25 @@ npm install
 # Configurar variables de entorno
 cp .env.example .env.local
 # Editar .env.local con tus credenciales
+# IMPORTANTE: Genera un NEXTAUTH_SECRET seguro con: openssl rand -base64 32
 
 # Ejecutar en desarrollo
 npm run dev
 ```
 
 ### Variables de Entorno
+
+Copia `.env.example` a `.env.local` y completa con tus valores:
+
+```bash
+cp .env.example .env.local
+```
+
+**Importante**: 
+- `.env.local` está en `.gitignore` y **NO** se subirá al repositorio
+- Genera un `NEXTAUTH_SECRET` seguro con: `openssl rand -base64 32`
+- Para configuración en Vercel, consulta [docs/VERCEL_SETUP.md](docs/VERCEL_SETUP.md)
+
 ```env
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -106,10 +119,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
 # NextAuth
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your_secret_key
+NEXTAUTH_URL=http://localhost:3000  # En Vercel se detecta automáticamente
+NEXTAUTH_SECRET=your_secret_key      # Genera con: openssl rand -base64 32
 
-# Base de datos
+# Base de datos (opcional)
 DATABASE_URL=your_database_url
 ```
 
