@@ -24,6 +24,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 3. Copia los siguientes valores:
    - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
    - **anon public** key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - **service_role** key → `SUPABASE_SERVICE_ROLE_KEY` ⚠️ **IMPORTANTE**: Esta clave tiene permisos completos, mantenla segura
 
 ### Paso 3: Configurar Variables
 1. Crea el archivo `.env.local` en la raíz del proyecto
@@ -32,7 +33,27 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...  # service_role key
 ```
+
+### 🔑 Obtener SUPABASE_SERVICE_ROLE_KEY
+
+La **Service Role Key** es una clave especial que tiene permisos completos en tu base de datos. Se usa para operaciones administrativas y scripts.
+
+**⚠️ ADVERTENCIA DE SEGURIDAD:**
+- Esta clave **NO** debe exponerse en el código del cliente
+- **NO** debe estar en variables con `NEXT_PUBLIC_`
+- Solo úsala en el servidor (API routes, scripts, etc.)
+- Si se compromete, revócala inmediatamente desde Supabase
+
+**Cómo obtenerla:**
+1. Ve a tu proyecto en [Supabase Dashboard](https://supabase.com/dashboard)
+2. Selecciona tu proyecto
+3. Ve a **Settings** → **API**
+4. En la sección **Project API keys**, busca **service_role** (no "anon")
+5. Haz clic en el ícono de **ojo** 👁️ para revelar la clave
+6. Copia la clave completa (es muy larga, empieza con `eyJ...`)
+7. Pégalo en tu `.env.local` como `SUPABASE_SERVICE_ROLE_KEY=...`
 
 ## 🚀 Ejecutar Script SQL
 

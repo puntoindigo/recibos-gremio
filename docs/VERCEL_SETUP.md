@@ -42,6 +42,8 @@ Valor: [Tu clave anon de Supabase]
 ```
 SUPABASE_SERVICE_ROLE_KEY
 Valor: [Tu service role key de Supabase]
+Nota: Obtén esta clave desde Supabase Dashboard → Settings → API → service_role key
+      Ver instrucciones detalladas en: docs/OBTENER_SERVICE_ROLE_KEY.md
 ```
 
 #### NextAuth.js
