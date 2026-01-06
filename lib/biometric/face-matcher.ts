@@ -31,7 +31,7 @@ export async function findEmployeeByFace(
 ): Promise<FaceMatchResult | null> {
   try {
     // Obtener todos los empleados con descriptores faciales
-    const allConsolidated = await dataManager.getAllConsolidated();
+    const allConsolidated = await dataManager.getConsolidated();
     
     // Filtrar solo los que tienen descriptor facial
     const employeesWithFace = allConsolidated

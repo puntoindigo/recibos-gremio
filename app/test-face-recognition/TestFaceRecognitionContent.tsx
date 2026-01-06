@@ -8,6 +8,8 @@ import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { 
   Camera, 
   Video, 
@@ -37,17 +39,24 @@ export default function TestFaceRecognitionContent() {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [autoRecognitionEnabled, setAutoRecognitionEnabled] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const recognitionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastRecognizedLegajoRef = useRef<string | null>(null);
 
   // Cargar modelos al montar
   useEffect(() => {
     loadModels();
   }, [loadModels]);
 
-  // Limpiar stream al desmontar
+  // Limpiar stream y intervalos al desmontar
   useEffect(() => {
     return () => {
+      if (recognitionIntervalRef.current) {
+        clearInterval(recognitionIntervalRef.current);
+        recognitionIntervalRef.current = null;
+      }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
@@ -57,6 +66,68 @@ export default function TestFaceRecognitionContent() {
       }
     };
   }, []);
+
+  // Reconocimiento automático continuo
+  useEffect(() => {
+    // Limpiar intervalo anterior si existe
+    if (recognitionIntervalRef.current) {
+      clearInterval(recognitionIntervalRef.current);
+      recognitionIntervalRef.current = null;
+    }
+
+    // Solo iniciar reconocimiento automático si:
+    // - La cámara está activa
+    // - Los modelos están cargados
+    // - El reconocimiento automático está habilitado
+    // - No hay un reconocimiento en curso
+    if (isStreaming && state.isModelLoaded && autoRecognitionEnabled && !isRecognizing) {
+      recognitionIntervalRef.current = setInterval(async () => {
+        if (!videoRef.current || isRecognizing || !state.isModelLoaded) {
+          return;
+        }
+
+        try {
+          // Detectar rostro y obtener descriptor
+          const descriptor = await detectFace(videoRef.current);
+          
+          if (!descriptor) {
+            // No hay rostro detectado, limpiar reconocimiento previo después de un tiempo
+            return;
+          }
+
+          // Buscar empleado que coincida
+          const match = await findEmployeeByFace(descriptor, dataManager);
+
+          if (match) {
+            // Solo actualizar si es un empleado diferente o si pasó suficiente tiempo
+            if (lastRecognizedLegajoRef.current !== match.legajo) {
+              setRecognizedEmployee(match);
+              lastRecognizedLegajoRef.current = match.legajo;
+              toast.success(`Empleado reconocido: ${match.nombre} (${match.legajo})`, {
+                duration: 2000,
+              });
+            }
+          } else {
+            // Si no hay coincidencia, limpiar después de un tiempo
+            if (lastRecognizedLegajoRef.current !== null) {
+              lastRecognizedLegajoRef.current = null;
+              setRecognizedEmployee(null);
+            }
+          }
+        } catch (error) {
+          console.error('Error en reconocimiento automático:', error);
+          // No mostrar toast para errores silenciosos en reconocimiento automático
+        }
+      }, 2000); // Reconocer cada 2 segundos
+    }
+
+    return () => {
+      if (recognitionIntervalRef.current) {
+        clearInterval(recognitionIntervalRef.current);
+        recognitionIntervalRef.current = null;
+      }
+    };
+  }, [isStreaming, state.isModelLoaded, autoRecognitionEnabled, isRecognizing, detectFace, dataManager]);
 
   const startCamera = async () => {
     // Verificar que getUserMedia esté disponible
@@ -92,6 +163,7 @@ export default function TestFaceRecognitionContent() {
       streamRef.current = stream;
       setIsStreaming(true);
       setRecognizedEmployee(null);
+      lastRecognizedLegajoRef.current = null;
       setIsStartingCamera(false);
 
       // Esperar a que el video esté listo
@@ -131,6 +203,12 @@ export default function TestFaceRecognitionContent() {
   };
 
   const stopStream = () => {
+    // Limpiar intervalo de reconocimiento automático
+    if (recognitionIntervalRef.current) {
+      clearInterval(recognitionIntervalRef.current);
+      recognitionIntervalRef.current = null;
+    }
+    
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -139,6 +217,8 @@ export default function TestFaceRecognitionContent() {
       videoRef.current.srcObject = null;
     }
     setIsStreaming(false);
+    setRecognizedEmployee(null);
+    lastRecognizedLegajoRef.current = null;
     stopDetection();
   };
 
@@ -238,7 +318,9 @@ export default function TestFaceRecognitionContent() {
           <CardHeader>
             <CardTitle className="text-lg">Cámara</CardTitle>
             <CardDescription>
-              Activa la cámara y captura un rostro para reconocer al empleado
+              {autoRecognitionEnabled 
+                ? 'Reconocimiento automático activado. El sistema reconocerá empleados automáticamente.'
+                : 'Activa la cámara y usa el botón para reconocer manualmente.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -270,6 +352,23 @@ export default function TestFaceRecognitionContent() {
               </div>
             )}
 
+            {/* Toggle de reconocimiento automático */}
+            {isStreaming && (
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                <div className="flex items-center gap-2">
+                  <Camera className="h-4 w-4 text-gray-600" />
+                  <Label htmlFor="auto-recognition" className="text-sm font-medium cursor-pointer">
+                    Reconocimiento automático
+                  </Label>
+                </div>
+                <Switch
+                  id="auto-recognition"
+                  checked={autoRecognitionEnabled}
+                  onCheckedChange={setAutoRecognitionEnabled}
+                />
+              </div>
+            )}
+
             <div className="flex gap-2">
               {!isStreaming ? (
                 <Button
@@ -291,23 +390,31 @@ export default function TestFaceRecognitionContent() {
                 </Button>
               ) : (
                 <>
-                  <Button
-                    onClick={recognizeFace}
-                    disabled={isRecognizing || state.isDetecting}
-                    className="flex-1 bg-green-600 hover:bg-green-700"
-                  >
-                    {isRecognizing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Reconociendo...
-                      </>
-                    ) : (
-                      <>
-                        <Camera className="h-4 w-4 mr-2" />
-                        Reconocer Empleado
-                      </>
-                    )}
-                  </Button>
+                  {!autoRecognitionEnabled && (
+                    <Button
+                      onClick={recognizeFace}
+                      disabled={isRecognizing || state.isDetecting}
+                      className="flex-1 bg-green-600 hover:bg-green-700"
+                    >
+                      {isRecognizing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Reconociendo...
+                        </>
+                      ) : (
+                        <>
+                          <Camera className="h-4 w-4 mr-2" />
+                          Reconocer Empleado
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {autoRecognitionEnabled && (
+                    <div className="flex-1 flex items-center justify-center gap-2 text-sm text-gray-600">
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                      <span>Reconociendo automáticamente...</span>
+                    </div>
+                  )}
                   <Button
                     onClick={stopStream}
                     variant="outline"
