@@ -21,8 +21,10 @@ import {
   Database,
   BookOpen,
   Settings,
-  CheckSquare
+  CheckSquare,
+  Camera
 } from 'lucide-react';
+import Link from 'next/link';
 
 interface SidebarNavigationProps {
   activeTab: string;
@@ -195,6 +197,19 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
         {/* Footer del sidebar */}
         <div className="p-4 border-t border-gray-200 flex-shrink-0">
           <div className="space-y-3">
+            {/* Botón temporal de prueba de reconocimiento facial */}
+            <Link href="/test-face-recognition">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start bg-yellow-50 hover:bg-yellow-100 border-yellow-300 text-yellow-700 hover:text-yellow-800 font-medium"
+                title="Prueba temporal de reconocimiento facial"
+              >
+                <Camera className="h-4 w-4 mr-2" />
+                🧪 Prueba Reconocimiento Facial
+              </Button>
+            </Link>
+
             {/* Información del usuario */}
             <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-xl">
               <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">

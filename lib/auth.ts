@@ -74,6 +74,30 @@ export const authOptions: NextAuthOptions = {
                 empresaId: 'empresa_limpar',
                 permissions: ['recibos', 'controles']
               }
+            },
+            {
+              email: 'adminregistro@recibos.com',
+              password: 'adminreg123',
+              user: {
+                id: 'adminregistro_initial',
+                email: 'adminregistro@recibos.com',
+                name: 'Administrador Registro',
+                role: 'ADMIN_REGISTRO',
+                empresaId: undefined,
+                permissions: ['empresas', 'empleados', 'accesos']
+              }
+            },
+            {
+              email: 'registro@recibos.com',
+              password: 'registro123',
+              user: {
+                id: 'registro_initial',
+                email: 'registro@recibos.com',
+                name: 'Operador Registro',
+                role: 'REGISTRO',
+                empresaId: undefined,
+                permissions: ['registro']
+              }
             }
           ];
 

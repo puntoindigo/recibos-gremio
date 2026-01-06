@@ -23,7 +23,13 @@ import {
   CheckCircle,
   XCircle,
   X,
-  ArrowLeft
+  ArrowLeft,
+  LogIn,
+  LogOut,
+  Clock,
+  MapPin,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { getFichaEmpleado } from '@/lib/descuentos-manager';
 // import { db } from '@/lib/db'; // Removido - usar dataManager en su lugar
@@ -55,7 +61,9 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
   const { dataManager } = useCentralizedDataManager();
   const [fichaData, setFichaData] = useState<FichaData | null>(null);
   const [recibos, setRecibos] = useState<any[]>([]);
+  const [registros, setRegistros] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadFichaData();
@@ -89,10 +97,57 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
       console.log('🔍 Debug ficha creada:', ficha);
       setFichaData(ficha);
       setRecibos(empleadoData.recibos);
-    } catch (error) {
-      console.error('Error cargando ficha del empleado:', error);
+      
+      // Cargar registros de entrada/salida
+      try {
+        const registrosData = await dataManager.getRegistrosByLegajo(legajo);
+        setRegistros(registrosData || []);
+      } catch (registrosError: any) {
+        console.error('❌ Error cargando registros en ficha:', {
+          legajo,
+          error: registrosError,
+          code: registrosError?.code,
+          message: registrosError?.message,
+          details: registrosError?.details,
+          hint: registrosError?.hint,
+          fullError: JSON.stringify(registrosError, null, 2)
+        });
+        // No romper la ficha si falla cargar registros
+        setRegistros([]);
+      }
+    } catch (error: any) {
+      console.error('❌ Error cargando ficha del empleado:', {
+        error,
+        legajo,
+        empresa,
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        fullError: JSON.stringify(error, null, 2)
+      });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeleteRegistro = async (id: string) => {
+    if (!confirm('¿Estás seguro de eliminar este registro?')) {
+      return;
+    }
+
+    setDeletingId(id);
+    try {
+      await dataManager.deleteRegistro(id);
+      // Recargar registros
+      const registrosData = await dataManager.getRegistrosByLegajo(legajo);
+      setRegistros(registrosData || []);
+      toast.success('Registro eliminado exitosamente');
+    } catch (error) {
+      console.error('Error eliminando registro:', error);
+      toast.error('Error al eliminar el registro');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -231,6 +286,95 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
               </CardContent>
             </Card>
           </div>
+
+          {/* Registros de Entrada/Salida */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Clock className="h-5 w-5" />
+                <span>Registros de Entrada/Salida</span>
+              </CardTitle>
+              <CardDescription>
+                Historial de registros de asistencia
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {registros.length > 0 ? (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {registros.map((registro) => (
+                    <div
+                      key={registro.id}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        registro.accion === 'entrada' 
+                          ? 'bg-green-50 border-green-200' 
+                          : registro.accion === 'salida'
+                          ? 'bg-red-50 border-red-200'
+                          : 'bg-blue-50 border-blue-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 flex-1">
+                        {registro.accion === 'entrada' ? (
+                          <LogIn className="h-5 w-5 text-green-600" />
+                        ) : registro.accion === 'salida' ? (
+                          <LogOut className="h-5 w-5 text-red-600" />
+                        ) : (
+                          <User className="h-5 w-5 text-blue-600" />
+                        )}
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <Badge className={
+                                registro.accion === 'entrada' 
+                                  ? 'bg-green-600 text-white' 
+                                  : registro.accion === 'salida'
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-blue-600 text-white'
+                              }>
+                                {registro.accion === 'entrada' ? 'ENTRADA' : registro.accion === 'salida' ? 'SALIDA' : 'ALTA'}
+                              </Badge>
+                              <span className="text-sm text-gray-600">
+                                {new Date(registro.fecha_hora).toLocaleString('es-AR', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3 text-gray-400" />
+                                <span className="text-xs text-gray-500">{registro.sede || 'CENTRAL'}</span>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-100"
+                                onClick={() => handleDeleteRegistro(registro.id)}
+                                disabled={deletingId === registro.id}
+                              >
+                                {deletingId === registro.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No hay registros de entrada/salida</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Descuentos activos */}
           <Card>

@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Crown, Shield, User } from 'lucide-react';
+import { Loader2, Crown, Shield, User, ClipboardList, Clock } from 'lucide-react';
 
 // Credenciales por defecto para cada rol
 const defaultCredentials = [
@@ -43,6 +43,26 @@ const defaultCredentials = [
     icon: User,
     color: 'bg-gradient-to-br from-green-500 to-emerald-500',
     permissions: ['Recibos', 'Controles']
+  },
+  {
+    role: 'ADMIN_REGISTRO',
+    email: 'adminregistro@recibos.com',
+    password: 'adminreg123',
+    name: 'Administrador Registro',
+    description: 'Gestión de empresas, empleados y accesos',
+    icon: ClipboardList,
+    color: 'bg-gradient-to-br from-orange-500 to-red-500',
+    permissions: ['Empresas', 'Empleados', 'Accesos']
+  },
+  {
+    role: 'REGISTRO',
+    email: 'registro@recibos.com',
+    password: 'registro123',
+    name: 'Operador Registro',
+    description: 'Solo registro de entradas y salidas',
+    icon: Clock,
+    color: 'bg-gradient-to-br from-teal-500 to-blue-500',
+    permissions: ['Registro de Entradas/Salidas']
   }
 ];
 

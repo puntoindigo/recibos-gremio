@@ -11,7 +11,20 @@ const nextConfig: NextConfig = {
     // Los errores de linting se pueden corregir gradualmente
     ignoreDuringBuilds: true,
   },
-  serverExternalPackages: [],
+  // Excluir archivos grandes del tracing de serverless functions
+  outputFileTracingExcludes: {
+    '*': [
+      'node_modules/@tensorflow/**',
+      'node_modules/face-api.js/**',
+      'public/models/**',
+      'public/recibos/**',
+      'node_modules/.cache/**',
+      '.next/cache/**',
+      'node_modules/pdfjs-dist/**',
+    ],
+  },
+  // Excluir paquetes pesados del bundle del servidor
+  // serverComponentsExternalPackages removido - no es válido en Next.js 15.5.9
 };
 
 export default nextConfig;

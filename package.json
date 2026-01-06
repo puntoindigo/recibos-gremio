@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs || true"
+    "postinstall": "cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs || true",
+    "download-face-models": "node scripts/download-face-api-models.js"
   },
   "dependencies": {
     "@auth/core": "^0.34.2",

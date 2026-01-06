@@ -146,6 +146,12 @@ export interface DataManager {
   setAppConfig(key: string, value: any): Promise<void>;
   getAllAppConfigs(): Promise<any[]>;
   deleteAppConfig(key: string): Promise<void>;
+  
+  // Métodos para registros de entrada/salida
+  getAllRegistros(forceRefresh?: boolean): Promise<any[]>;
+  getRegistrosByLegajo(legajo: string): Promise<any[]>;
+  createRegistro(registro: any): Promise<void>;
+  deleteRegistro(id: string): Promise<void>;
 }
 
 /**
@@ -521,6 +527,23 @@ class SupabaseDataManager implements DataManager {
   async deleteSavedControl(id: string): Promise<void> {
     console.log('SUPABASE| deleteSavedControl() - Implementación pendiente');
     // TODO: Implementar deleteSavedControl en getSupabaseManager()
+  }
+
+  async getAllRegistros(forceRefresh: boolean = false): Promise<any[]> {
+    return await getSupabaseManager().getAllRegistros(forceRefresh);
+  }
+
+  async getRegistrosByLegajo(legajo: string): Promise<any[]> {
+    return await getSupabaseManager().getRegistrosByLegajo(legajo);
+  }
+
+  async createRegistro(registro: any): Promise<void> {
+    await getSupabaseManager().createRegistro(registro);
+    // No necesitamos retornar el registro creado
+  }
+
+  async deleteRegistro(id: string): Promise<void> {
+    await getSupabaseManager().deleteRegistro(id);
   }
 
   async clearSavedControls(): Promise<void> {

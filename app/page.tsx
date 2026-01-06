@@ -11,7 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { Download, FileUp, Loader2, CheckCircle2, XCircle, Menu, X, Plus, User, FileText, Bug, RefreshCw, Database, Wrench, ListTodo, Trash2, Settings, Square, AlertTriangle } from "lucide-react";
+import { Download, FileUp, Loader2, CheckCircle2, XCircle, Menu, X, Plus, User, FileText, Bug, RefreshCw, Database, Wrench, ListTodo, Trash2, Settings, Square, AlertTriangle, Camera } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { useConfiguration } from "@/contexts/ConfigurationContext";
 import { useCentralizedDataManager } from "@/hooks/useCentralizedDataManager";
@@ -61,6 +62,7 @@ import { EmpresasPanel } from "@/components/EmpresasPanel";
 import SidebarNavigation from "@/components/SidebarNavigation";
 import Dashboard, { DashboardRef } from "@/components/Dashboard";
 import BackupPanel from "@/components/BackupPanel";
+import AccesosPanel from "@/components/AccesosPanel";
 import ProcessingProgress from "@/components/ProcessingProgress";
 import PersistentUploadProgress from "@/components/PersistentUploadProgress";
 import DocumentationPanel from "@/components/DocumentationPanel";
@@ -93,6 +95,14 @@ export default function Page() {
   const { config, saveConfiguration: updateConfig } = useConfiguration();
   const { dataManager } = useCentralizedDataManager();
   const [activeTab, setActiveTab] = useState<string>("tablero");
+  
+  // Redirigir registro@recibos.com automáticamente a la página de registro
+  useEffect(() => {
+    if (session?.user?.email === 'registro@recibos.com' && activeTab !== 'registro') {
+      // Redirigir a la página de registro
+      window.location.href = '/test-face-recognition';
+    }
+  }, [session, activeTab]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showUploadLog, setShowUploadLog] = useState(false);
   const [showTestTools, setShowTestTools] = useState(false);
@@ -3253,6 +3263,20 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       )}
 
       <main className="mx-auto max-w-7xl 2xl:max-w-full p-4 lg:p-6 lg:ml-64">
+        {/* Banner temporal de prueba de reconocimiento facial */}
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-300 rounded-lg flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-yellow-800 font-medium">🧪 Prueba Temporal:</span>
+            <span className="text-yellow-700 text-sm">Reconocimiento Facial</span>
+          </div>
+          <Link href="/test-face-recognition">
+            <Button size="sm" className="bg-yellow-600 hover:bg-yellow-700 text-white">
+              <Camera className="h-4 w-4 mr-2" />
+              Probar Ahora
+            </Button>
+          </Link>
+        </div>
+
         {/* Header contextual - oculto en desktop */}
         <div className="mb-6 lg:hidden">
           <h2 className="text-2xl font-semibold text-gray-900">
@@ -3261,6 +3285,9 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             {activeTab === 'control' && 'Control'}
             {activeTab === 'export' && 'Exportar'}
             {activeTab === 'descuentos' && 'Descuentos'}
+            {activeTab === 'empleados' && 'Empleados'}
+            {activeTab === 'empresas' && 'Empresas'}
+            {activeTab === 'accesos' && 'Accesos'}
             {activeTab === 'usuarios' && 'Usuarios'}
             {activeTab === 'backup' && 'Backup'}
             {activeTab === 'documentacion' && 'Documentación'}
@@ -3272,6 +3299,9 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             {activeTab === 'control' && 'Control de nóminas y comparaciones'}
             {activeTab === 'export' && 'Exportación de datos'}
             {activeTab === 'descuentos' && 'Gestión de descuentos'}
+            {activeTab === 'empleados' && 'Gestión de empleados'}
+            {activeTab === 'empresas' && 'Gestión de empresas'}
+            {activeTab === 'accesos' && 'Registros de entradas y salidas'}
             {activeTab === 'usuarios' && 'Administración de usuarios'}
             {activeTab === 'backup' && 'Respaldo de base de datos'}
             {activeTab === 'documentacion' && 'Documentación del proyecto'}
@@ -3679,6 +3709,11 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
           {/* Empresas Tab */}
           <TabsContent value="empresas" className="space-y-4">
             <EmpresasPanel empresaFiltro={empresaFiltro} />
+          </TabsContent>
+
+          {/* Accesos Tab */}
+          <TabsContent value="accesos" className="space-y-4">
+            <AccesosPanel />
           </TabsContent>
 
           {/* Usuarios Tab */}

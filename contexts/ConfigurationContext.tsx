@@ -12,7 +12,8 @@ import {
   BookOpen, 
   Settings,
   Percent,
-  Building2
+  Building2,
+  ClipboardList
 } from 'lucide-react';
 
 export interface ConfigurationState {
@@ -184,8 +185,19 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         bgColor: 'bg-cyan-50',
         activeBgColor: 'bg-cyan-100',
         shortcut: 'M',
-        permission: 'empresas:view',
+        permission: 'empresas',
         enabledConfigKey: 'enableCompanyManagement'
+      },
+      { 
+        id: 'accesos', 
+        label: 'Accesos', 
+        icon: ClipboardList, 
+        color: 'text-violet-600',
+        bgColor: 'bg-violet-50',
+        activeBgColor: 'bg-violet-100',
+        shortcut: 'A',
+        permission: 'accesos',
+        enabledConfigKey: null
       },
       { 
         id: 'usuarios', 

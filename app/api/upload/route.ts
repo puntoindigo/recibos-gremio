@@ -61,7 +61,10 @@ export async function POST(req: Request) {
       const rawName = file.name || 'recibo.pdf';
       // Primero normalizar (eliminar paréntesis) y luego sanitizar (limpiar caracteres peligrosos)
       // Esto asegura que el nombre físico coincida con el nombre en la BD
-      const { normalizeFileName } = await import('@/lib/simple-pdf-processor');
+      // Función simple inline para evitar importar todo el módulo pesado
+      const normalizeFileName = (filename: string): string => {
+        return filename.replace(/\([^)]*\)/g, '').trim();
+      };
       const normalizedName = normalizeFileName(rawName);
       const safeName = sanitizeName(normalizedName);
     

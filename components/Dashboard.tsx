@@ -4,9 +4,10 @@ import { useState, useEffect, useImperativeHandle, forwardRef, useCallback } fro
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, FileText, CreditCard, Building2, TrendingUp, Calendar, Plus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Users, FileText, CreditCard, Building2, TrendingUp, Calendar, Plus, ChevronDown, ChevronRight, Clock, LogIn, LogOut } from 'lucide-react';
 import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { useConfiguration } from '@/contexts/ConfigurationContext';
+import { useSession } from 'next-auth/react';
 import { getEstadisticasDescuentos } from '@/lib/descuentos-manager';
 import type { ConsolidatedEntity } from '@/lib/repo';
 import UploadManagerModal from './UploadManagerModal';
@@ -55,6 +56,13 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
   const { dataManager } = useCentralizedDataManager();
   const { config } = useConfiguration();
   const { isLoading: isLoadingEmpresas, loadEmpresas } = useEmpresasLoading();
+  const { data: session } = useSession();
+  
+  // Función para verificar permisos
+  const canAccess = (permission: string) => {
+    if (!session?.user?.permissions) return false;
+    return session.user.permissions.includes(permission) || session.user.permissions.includes('*');
+  };
   
   const [stats, setStats] = useState<DashboardStats>({
     totalEmployees: 0,
@@ -69,12 +77,13 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showUploadManager, setShowUploadManager] = useState(false);
-  const [showCreateEmployee, setShowCreateEmployee] = useState(false);
+  const [showCreateEmployee, setShowCreateEmployee] = useState<boolean>(false);
   const [expandedCompany, setExpandedCompany] = useState<string | null>(null);
   const [employeesByCategory, setEmployeesByCategory] = useState<Record<string, Array<{
     categoria: string;
     count: number;
   }>>>({});
+  const [registros, setRegistros] = useState<any[]>([]);
   
   const loadDashboardData = useCallback(async () => {
     try {
@@ -186,8 +195,33 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
         receiptsByPeriod,
         recentActivity
       });
-    } catch (error) {
-      console.error('Error cargando datos del dashboard:', error);
+
+      // Cargar registros de entrada/salida
+      try {
+        const registrosData = await dataManager.getAllRegistros();
+        setRegistros(registrosData || []);
+      } catch (registrosError: any) {
+        console.error('❌ Error cargando registros en dashboard:', {
+          error: registrosError,
+          code: registrosError?.code,
+          message: registrosError?.message,
+          details: registrosError?.details,
+          hint: registrosError?.hint,
+          fullError: JSON.stringify(registrosError, null, 2)
+        });
+        // No romper el dashboard si falla cargar registros
+        setRegistros([]);
+      }
+    } catch (error: any) {
+      console.error('❌ Error cargando datos del dashboard:', {
+        error,
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        fullError: JSON.stringify(error, null, 2)
+      });
+      setError('Error cargando datos del dashboard');
     } finally {
       setLoading(false);
     }
@@ -284,6 +318,7 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
 
       {/* Estadísticas principales */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-6">
+        {canAccess('empleados') && (
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => onNavigateToTab?.('empleados')}
@@ -313,7 +348,9 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {canAccess('recibos') && (
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => onNavigateToTab?.('recibos')}
@@ -342,7 +379,9 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {canAccess('descuentos') && (
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => onNavigateToTab?.('descuentos')}
@@ -375,7 +414,9 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {canAccess('descuentos') && (
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => onNavigateToTab?.('descuentos')}
@@ -404,7 +445,9 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {canAccess('empresas') && (
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => onNavigateToTab?.('empresas')}
@@ -433,6 +476,7 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
             </div>
           </CardContent>
         </Card>
+        )}
 
         {/* Items Pendientes - Card destacada */}
         <Card 
@@ -617,6 +661,75 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
             </div>
           </CardContent>
         </Card>
+
+        {/* Registros de Entrada/Salida */}
+        {(canAccess('accesos') || canAccess('registro')) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Registros
+            </CardTitle>
+            <CardDescription>
+              Últimos registros de entrada/salida
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {registros.slice(0, 20).map((registro) => (
+                <div
+                  key={registro.id}
+                  className={`flex items-center justify-between p-2 rounded-lg border text-sm ${
+                    registro.accion === 'entrada' 
+                      ? 'bg-green-50 border-green-200' 
+                      : 'bg-red-50 border-red-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {registro.accion === 'entrada' ? (
+                      <LogIn className="h-4 w-4 text-green-600 flex-shrink-0" />
+                    ) : (
+                      <LogOut className="h-4 w-4 text-red-600 flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{registro.nombre}</span>
+                        <Badge variant="outline" className="text-xs flex-shrink-0">
+                          {registro.legajo}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-600 mt-0.5">
+                        <span className="truncate">{registro.empresa}</span>
+                        <span>•</span>
+                        <span className="flex-shrink-0">
+                          {new Date(registro.fecha_hora).toLocaleString('es-AR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                    <Badge className={`ml-2 flex-shrink-0 ${
+                      registro.accion === 'entrada' 
+                        ? 'bg-green-600 text-white' 
+                        : 'bg-red-600 text-white'
+                    }`}>
+                      {registro.accion === 'entrada' ? 'ENTRADA' : 'SALIDA'}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+              {registros.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No hay registros disponibles
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        )}
       </div>
 
       {/* Actividad reciente */}
@@ -662,7 +775,7 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
       {/* Modal de Registrar Empleado */}
       {showCreateEmployee && (
         <EmpleadoModal
-          empleado={null}
+          empleado={undefined}
           onClose={() => setShowCreateEmployee(false)}
           onSave={() => {
             console.log('✅ Empleado registrado');

@@ -6,7 +6,8 @@ import type {
   SupabaseDescuento, 
   SupabaseColumnConfig,
   SupabasePendingItem,
-  SupabaseAppConfig
+  SupabaseAppConfig,
+  SupabaseRegistro
 } from './supabase-client';
 
 // Cache de datos para evitar peticiones duplicadas
@@ -146,7 +147,10 @@ export class SupabaseManager {
       
       // Limpiar cache relacionado
       dataCache.delete('receipts_all');
-      dataCache.delete(`receipts_empresa_${receipt.empresa}`);
+      const empresa = receipt.data?.EMPRESA || '';
+      if (empresa) {
+        dataCache.delete(`receipts_empresa_${empresa}`);
+      }
       
       return data;
     } finally {
@@ -773,38 +777,90 @@ export class SupabaseManager {
     loadingState.setLoading('consolidated', true);
     
     try {
-      // Intentar primero con id
-      let { data, error } = await this.client
-        .from('consolidated')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', key)
-        .select()
-        .maybeSingle();
+      // Determinar si el key parece ser un UUID (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+      // o un key compuesto (formato: legajo-periodo-empresa)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key);
       
-      // Si no encontramos por id, intentar con key
-      if (error || !data) {
-        console.log(`⚠️ No se encontró registro con id="${key}", intentando por key...`);
-        const result = await this.client
+      let data: SupabaseConsolidated | null = null;
+      let error: any = null;
+      
+      // Si parece ser un UUID, intentar primero por id, luego por key
+      // Si no parece ser un UUID, buscar directamente por key
+      if (isUUID) {
+        // Intentar primero con id (UUID)
+        const resultById = await this.client
           .from('consolidated')
           .update({ ...updates, updated_at: new Date().toISOString() })
-          .eq('key', key)
+          .eq('id', key)
           .select()
           .maybeSingle();
         
-        if (result.error) {
-          console.error(`❌ Error actualizando consolidated con key="${key}":`, result.error);
-          throw result.error;
+        if (resultById.data) {
+          data = resultById.data;
+          console.log(`✅ Registro actualizado exitosamente por id="${key}"`);
+        } else if (resultById.error) {
+          error = resultById.error;
         }
-        
-        if (!result.data) {
-          console.error(`❌ No se encontró registro consolidated con key="${key}"`);
-          return null;
+      }
+      
+      // Si no encontramos por id o no es UUID, intentar con key
+      if (!data) {
+        try {
+          const resultByKey = await this.client
+            .from('consolidated')
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq('key', key)
+            .select()
+            .maybeSingle();
+          
+          if (resultByKey.error) {
+            console.error(`❌ Error actualizando consolidated con key="${key}":`, resultByKey.error);
+            console.error(`   Código de error:`, resultByKey.error.code);
+            console.error(`   Mensaje:`, resultByKey.error.message);
+            console.error(`   Detalles:`, resultByKey.error.details);
+            throw resultByKey.error;
+          }
+          
+          if (!resultByKey.data) {
+            console.error(`❌ No se encontró registro consolidated con key="${key}"`);
+            // Intentar buscar el registro para ver qué existe
+            const checkResult = await this.client
+              .from('consolidated')
+              .select('id, key, legajo')
+              .eq('legajo', key.split('-')[0])
+              .limit(5);
+            console.log(`   Registros encontrados con legajo similar:`, checkResult.data);
+            return null;
+          }
+          
+          data = resultByKey.data;
+          console.log(`✅ Registro actualizado exitosamente por key="${key}"`);
+        } catch (keyError: any) {
+          // Si falla por key, intentar buscar por id usando el key como id
+          console.log(`⚠️ Falló búsqueda por key, intentando usar key como id...`);
+          try {
+            const resultById = await this.client
+              .from('consolidated')
+              .update({ ...updates, updated_at: new Date().toISOString() })
+              .eq('id', key)
+              .select()
+              .maybeSingle();
+            
+            if (resultById.error) {
+              console.error(`❌ Error usando key como id:`, resultById.error);
+              throw keyError; // Lanzar el error original
+            }
+            
+            if (resultById.data) {
+              data = resultById.data;
+              console.log(`✅ Registro actualizado usando key como id="${key}"`);
+            } else {
+              throw keyError; // Lanzar el error original si no se encontró
+            }
+          } catch {
+            throw keyError; // Lanzar el error original
+          }
         }
-        
-        data = result.data;
-        console.log(`✅ Registro actualizado exitosamente por key="${key}"`);
-      } else {
-        console.log(`✅ Registro actualizado exitosamente por id="${key}"`);
       }
       
       // Limpiar cache relacionado
@@ -1183,23 +1239,62 @@ export class SupabaseManager {
     }
   }
 
-  async addEmpresa(empresa: { nombre: string; descripcion?: string }): Promise<void> {
+  async addEmpresa(empresa: any): Promise<void> {
     loadingState.setLoading('empresas', true);
     
     try {
-      const { error } = await this.client
+      // La tabla empresas solo tiene: id, nombre, logo_url, created_at, updated_at
+      // NOTA: La columna 'descripcion' no existe en la tabla real de Supabase
+      // Filtrar solo los campos válidos
+      const empresaData: any = {
+        nombre: empresa.nombre,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // El id es requerido (PRIMARY KEY), usar el proporcionado o generar uno
+      if (empresa.id) {
+        empresaData.id = empresa.id;
+      } else {
+        // Generar un ID único si no se proporciona
+        empresaData.id = `empresa-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      }
+
+      // Manejar logo_url (la tabla usa logo_url, no logo)
+      if (empresa.logo_url !== undefined) {
+        empresaData.logo_url = empresa.logo_url || null;
+      } else if (empresa.logo !== undefined) {
+        empresaData.logo_url = empresa.logo || null;
+      } else {
+        empresaData.logo_url = null;
+      }
+
+      console.log('🔍 SupabaseManager.addEmpresa() - Insertando:', JSON.stringify(empresaData, null, 2));
+      console.log('🔍 Campos recibidos:', JSON.stringify(empresa, null, 2));
+
+      const { data, error } = await this.client
         .from('empresas')
-        .insert({
-          nombre: empresa.nombre,
-          descripcion: empresa.descripcion || '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
+        .insert(empresaData)
+        .select();
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ SupabaseManager.addEmpresa() - Error completo:', error);
+        console.error('❌ Código de error:', error.code);
+        console.error('❌ Mensaje:', error.message);
+        console.error('❌ Detalles:', error.details);
+        console.error('❌ Hint:', error.hint);
+        console.error('❌ Error JSON:', JSON.stringify(error, null, 2));
+        console.error('❌ Datos que intentó insertar:', JSON.stringify(empresaData, null, 2));
+        throw error;
+      }
+
+      console.log('✅ SupabaseManager.addEmpresa() - Empresa creada:', data);
       
       // Limpiar cache
       dataCache.delete('empresas_all');
+    } catch (error) {
+      console.error('❌ SupabaseManager.addEmpresa() - Error fatal:', error);
+      throw error;
     } finally {
       loadingState.setLoading('empresas', false);
     }
@@ -1337,6 +1432,187 @@ export class SupabaseManager {
       return fallbackEmpresas;
     } finally {
       loadingState.setLoading('empresas', false);
+    }
+  }
+
+  // Métodos de registros de entrada/salida
+  async createRegistro(registro: Omit<SupabaseRegistro, 'id' | 'created_at' | 'updated_at'>): Promise<SupabaseRegistro> {
+    loadingState.setLoading('registros', true);
+    
+    try {
+      const registroId = `${registro.legajo}-${registro.fecha_hora || new Date().toISOString()}-${Date.now()}`;
+      const registroData = {
+        ...registro,
+        id: registroId,
+        fecha_hora: registro.fecha_hora || new Date().toISOString()
+      };
+
+      const { data, error } = await this.client
+        .from('registros')
+        .insert([registroData])
+        .select()
+        .single();
+      
+      if (error) {
+        // Log detallado del error
+        console.error('❌ Error creando registro:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          error: JSON.stringify(error, null, 2)
+        });
+        
+        // Si la tabla no existe (404), mostrar mensaje útil pero no romper la app
+        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404') || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('not found') || error.message?.includes('schema cache')) {
+          console.warn('⚠️ Tabla de registros no existe o no es accesible. Verifica:');
+          console.warn('1. Ejecuta el script SQL: sql/create_registros_table_complete.sql');
+          console.warn('2. Verifica que la tabla existe con: sql/verify_registros_table.sql');
+          console.warn('3. Si la tabla existe pero sigue el error, refresca el schema cache en Supabase');
+          console.warn('4. Verifica que RLS está habilitado y tiene políticas que permiten acceso');
+          console.warn('5. Error completo:', error);
+          // Retornar un objeto simulado para que la app no se rompa
+          return {
+            ...registroData,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          } as SupabaseRegistro;
+        }
+        throw error;
+      }
+      
+      // Limpiar cache relacionado
+      dataCache.delete('registros_all');
+      dataCache.delete(`registros_legajo_${registro.legajo}`);
+      
+      return data;
+    } finally {
+      loadingState.setLoading('registros', false);
+    }
+  }
+
+  async getAllRegistros(forceRefresh: boolean = false): Promise<SupabaseRegistro[]> {
+    const cacheKey = 'registros_all';
+    
+    if (!forceRefresh) {
+      const cached = dataCache.get(cacheKey);
+      if (cached) return cached;
+    }
+    
+    loadingState.setLoading('registros', true);
+    
+    try {
+      const { data, error } = await this.client
+        .from('registros')
+        .select('*')
+        .order('fecha_hora', { ascending: false });
+      
+      if (error) {
+        // Log detallado del error
+        console.error('❌ Error obteniendo todos los registros:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          error: JSON.stringify(error, null, 2)
+        });
+        
+        // Si la tabla no existe (404), retornar array vacío sin romper la app
+        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404') || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('not found') || error.message?.includes('schema cache')) {
+          console.warn('⚠️ Tabla de registros no existe o no es accesible. Verifica:');
+          console.warn('1. Ejecuta el script SQL: sql/create_registros_table_complete.sql');
+          console.warn('2. Verifica que la tabla existe con: sql/verify_registros_table.sql');
+          console.warn('3. Si la tabla existe pero sigue el error, refresca el schema cache en Supabase');
+          console.warn('4. Verifica que RLS está habilitado y tiene políticas que permiten acceso');
+          console.warn('5. Error completo:', error);
+          return [];
+        }
+        throw error;
+      }
+      
+      const result = data || [];
+      dataCache.set(cacheKey, result);
+      return result;
+    } finally {
+      loadingState.setLoading('registros', false);
+    }
+  }
+
+  async getRegistrosByLegajo(legajo: string): Promise<SupabaseRegistro[]> {
+    const cacheKey = `registros_legajo_${legajo}`;
+    const cached = dataCache.get(cacheKey);
+    if (cached) return cached;
+    
+    loadingState.setLoading('registros', true);
+    
+    try {
+      const { data, error } = await this.client
+        .from('registros')
+        .select('*')
+        .eq('legajo', legajo)
+        .order('fecha_hora', { ascending: false });
+      
+      if (error) {
+        // Log detallado del error
+        console.error('❌ Error obteniendo registros por legajo:', {
+          legajo,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          error: JSON.stringify(error, null, 2)
+        });
+        
+        // Si la tabla no existe (404), retornar array vacío sin romper la app
+        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404') || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('not found') || error.message?.includes('schema cache')) {
+          console.warn('⚠️ Tabla de registros no existe o no es accesible. Verifica:');
+          console.warn('1. Ejecuta el script SQL: sql/create_registros_table_complete.sql');
+          console.warn('2. Verifica que la tabla existe con: sql/verify_registros_table.sql');
+          console.warn('3. Si la tabla existe pero sigue el error, refresca el schema cache en Supabase');
+          console.warn('4. Verifica que RLS está habilitado y tiene políticas que permiten acceso');
+          console.warn('5. Error completo:', error);
+          return [];
+        }
+        throw error;
+      }
+      
+      const result = data || [];
+      dataCache.set(cacheKey, result);
+      return result;
+    } finally {
+      loadingState.setLoading('registros', false);
+    }
+  }
+
+  async deleteRegistro(id: string): Promise<void> {
+    loadingState.setLoading('registros', true);
+    
+    try {
+      const { error } = await this.client
+        .from('registros')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('❌ Error eliminando registro:', {
+          id,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          error: JSON.stringify(error, null, 2)
+        });
+        throw error;
+      }
+      
+      // Limpiar cache relacionado
+      dataCache.delete('registros_all');
+      // Limpiar cache por legajo (necesitamos obtener el legajo primero)
+      // Por ahora limpiamos todos los caches de registros
+      const cacheKeys = Array.from(dataCache['cache'].keys()).filter(key => key.startsWith('registros_'));
+      cacheKeys.forEach(key => dataCache.delete(key));
+    } finally {
+      loadingState.setLoading('registros', false);
     }
   }
 }
