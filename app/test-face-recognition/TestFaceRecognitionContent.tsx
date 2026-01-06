@@ -6,13 +6,10 @@ import { useFaceRecognition } from '@/hooks/useFaceRecognition';
 import { findEmployeeByFace } from '@/lib/biometric/face-matcher';
 import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { 
   Camera, 
-  Video, 
   VideoOff, 
   Loader2, 
   CheckCircle2, 
@@ -20,14 +17,20 @@ import {
   User,
   Building2,
   Hash,
-  ArrowLeft
+  ArrowLeft,
+  LogIn,
+  LogOut,
+  Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 
+type RegistrationType = 'entrada' | 'salida' | null;
+
 export default function TestFaceRecognitionContent() {
   const { state, loadModels, detectFace, detectFaceBox, stopDetection } = useFaceRecognition();
   const { dataManager } = useCentralizedDataManager();
+  const [registrationType, setRegistrationType] = useState<RegistrationType>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [recognizedEmployee, setRecognizedEmployee] = useState<{
     legajo: string;
@@ -39,8 +42,13 @@ export default function TestFaceRecognitionContent() {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [autoRecognitionEnabled, setAutoRecognitionEnabled] = useState(true);
   const [faceDetection, setFaceDetection] = useState<any | null>(null);
+  const [lastRegistration, setLastRegistration] = useState<{
+    tipo: 'entrada' | 'salida';
+    empleado: string;
+    legajo: string;
+    timestamp: Date;
+  } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -52,6 +60,16 @@ export default function TestFaceRecognitionContent() {
   useEffect(() => {
     loadModels();
   }, [loadModels]);
+
+  // Activar cámara automáticamente cuando se selecciona tipo de registro
+  useEffect(() => {
+    if (registrationType && state.isModelLoaded && !isStreaming && !isStartingCamera) {
+      const timer = setTimeout(() => {
+        startCamera();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [registrationType, state.isModelLoaded]);
 
   // Limpiar stream y intervalos al desmontar
   useEffect(() => {
@@ -150,9 +168,8 @@ export default function TestFaceRecognitionContent() {
     // Solo iniciar reconocimiento automático si:
     // - La cámara está activa
     // - Los modelos están cargados
-    // - El reconocimiento automático está habilitado
     // - No hay un reconocimiento en curso
-    if (isStreaming && state.isModelLoaded && autoRecognitionEnabled && !isRecognizing) {
+    if (isStreaming && state.isModelLoaded && !isRecognizing && registrationType) {
       recognitionIntervalRef.current = setInterval(async () => {
         if (!videoRef.current || isRecognizing || !state.isModelLoaded) {
           return;
@@ -163,21 +180,20 @@ export default function TestFaceRecognitionContent() {
           const descriptor = await detectFace(videoRef.current);
           
           if (!descriptor) {
-            // No hay rostro detectado, limpiar reconocimiento previo después de un tiempo
             return;
           }
 
           // Buscar empleado que coincida
           const match = await findEmployeeByFace(descriptor, dataManager);
 
-          if (match) {
-            // Solo actualizar si es un empleado diferente o si pasó suficiente tiempo
+          if (match && match.distance < 0.6) {
+            // Solo registrar si es un empleado diferente o si pasó suficiente tiempo
             if (lastRecognizedLegajoRef.current !== match.legajo) {
               setRecognizedEmployee(match);
               lastRecognizedLegajoRef.current = match.legajo;
-              toast.success(`Empleado reconocido: ${match.nombre} (${match.legajo})`, {
-                duration: 2000,
-              });
+              
+              // Registrar entrada/salida
+              registerAttendance(match, registrationType);
             }
           } else {
             // Si no hay coincidencia, limpiar después de un tiempo
@@ -188,7 +204,6 @@ export default function TestFaceRecognitionContent() {
           }
         } catch (error) {
           console.error('Error en reconocimiento automático:', error);
-          // No mostrar toast para errores silenciosos en reconocimiento automático
         }
       }, 2000); // Reconocer cada 2 segundos
     }
@@ -199,7 +214,41 @@ export default function TestFaceRecognitionContent() {
         recognitionIntervalRef.current = null;
       }
     };
-  }, [isStreaming, state.isModelLoaded, autoRecognitionEnabled, isRecognizing, detectFace, dataManager]);
+  }, [isStreaming, state.isModelLoaded, isRecognizing, registrationType, detectFace, dataManager]);
+
+  const registerAttendance = async (employee: {
+    legajo: string;
+    nombre: string;
+    empresa: string;
+    distance: number;
+    confidence: number;
+  }, type: 'entrada' | 'salida') => {
+    const timestamp = new Date();
+    
+    // Aquí puedes guardar en la base de datos
+    // Por ahora solo mostramos un toast y guardamos en estado
+    setLastRegistration({
+      tipo: type,
+      empleado: employee.nombre,
+      legajo: employee.legajo,
+      timestamp
+    });
+
+    toast.success(
+      `${type === 'entrada' ? 'Entrada' : 'Salida'} registrada: ${employee.nombre} (${employee.legajo})`,
+      {
+        duration: 3000,
+      }
+    );
+
+    // Resetear después de 3 segundos para permitir otro registro
+    setTimeout(() => {
+      setRecognizedEmployee(null);
+      lastRecognizedLegajoRef.current = null;
+      stopStream();
+      setRegistrationType(null);
+    }, 3000);
+  };
 
   const startCamera = async () => {
     // Verificar que getUserMedia esté disponible
@@ -225,7 +274,6 @@ export default function TestFaceRecognitionContent() {
       });
 
       console.log('Stream obtenido:', stream);
-      console.log('Tracks activos:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
 
       if (!videoRef.current) {
         throw new Error('El elemento de video no está disponible');
@@ -271,6 +319,7 @@ export default function TestFaceRecognitionContent() {
       
       toast.error(errorMessage);
       setCameraError(errorMessage);
+      setRegistrationType(null);
     }
   };
 
@@ -305,318 +354,234 @@ export default function TestFaceRecognitionContent() {
     stopDetection();
   };
 
-  const recognizeFace = async () => {
-    if (!videoRef.current) {
-      toast.error('El video no está disponible');
-      return;
-    }
-
-    if (!state.isModelLoaded) {
-      toast.error('Los modelos de reconocimiento no están cargados');
-      return;
-    }
-
-    setIsRecognizing(true);
+  const handleTypeSelection = (type: 'entrada' | 'salida') => {
+    setRegistrationType(type);
     setRecognizedEmployee(null);
+    setLastRegistration(null);
+  };
 
-    try {
-      // Detectar rostro y obtener descriptor
-      const descriptor = await detectFace(videoRef.current);
-      
-      if (!descriptor) {
-        toast.error('No se detectó ningún rostro. Asegúrate de estar frente a la cámara.');
-        setIsRecognizing(false);
-        return;
-      }
-
-      // Buscar empleado que coincida
-      const match = await findEmployeeByFace(descriptor, dataManager);
-
-      if (match) {
-        setRecognizedEmployee(match);
-        toast.success(`Empleado reconocido: ${match.nombre} (${match.legajo})`);
-      } else {
-        toast.error('No se encontró ningún empleado que coincida con este rostro');
-      }
-    } catch (error) {
-      console.error('Error reconociendo rostro:', error);
-      toast.error('Error al reconocer el rostro');
-    } finally {
-      setIsRecognizing(false);
-    }
+  const handleCancel = () => {
+    stopStream();
+    setRegistrationType(null);
+    setRecognizedEmployee(null);
+    setLastRegistration(null);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-              <Camera className="h-8 w-8" />
-              Prueba de Reconocimiento Facial
-            </h1>
-            <p className="text-gray-600 mt-2">
-              Página temporal para probar el reconocimiento facial de empleados
-            </p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Statusbar pequeña en la parte superior */}
+      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between text-xs">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            {state.isModelLoaded ? (
+              <>
+                <CheckCircle2 className="h-3 w-3 text-green-600" />
+                <span className="text-gray-600">Modelos cargados</span>
+              </>
+            ) : (
+              <>
+                <Loader2 className="h-3 w-3 text-yellow-600 animate-spin" />
+                <span className="text-gray-600">Cargando modelos...</span>
+              </>
+            )}
           </div>
-          <Link href="/">
-            <Button variant="outline">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Volver
-            </Button>
-          </Link>
+          {state.error && (
+            <div className="flex items-center gap-1 text-red-600">
+              <XCircle className="h-3 w-3" />
+              <span>{state.error}</span>
+            </div>
+          )}
+        </div>
+        <Link href="/">
+          <Button variant="ghost" size="sm" className="h-6 text-xs">
+            <ArrowLeft className="h-3 w-3 mr-1" />
+            Volver
+          </Button>
+        </Link>
+      </div>
+
+      <div className="max-w-6xl mx-auto p-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            Registro de Entradas y Salidas
+          </h1>
+          <p className="text-gray-600">
+            Selecciona el tipo de registro y posiciona tu rostro frente a la cámara
+          </p>
         </div>
 
-        {/* Estado de modelos */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Estado del Sistema</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              {state.isModelLoaded ? (
-                <>
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                  <span className="text-green-700 font-medium">Modelos cargados</span>
-                </>
-              ) : (
-                <>
-                  <Loader2 className="h-5 w-5 text-yellow-600 animate-spin" />
-                  <span className="text-yellow-700">Cargando modelos...</span>
-                </>
-              )}
-            </div>
-            {state.error && (
-              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-                <XCircle className="h-4 w-4 inline mr-2" />
-                {state.error}
+        {/* Selección de tipo de registro */}
+        {!registrationType && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-8">
+            <Button
+              onClick={() => handleTypeSelection('entrada')}
+              disabled={!state.isModelLoaded}
+              className="h-32 text-xl font-semibold bg-green-600 hover:bg-green-700 text-white"
+            >
+              <div className="flex flex-col items-center gap-3">
+                <LogIn className="h-12 w-12" />
+                <span>ENTRADA</span>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </Button>
+            <Button
+              onClick={() => handleTypeSelection('salida')}
+              disabled={!state.isModelLoaded}
+              className="h-32 text-xl font-semibold bg-red-600 hover:bg-red-700 text-white"
+            >
+              <div className="flex flex-col items-center gap-3">
+                <LogOut className="h-12 w-12" />
+                <span>SALIDA</span>
+              </div>
+            </Button>
+          </div>
+        )}
 
-        {/* Video y controles */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Cámara</CardTitle>
-            <CardDescription>
-              {autoRecognitionEnabled 
-                ? 'Reconocimiento automático activado. El sistema reconocerá empleados automáticamente.'
-                : 'Activa la cámara y usa el botón para reconocer manualmente.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
-              {/* Elemento video siempre presente para que el ref funcione */}
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className={`w-full h-full object-cover ${isStreaming ? 'block' : 'hidden'}`}
-              />
-              {/* Canvas overlay para dibujar encuadres */}
-              {isStreaming && (
-                <canvas
-                  ref={canvasRef}
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                  style={{ objectFit: 'cover' }}
-                />
-              )}
-              {/* Overlay cuando no está activo */}
-              {!isStreaming && (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                  <div className="text-center">
-                    <VideoOff className="h-16 w-16 mx-auto mb-4" />
-                    <p className="text-lg">Cámara no activa</p>
-                    <p className="text-sm mt-2">Haz clic en "Activar Cámara" para comenzar</p>
-                  </div>
-                </div>
-              )}
-              {/* Indicador visual de detección */}
-              {isStreaming && faceDetection && (
-                <div className="absolute top-2 left-2">
-                  <div className={`px-2 py-1 rounded text-xs font-medium ${
-                    faceDetection.detection.score > 0.5 
-                      ? 'bg-green-500 text-white' 
-                      : 'bg-yellow-500 text-white'
+        {/* Cámara - solo se muestra cuando se selecciona tipo */}
+        {registrationType && (
+          <Card className="max-w-4xl mx-auto">
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                {/* Indicador de tipo de registro */}
+                <div className="text-center">
+                  <Badge className={`text-lg px-4 py-2 ${
+                    registrationType === 'entrada' 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-red-600 text-white'
                   }`}>
-                    {faceDetection.detection.score > 0.5 ? '✓ Rostro detectado' : '⏳ Ajustando...'}
-                  </div>
+                    {registrationType === 'entrada' ? (
+                      <>
+                        <LogIn className="h-4 w-4 mr-2 inline" />
+                        Registrando ENTRADA
+                      </>
+                    ) : (
+                      <>
+                        <LogOut className="h-4 w-4 mr-2 inline" />
+                        Registrando SALIDA
+                      </>
+                    )}
+                  </Badge>
                 </div>
-              )}
-            </div>
 
-            {cameraError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-                <XCircle className="h-4 w-4 inline mr-2" />
-                {cameraError}
-              </div>
-            )}
-
-            {/* Toggle de reconocimiento automático */}
-            {isStreaming && (
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
-                <div className="flex items-center gap-2">
-                  <Camera className="h-4 w-4 text-gray-600" />
-                  <Label htmlFor="auto-recognition" className="text-sm font-medium cursor-pointer">
-                    Reconocimiento automático
-                  </Label>
-                </div>
-                <Switch
-                  id="auto-recognition"
-                  checked={autoRecognitionEnabled}
-                  onCheckedChange={setAutoRecognitionEnabled}
-                />
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              {!isStreaming ? (
-                <Button
-                  onClick={startCamera}
-                  disabled={!state.isModelLoaded || isStartingCamera}
-                  className="flex-1"
-                >
-                  {isStartingCamera ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Activando cámara...
-                    </>
-                  ) : (
-                    <>
-                      <Video className="h-4 w-4 mr-2" />
-                      Activar Cámara
-                    </>
+                {/* Video */}
+                <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover ${isStreaming ? 'block' : 'hidden'}`}
+                  />
+                  {/* Canvas overlay para dibujar encuadres */}
+                  {isStreaming && (
+                    <canvas
+                      ref={canvasRef}
+                      className="absolute inset-0 w-full h-full pointer-events-none"
+                      style={{ objectFit: 'cover' }}
+                    />
                   )}
-                </Button>
-              ) : (
-                <>
-                  {!autoRecognitionEnabled && (
-                    <Button
-                      onClick={recognizeFace}
-                      disabled={isRecognizing || state.isDetecting}
-                      className="flex-1 bg-green-600 hover:bg-green-700"
-                    >
-                      {isRecognizing ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Reconociendo...
-                        </>
-                      ) : (
-                        <>
-                          <Camera className="h-4 w-4 mr-2" />
-                          Reconocer Empleado
-                        </>
-                      )}
-                    </Button>
-                  )}
-                  {autoRecognitionEnabled && (
-                    <div className="flex-1 flex items-center justify-center gap-2 text-sm text-gray-600">
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                      <span>Reconociendo automáticamente...</span>
+                  {/* Overlay cuando no está activo */}
+                  {!isStreaming && (
+                    <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                      <div className="text-center">
+                        <Loader2 className="h-16 w-16 mx-auto mb-4 animate-spin" />
+                        <p className="text-lg">Activando cámara...</p>
+                      </div>
                     </div>
                   )}
+                  {/* Indicador visual de detección */}
+                  {isStreaming && faceDetection && (
+                    <div className="absolute top-2 left-2">
+                      <div className={`px-2 py-1 rounded text-xs font-medium ${
+                        faceDetection.detection.score > 0.5 
+                          ? 'bg-green-500 text-white' 
+                          : 'bg-yellow-500 text-white'
+                      }`}>
+                        {faceDetection.detection.score > 0.5 ? '✓ Rostro detectado' : '⏳ Ajustando...'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Error de cámara */}
+                {cameraError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                    <XCircle className="h-4 w-4 inline mr-2" />
+                    {cameraError}
+                  </div>
+                )}
+
+                {/* Botón cancelar */}
+                <div className="flex justify-center">
                   <Button
-                    onClick={stopStream}
+                    onClick={handleCancel}
                     variant="outline"
+                    className="w-full max-w-xs"
                   >
-                    <VideoOff className="h-4 w-4" />
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Cancelar
                   </Button>
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Resultado del reconocimiento */}
-        {recognizedEmployee && (
-          <Card className="border-green-200 bg-green-50">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                  Empleado Reconocido
-                </CardTitle>
-                <Badge className="bg-green-600">
-                  {recognizedEmployee.confidence}% confianza
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg">
-                    <User className="h-5 w-5 text-gray-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Nombre</p>
-                    <p className="font-semibold text-lg">{recognizedEmployee.nombre}</p>
-                  </div>
                 </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg">
-                    <Hash className="h-5 w-5 text-gray-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Legajo</p>
-                    <p className="font-semibold text-lg">{recognizedEmployee.legajo}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg">
-                    <Building2 className="h-5 w-5 text-gray-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Empresa</p>
-                    <p className="font-semibold text-lg">{recognizedEmployee.empresa}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg">
-                    <Camera className="h-5 w-5 text-gray-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Distancia</p>
-                    <p className="font-semibold text-lg">{recognizedEmployee.distance.toFixed(4)}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-green-200">
-                <p className="text-sm text-gray-600">
-                  <strong>Nota:</strong> Una distancia menor a 0.6 indica alta probabilidad de coincidencia.
-                  La distancia actual es {recognizedEmployee.distance.toFixed(4)}, lo que indica una{' '}
-                  {recognizedEmployee.distance < 0.6 ? 'coincidencia muy probable' : 
-                   recognizedEmployee.distance < 0.8 ? 'posible coincidencia' : 
-                   'coincidencia poco probable'}.
-                </p>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Instrucciones */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Instrucciones</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="list-decimal list-inside space-y-2 text-sm text-gray-600">
-              <li>Espera a que los modelos se carguen (verás un check verde)</li>
-              <li>Haz clic en "Activar Cámara" para iniciar el video</li>
-              <li>Posiciona tu rostro frente a la cámara con buena iluminación</li>
-              <li>Haz clic en "Reconocer Empleado" para capturar y buscar</li>
-              <li>Si hay coincidencia, verás los datos del empleado reconocido</li>
-            </ol>
-          </CardContent>
-        </Card>
+        {/* Resultado del reconocimiento */}
+        {recognizedEmployee && (
+          <Card className={`max-w-4xl mx-auto mt-6 border-2 ${
+            registrationType === 'entrada' 
+              ? 'border-green-200 bg-green-50' 
+              : 'border-red-200 bg-red-50'
+          }`}>
+            <CardContent className="p-6">
+              <div className="text-center space-y-4">
+                <div className="flex items-center justify-center gap-2">
+                  <CheckCircle2 className={`h-8 w-8 ${
+                    registrationType === 'entrada' ? 'text-green-600' : 'text-red-600'
+                  }`} />
+                  <h2 className="text-2xl font-bold">
+                    {registrationType === 'entrada' ? 'Entrada' : 'Salida'} Registrada
+                  </h2>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                  <div className="flex flex-col items-center gap-2">
+                    <User className="h-8 w-8 text-gray-600" />
+                    <p className="text-sm text-gray-600">Nombre</p>
+                    <p className="font-semibold text-lg">{recognizedEmployee.nombre}</p>
+                  </div>
+                  <div className="flex flex-col items-center gap-2">
+                    <Hash className="h-8 w-8 text-gray-600" />
+                    <p className="text-sm text-gray-600">Legajo</p>
+                    <p className="font-semibold text-lg">{recognizedEmployee.legajo}</p>
+                  </div>
+                  <div className="flex flex-col items-center gap-2">
+                    <Building2 className="h-8 w-8 text-gray-600" />
+                    <p className="text-sm text-gray-600">Empresa</p>
+                    <p className="font-semibold text-lg">{recognizedEmployee.empresa}</p>
+                  </div>
+                </div>
+
+                {lastRegistration && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+                      <Clock className="h-4 w-4" />
+                      <span>
+                        {lastRegistration.timestamp.toLocaleTimeString('es-AR', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
 }
-
