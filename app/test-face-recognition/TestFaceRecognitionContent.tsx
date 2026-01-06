@@ -1,39 +1,10 @@
-// app/test-face-recognition/page.tsx
+// app/test-face-recognition/TestFaceRecognitionContent.tsx
 'use client';
 
-import dynamic from 'next/dynamic';
-import { Suspense } from 'react';
-
-// Cargar el componente dinámicamente solo en el cliente
-const TestFaceRecognitionContent = dynamic(
-  () => import('./TestFaceRecognitionContent'),
-  { 
-    ssr: false,
-    loading: () => (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando reconocimiento facial...</p>
-        </div>
-      </div>
-    )
-  }
-);
-
-export default function TestFaceRecognitionPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando...</p>
-        </div>
-      </div>
-    }>
-      <TestFaceRecognitionContent />
-    </Suspense>
-  );
-}
+import React, { useState, useRef, useEffect } from 'react';
+import { useFaceRecognition } from '@/hooks/useFaceRecognition';
+import { findEmployeeByFace } from '@/lib/biometric/face-matcher';
+import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -52,7 +23,7 @@ import {
 import { toast } from 'sonner';
 import Link from 'next/link';
 
-export default function TestFaceRecognitionPage() {
+export default function TestFaceRecognitionContent() {
   const { state, loadModels, detectFace, stopDetection } = useFaceRecognition();
   const { dataManager } = useCentralizedDataManager();
   const [isStreaming, setIsStreaming] = useState(false);
