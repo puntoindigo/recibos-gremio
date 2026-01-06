@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// face-api.js se carga dinámicamente solo cuando se necesita
+// face-api.js se carga desde CDN para evitar incluirlo en el bundle
 let faceapiPromise: Promise<any> | null = null;
 
 const loadFaceApi = async () => {
@@ -12,7 +12,43 @@ const loadFaceApi = async () => {
   }
   
   if (!faceapiPromise) {
-    faceapiPromise = import('face-api.js');
+    // Cargar face-api.js desde CDN usando dynamic import con script tag
+    faceapiPromise = new Promise((resolve, reject) => {
+      // Verificar si ya está cargado (puede estar como faceapi o faceApi)
+      const existingFaceApi = (window as any).faceapi || (window as any).faceApi;
+      if (existingFaceApi) {
+        resolve(existingFaceApi);
+        return;
+      }
+
+      // Crear script tag para cargar desde CDN
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
+      script.async = true;
+      
+      // Esperar a que se cargue y verificar diferentes formas de exposición
+      script.onload = () => {
+        // face-api.js puede exponerse de diferentes formas
+        const faceApi = (window as any).faceapi || 
+                       (window as any).faceApi || 
+                       (window as any).face_api;
+        
+        if (faceApi) {
+          resolve(faceApi);
+        } else {
+          // Si no está disponible globalmente, intentar import dinámico como fallback
+          import('face-api.js').then(resolve).catch(() => {
+            reject(new Error('face-api.js no se cargó correctamente desde CDN'));
+          });
+        }
+      };
+      
+      script.onerror = () => {
+        reject(new Error('Error cargando face-api.js desde CDN. Verifica tu conexión a internet.'));
+      };
+      
+      document.head.appendChild(script);
+    });
   }
   
   return faceapiPromise;
@@ -63,9 +99,9 @@ export function useFaceRecognition(): UseFaceRecognitionReturn {
       // Cargar face-api.js dinámicamente solo en el cliente
       const faceapi = await loadFaceApi();
 
-      // Cargar los modelos necesarios
-      // Estos archivos deben estar en /public/models/
-      const MODEL_URL = '/models';
+      // Cargar los modelos necesarios desde CDN
+      // Usamos unpkg CDN que tiene los modelos de face-api.js
+      const MODEL_URL = 'https://unpkg.com/face-api.js@0.22.2/weights';
 
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),

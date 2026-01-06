@@ -15,22 +15,17 @@ Este documento describe cómo configurar y usar el sistema de reconocimiento fac
 Las dependencias ya están instaladas en `package.json`:
 - `face-api.js`: Librería de reconocimiento facial
 
-### 2. Descargar modelos de face-api.js
+### 2. Modelos desde CDN
 
-Los modelos pre-entrenados deben estar en `/public/models/`. Para descargarlos:
+Los modelos se cargan automáticamente desde CDN (unpkg) cuando se necesitan. **No es necesario descargar ni instalar nada adicional**. El sistema carga:
 
-```bash
-npm run download-face-models
-```
-
-Este script descargará los siguientes modelos:
 - `tiny_face_detector_model`: Detector de rostros rápido
-- `face_landmark_68_model`: Detección de puntos faciales
+- `face_landmark_68_model`: Detección de puntos faciales  
 - `face_recognition_model`: Modelo de reconocimiento facial
 
-### 3. Verificar estructura
-
-Asegúrate de que exista la carpeta `/public/models/` con los archivos descargados.
+Todo se carga automáticamente desde:
+- **face-api.js**: `https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js`
+- **Modelos**: `https://unpkg.com/face-api.js@0.22.2/weights`
 
 ## 🏗️ Arquitectura
 
@@ -133,9 +128,9 @@ Este sistema está preparado para integrarse con:
 
 ### Los modelos no se cargan
 
-1. Verifica que los archivos estén en `/public/models/`
-2. Ejecuta `npm run download-face-models` nuevamente
-3. Verifica la consola del navegador para errores
+1. Verifica tu conexión a internet (los modelos se cargan desde CDN)
+2. Verifica la consola del navegador para errores de CORS o red
+3. Si hay problemas con el CDN, puedes cambiar la URL en `hooks/useFaceRecognition.ts`
 
 ### No se detecta el rostro
 
