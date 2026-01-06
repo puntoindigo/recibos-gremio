@@ -220,7 +220,13 @@ export function canAccessEmpresa(user: User, empresaId: string): boolean {
 }
 
 export function canManageUsers(user: User): boolean {
-  return hasPermission(user, 'usuarios:create') || hasPermission(user, 'usuarios:edit');
+  // Si tiene permisos de SUPERADMIN (todos los permisos)
+  if (user.permissions.includes('*')) return true;
+  
+  // Si tiene permisos de empleados o usuarios
+  return hasPermission(user, 'empleados') || 
+         hasPermission(user, 'usuarios:create') || 
+         hasPermission(user, 'usuarios:edit');
 }
 
 export function canManageDescuentos(user: User): boolean {
