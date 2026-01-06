@@ -1239,23 +1239,55 @@ export class SupabaseManager {
     }
   }
 
-  async addEmpresa(empresa: { nombre: string; descripcion?: string }): Promise<void> {
+  async addEmpresa(empresa: any): Promise<void> {
     loadingState.setLoading('empresas', true);
     
     try {
-      const { error } = await this.client
+      // Preparar datos para insertar
+      const empresaData: any = {
+        nombre: empresa.nombre,
+        descripcion: empresa.descripcion || '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Si se proporciona un id, usarlo; si no, Supabase generará uno automáticamente
+      if (empresa.id) {
+        empresaData.id = empresa.id;
+      }
+
+      // Si hay logo_url, incluirlo
+      if (empresa.logo_url !== undefined) {
+        empresaData.logo_url = empresa.logo_url;
+      } else if (empresa.logo !== undefined) {
+        empresaData.logo_url = empresa.logo || null;
+      }
+
+      console.log('🔍 SupabaseManager.addEmpresa() - Insertando:', empresaData);
+
+      const { data, error } = await this.client
         .from('empresas')
-        .insert({
-          nombre: empresa.nombre,
-          descripcion: empresa.descripcion || '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
+        .insert(empresaData)
+        .select();
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ SupabaseManager.addEmpresa() - Error:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          error: JSON.stringify(error, null, 2)
+        });
+        throw error;
+      }
+
+      console.log('✅ SupabaseManager.addEmpresa() - Empresa creada:', data);
       
       // Limpiar cache
       dataCache.delete('empresas_all');
+    } catch (error) {
+      console.error('❌ SupabaseManager.addEmpresa() - Error fatal:', error);
+      throw error;
     } finally {
       loadingState.setLoading('empresas', false);
     }
