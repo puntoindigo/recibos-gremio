@@ -1,5 +1,0 @@
-# Excluir modelos de face-api.js del bundle de serverless
-# Los modelos se servirán como archivos estáticos desde /public/models/
-public/models/*.shard*
-public/models/*.json
-
