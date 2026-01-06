@@ -20,7 +20,8 @@ import {
   ArrowLeft,
   LogIn,
   LogOut,
-  Clock
+  Clock,
+  MapPin
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -50,6 +51,7 @@ export default function TestFaceRecognitionContent() {
     timestamp: Date;
   } | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
+  const [allRegistros, setAllRegistros] = useState<any[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -61,6 +63,20 @@ export default function TestFaceRecognitionContent() {
   useEffect(() => {
     loadModels();
   }, [loadModels]);
+
+  // Cargar todos los registros al montar y después de cada registro
+  useEffect(() => {
+    const loadRegistros = async () => {
+      try {
+        const registros = await dataManager.getAllRegistros(true);
+        setAllRegistros(registros || []);
+      } catch (error) {
+        console.error('Error cargando registros:', error);
+        setAllRegistros([]);
+      }
+    };
+    loadRegistros();
+  }, [dataManager, lastRegistration]);
 
   // Activar cámara automáticamente cuando se selecciona tipo de registro
   useEffect(() => {
