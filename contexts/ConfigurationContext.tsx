@@ -175,6 +175,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         bgColor: 'bg-emerald-50',
         activeBgColor: 'bg-emerald-100',
         shortcut: 'E',
+        permission: 'empleados',
         enabledConfigKey: 'enableEmployeeManagement'
       },
       { 
