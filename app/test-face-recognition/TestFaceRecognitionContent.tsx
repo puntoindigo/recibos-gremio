@@ -543,14 +543,18 @@ export default function TestFaceRecognitionContent() {
                         className={`flex items-center justify-between p-3 rounded-lg border ${
                           registro.accion === 'entrada' 
                             ? 'bg-green-50 border-green-200' 
-                            : 'bg-red-50 border-red-200'
+                            : registro.accion === 'salida'
+                            ? 'bg-red-50 border-red-200'
+                            : 'bg-blue-50 border-blue-200'
                         }`}
                       >
                         <div className="flex items-center gap-3 flex-1">
                           {registro.accion === 'entrada' ? (
                             <LogIn className="h-5 w-5 text-green-600 flex-shrink-0" />
-                          ) : (
+                          ) : registro.accion === 'salida' ? (
                             <LogOut className="h-5 w-5 text-red-600 flex-shrink-0" />
+                          ) : (
+                            <User className="h-5 w-5 text-blue-600 flex-shrink-0" />
                           )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
@@ -566,9 +570,11 @@ export default function TestFaceRecognitionContent() {
                                 <Badge className={
                                   registro.accion === 'entrada' 
                                     ? 'bg-green-600 text-white' 
-                                    : 'bg-red-600 text-white'
+                                    : registro.accion === 'salida'
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-blue-600 text-white'
                                 }>
-                                  {registro.accion === 'entrada' ? 'ENTRADA' : 'SALIDA'}
+                                  {registro.accion === 'entrada' ? 'ENTRADA' : registro.accion === 'salida' ? 'SALIDA' : 'ALTA'}
                                 </Badge>
                                 <span className="text-sm text-gray-600">
                                   {new Date(registro.fecha_hora).toLocaleString('es-AR', {
@@ -580,9 +586,24 @@ export default function TestFaceRecognitionContent() {
                                   })}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-1">
-                                <MapPin className="h-3 w-3 text-gray-400" />
-                                <span className="text-xs text-gray-500">{registro.sede || 'CENTRAL'}</span>
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1">
+                                  <MapPin className="h-3 w-3 text-gray-400" />
+                                  <span className="text-xs text-gray-500">{registro.sede || 'CENTRAL'}</span>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-100"
+                                  onClick={() => handleDeleteRegistro(registro.id)}
+                                  disabled={deletingId === registro.id}
+                                >
+                                  {deletingId === registro.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3 w-3" />
+                                  )}
+                                </Button>
                               </div>
                             </div>
                           </div>
