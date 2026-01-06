@@ -12,18 +12,16 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   // Excluir archivos grandes del tracing de serverless functions
-  experimental: {
-    outputFileTracingExcludes: {
-      '*': [
-        'node_modules/@tensorflow/**',
-        'node_modules/face-api.js/**',
-        'public/models/**',
-        'public/recibos/**',
-        'node_modules/.cache/**',
-        '.next/cache/**',
-        'node_modules/pdfjs-dist/**',
-      ],
-    },
+  outputFileTracingExcludes: {
+    '*': [
+      'node_modules/@tensorflow/**',
+      'node_modules/face-api.js/**',
+      'public/models/**',
+      'public/recibos/**',
+      'node_modules/.cache/**',
+      '.next/cache/**',
+      'node_modules/pdfjs-dist/**',
+    ],
   },
   // Excluir paquetes pesados del bundle del servidor
   serverComponentsExternalPackages: ['face-api.js', 'pdfjs-dist'],
