@@ -4,7 +4,7 @@ import { useState, useEffect, useImperativeHandle, forwardRef, useCallback } fro
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, FileText, CreditCard, Building2, TrendingUp, Calendar, Plus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Users, FileText, CreditCard, Building2, TrendingUp, Calendar, Plus, ChevronDown, ChevronRight, Clock, LogIn, LogOut } from 'lucide-react';
 import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { useConfiguration } from '@/contexts/ConfigurationContext';
 import { getEstadisticasDescuentos } from '@/lib/descuentos-manager';
@@ -75,6 +75,7 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
     categoria: string;
     count: number;
   }>>>({});
+  const [registros, setRegistros] = useState<any[]>([]);
   
   const loadDashboardData = useCallback(async () => {
     try {
@@ -186,6 +187,10 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
         receiptsByPeriod,
         recentActivity
       });
+
+      // Cargar registros de entrada/salida
+      const registrosData = await dataManager.getAllRegistros();
+      setRegistros(registrosData || []);
     } catch (error) {
       console.error('Error cargando datos del dashboard:', error);
     } finally {
@@ -612,6 +617,73 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
               {stats.receiptsByPeriod.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No hay datos disponibles
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Registros de Entrada/Salida */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Registros
+            </CardTitle>
+            <CardDescription>
+              Últimos registros de entrada/salida
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {registros.slice(0, 20).map((registro) => (
+                <div
+                  key={registro.id}
+                  className={`flex items-center justify-between p-2 rounded-lg border text-sm ${
+                    registro.accion === 'entrada' 
+                      ? 'bg-green-50 border-green-200' 
+                      : 'bg-red-50 border-red-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {registro.accion === 'entrada' ? (
+                      <LogIn className="h-4 w-4 text-green-600 flex-shrink-0" />
+                    ) : (
+                      <LogOut className="h-4 w-4 text-red-600 flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{registro.nombre}</span>
+                        <Badge variant="outline" className="text-xs flex-shrink-0">
+                          {registro.legajo}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-600 mt-0.5">
+                        <span className="truncate">{registro.empresa}</span>
+                        <span>•</span>
+                        <span className="flex-shrink-0">
+                          {new Date(registro.fecha_hora).toLocaleString('es-AR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                    <Badge className={`ml-2 flex-shrink-0 ${
+                      registro.accion === 'entrada' 
+                        ? 'bg-green-600 text-white' 
+                        : 'bg-red-600 text-white'
+                    }`}>
+                      {registro.accion === 'entrada' ? 'ENTRADA' : 'SALIDA'}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+              {registros.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No hay registros disponibles
                 </p>
               )}
             </div>

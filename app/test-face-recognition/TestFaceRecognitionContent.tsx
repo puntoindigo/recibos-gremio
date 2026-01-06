@@ -225,29 +225,42 @@ export default function TestFaceRecognitionContent() {
   }, type: 'entrada' | 'salida') => {
     const timestamp = new Date();
     
-    // Aquí puedes guardar en la base de datos
-    // Por ahora solo mostramos un toast y guardamos en estado
-    setLastRegistration({
-      tipo: type,
-      empleado: employee.nombre,
-      legajo: employee.legajo,
-      timestamp
-    });
+    try {
+      // Guardar en la base de datos inmediatamente
+      await dataManager.createRegistro({
+        legajo: employee.legajo,
+        nombre: employee.nombre,
+        empresa: employee.empresa,
+        accion: type,
+        sede: 'CENTRAL',
+        fecha_hora: timestamp.toISOString()
+      });
 
-    toast.success(
-      `${type === 'entrada' ? 'Entrada' : 'Salida'} registrada: ${employee.nombre} (${employee.legajo})`,
-      {
-        duration: 3000,
-      }
-    );
+      setLastRegistration({
+        tipo: type,
+        empleado: employee.nombre,
+        legajo: employee.legajo,
+        timestamp
+      });
 
-    // Resetear después de 3 segundos para permitir otro registro
-    setTimeout(() => {
-      setRecognizedEmployee(null);
-      lastRecognizedLegajoRef.current = null;
-      stopStream();
-      setRegistrationType(null);
-    }, 3000);
+      toast.success(
+        `${type === 'entrada' ? 'Entrada' : 'Salida'} registrada: ${employee.nombre} (${employee.legajo})`,
+        {
+          duration: 3000,
+        }
+      );
+
+      // Resetear después de 3 segundos para permitir otro registro
+      setTimeout(() => {
+        setRecognizedEmployee(null);
+        lastRecognizedLegajoRef.current = null;
+        stopStream();
+        setRegistrationType(null);
+      }, 3000);
+    } catch (error) {
+      console.error('Error guardando registro:', error);
+      toast.error('Error al guardar el registro. Intenta nuevamente.');
+    }
   };
 
   const startCamera = async () => {

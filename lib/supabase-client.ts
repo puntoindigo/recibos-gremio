@@ -142,3 +142,15 @@ export interface SupabaseAppConfig {
   created_at: string;
   updated_at: string;
 }
+
+export interface SupabaseRegistro {
+  id: string;
+  legajo: string;
+  nombre: string;
+  empresa: string;
+  accion: 'entrada' | 'salida';
+  sede: string;
+  fecha_hora: string;
+  created_at: string;
+  updated_at: string;
+}

@@ -6,7 +6,8 @@ import type {
   SupabaseDescuento, 
   SupabaseColumnConfig,
   SupabasePendingItem,
-  SupabaseAppConfig
+  SupabaseAppConfig,
+  SupabaseRegistro
 } from './supabase-client';
 
 // Cache de datos para evitar peticiones duplicadas
@@ -1389,6 +1390,85 @@ export class SupabaseManager {
       return fallbackEmpresas;
     } finally {
       loadingState.setLoading('empresas', false);
+    }
+  }
+
+  // Métodos de registros de entrada/salida
+  async createRegistro(registro: Omit<SupabaseRegistro, 'id' | 'created_at' | 'updated_at'>): Promise<SupabaseRegistro> {
+    loadingState.setLoading('registros', true);
+    
+    try {
+      const registroData = {
+        ...registro,
+        id: `${registro.legajo}-${registro.fecha_hora}-${Date.now()}`,
+        fecha_hora: registro.fecha_hora || new Date().toISOString()
+      };
+
+      const { data, error } = await this.client
+        .from('registros')
+        .insert([registroData])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Limpiar cache relacionado
+      dataCache.delete('registros_all');
+      dataCache.delete(`registros_legajo_${registro.legajo}`);
+      
+      return data;
+    } finally {
+      loadingState.setLoading('registros', false);
+    }
+  }
+
+  async getAllRegistros(forceRefresh: boolean = false): Promise<SupabaseRegistro[]> {
+    const cacheKey = 'registros_all';
+    
+    if (!forceRefresh) {
+      const cached = dataCache.get(cacheKey);
+      if (cached) return cached;
+    }
+    
+    loadingState.setLoading('registros', true);
+    
+    try {
+      const { data, error } = await this.client
+        .from('registros')
+        .select('*')
+        .order('fecha_hora', { ascending: false });
+      
+      if (error) throw error;
+      
+      const result = data || [];
+      dataCache.set(cacheKey, result);
+      return result;
+    } finally {
+      loadingState.setLoading('registros', false);
+    }
+  }
+
+  async getRegistrosByLegajo(legajo: string): Promise<SupabaseRegistro[]> {
+    const cacheKey = `registros_legajo_${legajo}`;
+    const cached = dataCache.get(cacheKey);
+    if (cached) return cached;
+    
+    loadingState.setLoading('registros', true);
+    
+    try {
+      const { data, error } = await this.client
+        .from('registros')
+        .select('*')
+        .eq('legajo', legajo)
+        .order('fecha_hora', { ascending: false });
+      
+      if (error) throw error;
+      
+      const result = data || [];
+      dataCache.set(cacheKey, result);
+      return result;
+    } finally {
+      loadingState.setLoading('registros', false);
     }
   }
 }

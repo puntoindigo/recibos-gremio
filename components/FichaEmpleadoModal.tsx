@@ -23,7 +23,11 @@ import {
   CheckCircle,
   XCircle,
   X,
-  ArrowLeft
+  ArrowLeft,
+  LogIn,
+  LogOut,
+  Clock,
+  MapPin
 } from 'lucide-react';
 import { getFichaEmpleado } from '@/lib/descuentos-manager';
 // import { db } from '@/lib/db'; // Removido - usar dataManager en su lugar
@@ -55,6 +59,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
   const { dataManager } = useCentralizedDataManager();
   const [fichaData, setFichaData] = useState<FichaData | null>(null);
   const [recibos, setRecibos] = useState<any[]>([]);
+  const [registros, setRegistros] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -89,6 +94,10 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
       console.log('🔍 Debug ficha creada:', ficha);
       setFichaData(ficha);
       setRecibos(empleadoData.recibos);
+      
+      // Cargar registros de entrada/salida
+      const registrosData = await dataManager.getRegistrosByLegajo(legajo);
+      setRegistros(registrosData || []);
     } catch (error) {
       console.error('Error cargando ficha del empleado:', error);
     } finally {
@@ -231,6 +240,72 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
               </CardContent>
             </Card>
           </div>
+
+          {/* Registros de Entrada/Salida */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Clock className="h-5 w-5" />
+                <span>Registros de Entrada/Salida</span>
+              </CardTitle>
+              <CardDescription>
+                Historial de registros de asistencia
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {registros.length > 0 ? (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {registros.map((registro) => (
+                    <div
+                      key={registro.id}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        registro.accion === 'entrada' 
+                          ? 'bg-green-50 border-green-200' 
+                          : 'bg-red-50 border-red-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {registro.accion === 'entrada' ? (
+                          <LogIn className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <LogOut className="h-5 w-5 text-red-600" />
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Badge className={
+                              registro.accion === 'entrada' 
+                                ? 'bg-green-600 text-white' 
+                                : 'bg-red-600 text-white'
+                            }>
+                              {registro.accion === 'entrada' ? 'ENTRADA' : 'SALIDA'}
+                            </Badge>
+                            <span className="text-sm text-gray-600">
+                              {new Date(registro.fecha_hora).toLocaleString('es-AR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <MapPin className="h-3 w-3 text-gray-400" />
+                            <span className="text-xs text-gray-500">{registro.sede || 'CENTRAL'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No hay registros de entrada/salida</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Descuentos activos */}
           <Card>
