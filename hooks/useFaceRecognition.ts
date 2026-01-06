@@ -108,9 +108,9 @@ export function useFaceRecognition(): UseFaceRecognitionReturn {
       // Cargar face-api.js dinámicamente solo en el cliente
       const faceapi = await loadFaceApi();
 
-      // Cargar los modelos necesarios desde CDN
-      // Usamos jsdelivr CDN que tiene mejor soporte CORS
-      const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
+      // Cargar los modelos necesarios desde GitHub raw
+      // GitHub raw tiene buen soporte CORS y los modelos están disponibles allí
+      const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
 
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
