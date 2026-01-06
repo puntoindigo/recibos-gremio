@@ -86,6 +86,13 @@ const ConfigurationContext = createContext<ConfigurationContextType | undefined>
 export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [config, setConfig] = useState<ConfigurationState>(defaultConfig);
   const [isLoaded, setIsLoaded] = useState(false);
+  const { data: session } = useSession();
+  
+  // Función para verificar permisos (maneja caso cuando session no está disponible durante SSR)
+  const canAccess = useCallback((permission: string) => {
+    if (!session?.user?.permissions) return false;
+    return session.user.permissions.includes(permission) || session.user.permissions.includes('*');
+  }, [session]);
 
   // Cargar configuración desde localStorage
   useEffect(() => {
@@ -256,7 +263,13 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
     const filteredItems = items.filter(item => {
       // Si tiene permiso definido, verificar primero el permiso
       if (item.permission) {
-        if (!canAccess(item.permission)) {
+        // Solo verificar permisos si session está disponible (cliente)
+        if (typeof window !== 'undefined' && session) {
+          if (!canAccess(item.permission)) {
+            return false;
+          }
+        } else {
+          // Durante SSR/build, si tiene permiso requerido, no mostrar (solo mostrar en cliente)
           return false;
         }
       }
@@ -271,7 +284,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
     });
     
     return filteredItems;
-  }, [config, session]);
+  }, [config, session, canAccess]);
 
   return (
     <ConfigurationContext.Provider value={{
