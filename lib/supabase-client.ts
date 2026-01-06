@@ -75,10 +75,13 @@ export interface SupabaseReceipt {
 
 export interface SupabaseConsolidated {
   id: string;
+  key: string;
   legajo: string;
   nombre: string;
   periodo: string;
-  empresa: string;
+  cuil?: string;
+  cuil_norm?: string;
+  empresa?: string; // Puede estar en data.EMPRESA o como campo directo
   data: any;
   created_at: string;
   updated_at: string;

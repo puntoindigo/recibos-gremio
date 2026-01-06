@@ -801,25 +801,62 @@ export class SupabaseManager {
       
       // Si no encontramos por id o no es UUID, intentar con key
       if (!data) {
-        const resultByKey = await this.client
-          .from('consolidated')
-          .update({ ...updates, updated_at: new Date().toISOString() })
-          .eq('key', key)
-          .select()
-          .maybeSingle();
-        
-        if (resultByKey.error) {
-          console.error(`❌ Error actualizando consolidated con key="${key}":`, resultByKey.error);
-          throw resultByKey.error;
+        try {
+          const resultByKey = await this.client
+            .from('consolidated')
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq('key', key)
+            .select()
+            .maybeSingle();
+          
+          if (resultByKey.error) {
+            console.error(`❌ Error actualizando consolidated con key="${key}":`, resultByKey.error);
+            console.error(`   Código de error:`, resultByKey.error.code);
+            console.error(`   Mensaje:`, resultByKey.error.message);
+            console.error(`   Detalles:`, resultByKey.error.details);
+            throw resultByKey.error;
+          }
+          
+          if (!resultByKey.data) {
+            console.error(`❌ No se encontró registro consolidated con key="${key}"`);
+            // Intentar buscar el registro para ver qué existe
+            const checkResult = await this.client
+              .from('consolidated')
+              .select('id, key, legajo')
+              .eq('legajo', key.split('-')[0])
+              .limit(5);
+            console.log(`   Registros encontrados con legajo similar:`, checkResult.data);
+            return null;
+          }
+          
+          data = resultByKey.data;
+          console.log(`✅ Registro actualizado exitosamente por key="${key}"`);
+        } catch (keyError: any) {
+          // Si falla por key, intentar buscar por id usando el key como id
+          console.log(`⚠️ Falló búsqueda por key, intentando usar key como id...`);
+          try {
+            const resultById = await this.client
+              .from('consolidated')
+              .update({ ...updates, updated_at: new Date().toISOString() })
+              .eq('id', key)
+              .select()
+              .maybeSingle();
+            
+            if (resultById.error) {
+              console.error(`❌ Error usando key como id:`, resultById.error);
+              throw keyError; // Lanzar el error original
+            }
+            
+            if (resultById.data) {
+              data = resultById.data;
+              console.log(`✅ Registro actualizado usando key como id="${key}"`);
+            } else {
+              throw keyError; // Lanzar el error original si no se encontró
+            }
+          } catch {
+            throw keyError; // Lanzar el error original
+          }
         }
-        
-        if (!resultByKey.data) {
-          console.error(`❌ No se encontró registro consolidated con key="${key}"`);
-          return null;
-        }
-        
-        data = resultByKey.data;
-        console.log(`✅ Registro actualizado exitosamente por key="${key}"`);
       }
       
       // Limpiar cache relacionado
