@@ -442,7 +442,8 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
               >
                 <TrendingUp className="h-3 w-3 text-orange-600" />
               </Button>
-            </CardContent>
+            </div>
+          </CardContent>
         </Card>
         )}
 
@@ -472,7 +473,8 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
               >
                 <Plus className="h-3 w-3 text-orange-600" />
               </Button>
-            </CardContent>
+            </div>
+          </CardContent>
         </Card>
         )}
 
