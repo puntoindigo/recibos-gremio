@@ -491,12 +491,24 @@ export default function TestFaceRecognitionContent() {
             </div>
           )}
         </div>
-        <Link href="/">
-          <Button variant="ghost" size="sm" className="h-6 text-xs">
-            <ArrowLeft className="h-3 w-3 mr-1" />
-            Volver
+        {session?.user?.email === 'registro@recibos.com' ? (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-6 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={() => setShowLogoutModal(true)}
+          >
+            <LogOut className="h-3 w-3 mr-1" />
+            Cerrar Sesión
           </Button>
-        </Link>
+        ) : (
+          <Link href="/">
+            <Button variant="ghost" size="sm" className="h-6 text-xs">
+              <ArrowLeft className="h-3 w-3 mr-1" />
+              Volver
+            </Button>
+          </Link>
+        )}
       </div>
 
       <div className="max-w-6xl mx-auto p-8">
@@ -772,6 +784,13 @@ export default function TestFaceRecognitionContent() {
           </Card>
         )}
       </div>
+
+      {/* Modal de confirmación de logout */}
+      <ConfirmLogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        userName={session?.user?.name}
+      />
     </div>
   );
 }
