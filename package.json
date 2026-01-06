@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs || true"
+    "postinstall": "cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs || true",
+    "download-face-models": "node scripts/download-face-api-models.js"
   },
   "dependencies": {
     "@auth/core": "^0.34.2",
@@ -27,6 +28,7 @@
     "clsx": "^2.1.1",
     "dexie": "^4.0.11",
     "dotenv": "^17.2.1",
+    "face-api.js": "^0.22.2",
     "formidable": "^3.5.4",
     "googleapis": "^155.0.1",
     "lucide-react": "^0.539.0",

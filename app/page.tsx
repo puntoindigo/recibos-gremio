@@ -11,7 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { Download, FileUp, Loader2, CheckCircle2, XCircle, Menu, X, Plus, User, FileText, Bug, RefreshCw, Database, Wrench, ListTodo, Trash2, Settings, Square, AlertTriangle } from "lucide-react";
+import { Download, FileUp, Loader2, CheckCircle2, XCircle, Menu, X, Plus, User, FileText, Bug, RefreshCw, Database, Wrench, ListTodo, Trash2, Settings, Square, AlertTriangle, Camera } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { useConfiguration } from "@/contexts/ConfigurationContext";
 import { useCentralizedDataManager } from "@/hooks/useCentralizedDataManager";
@@ -3253,6 +3254,20 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       )}
 
       <main className="mx-auto max-w-7xl 2xl:max-w-full p-4 lg:p-6 lg:ml-64">
+        {/* Banner temporal de prueba de reconocimiento facial */}
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-300 rounded-lg flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-yellow-800 font-medium">🧪 Prueba Temporal:</span>
+            <span className="text-yellow-700 text-sm">Reconocimiento Facial</span>
+          </div>
+          <Link href="/test-face-recognition">
+            <Button size="sm" className="bg-yellow-600 hover:bg-yellow-700 text-white">
+              <Camera className="h-4 w-4 mr-2" />
+              Probar Ahora
+            </Button>
+          </Link>
+        </div>
+
         {/* Header contextual - oculto en desktop */}
         <div className="mb-6 lg:hidden">
           <h2 className="text-2xl font-semibold text-gray-900">

@@ -21,6 +21,7 @@ import {
   Save,
   AlertTriangle
 } from 'lucide-react';
+import FaceRecognitionCapture from '@/components/biometric/FaceRecognitionCapture';
 import { toast } from 'sonner';
 import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { empleadoManager, type EmpleadoData } from '@/lib/empleado-manager';
@@ -47,7 +48,8 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
     nombre: '',
     cuil: '',
     empresa: '',
-    observaciones: ''
+    observaciones: '',
+    faceDescriptor: null as number[] | null
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const empleadoRef = useRef(empleado);
@@ -72,7 +74,8 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
         nombre: empleado.nombre || '',
         cuil: empleado.cuil || '',
         empresa: empleado.empresa || '',
-        observaciones: empleado.data?.OBSERVACIONES || ''
+        observaciones: empleado.data?.OBSERVACIONES || '',
+        faceDescriptor: empleado.data?.FACE_DESCRIPTOR || null
       };
       console.log('🔍 Debug estableciendo formData:', newFormData);
       setFormData(newFormData);
@@ -83,7 +86,8 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
         nombre: '',
         cuil: '',
         empresa: '',
-        observaciones: ''
+        observaciones: '',
+        faceDescriptor: null
       });
     }
     setErrors({});
@@ -156,7 +160,8 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
         nombre: formData.nombre.trim(),
         cuil: formData.cuil.trim(),
         empresa: formData.empresa.trim(),
-        observaciones: formData.observaciones.trim()
+        observaciones: formData.observaciones.trim(),
+        faceDescriptor: formData.faceDescriptor
       };
 
       if (empleado) {
@@ -212,13 +217,14 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
       nombre: data.nombre,
       cuil: data.cuil,
       cuil_norm: data.cuil ? data.cuil.replace(/-/g, '') : '',
-      data: {
-        EMPRESA: data.empresa,
-        CUIL: data.cuil,
-        OBSERVACIONES: data.observaciones,
-        MANUAL: 'true',
-        TIPO: 'MANUAL'
-      }
+        data: {
+          EMPRESA: data.empresa,
+          CUIL: data.cuil,
+          OBSERVACIONES: data.observaciones,
+          MANUAL: 'true',
+          TIPO: 'MANUAL',
+          ...(data.faceDescriptor && { FACE_DESCRIPTOR: data.faceDescriptor })
+        }
     };
 
     await dataManager.addConsolidated(empleadoRecord);
@@ -257,7 +263,8 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
           CUIL: data.cuil,
           OBSERVACIONES: data.observaciones,
           MANUAL: 'true',
-          TIPO: 'MANUAL'
+          TIPO: 'MANUAL',
+          ...(data.faceDescriptor && { FACE_DESCRIPTOR: data.faceDescriptor })
         }
       });
     }
@@ -443,6 +450,23 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
               rows={3}
             />
           </div>
+
+          {/* Reconocimiento Facial - Sección Colapsable */}
+          <FaceRecognitionCapture
+            savedDescriptor={formData.faceDescriptor}
+            onDescriptorCaptured={(descriptor) => {
+              setFormData(prev => ({
+                ...prev,
+                faceDescriptor: descriptor
+              }));
+            }}
+            onDescriptorRemoved={() => {
+              setFormData(prev => ({
+                ...prev,
+                faceDescriptor: null
+              }));
+            }}
+          />
 
           {/* Información adicional para empleados manuales */}
           {empleado && empleado.recibosCount === 0 && (

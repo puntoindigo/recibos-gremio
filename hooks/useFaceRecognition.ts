@@ -1,0 +1,142 @@
+// hooks/useFaceRecognition.ts
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import * as faceapi from 'face-api.js';
+
+export interface FaceRecognitionState {
+  isModelLoaded: boolean;
+  isDetecting: boolean;
+  error: string | null;
+  descriptor: Float32Array | null;
+}
+
+export interface UseFaceRecognitionReturn {
+  state: FaceRecognitionState;
+  loadModels: () => Promise<void>;
+  detectFace: (videoElement: HTMLVideoElement) => Promise<Float32Array | null>;
+  stopDetection: () => void;
+}
+
+/**
+ * Hook personalizado para manejar reconocimiento facial con face-api.js
+ * 
+ * Este hook encapsula toda la lógica de face-api.js y mantiene el estado
+ * del modelo cargado y las detecciones en curso.
+ */
+export function useFaceRecognition(): UseFaceRecognitionReturn {
+  const [state, setState] = useState<FaceRecognitionState>({
+    isModelLoaded: false,
+    isDetecting: false,
+    error: null,
+    descriptor: null
+  });
+
+  const modelsLoadedRef = useRef(false);
+
+  /**
+   * Carga los modelos de face-api.js desde la carpeta public
+   */
+  const loadModels = useCallback(async () => {
+    if (modelsLoadedRef.current) {
+      setState(prev => ({ ...prev, isModelLoaded: true }));
+      return;
+    }
+
+    try {
+      setState(prev => ({ ...prev, error: null }));
+
+      // Cargar los modelos necesarios
+      // Estos archivos deben estar en /public/models/
+      const MODEL_URL = '/models';
+
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+      ]);
+
+      modelsLoadedRef.current = true;
+      setState(prev => ({
+        ...prev,
+        isModelLoaded: true,
+        error: null
+      }));
+    } catch (error) {
+      console.error('Error cargando modelos de face-api:', error);
+      setState(prev => ({
+        ...prev,
+        isModelLoaded: false,
+        error: error instanceof Error ? error.message : 'Error desconocido al cargar modelos'
+      }));
+    }
+  }, []);
+
+  /**
+   * Detecta un rostro en el video y extrae su descriptor
+   */
+  const detectFace = useCallback(async (
+    videoElement: HTMLVideoElement
+  ): Promise<Float32Array | null> => {
+    if (!state.isModelLoaded) {
+      throw new Error('Los modelos no están cargados. Llama a loadModels() primero.');
+    }
+
+    try {
+      setState(prev => ({ ...prev, isDetecting: true, error: null }));
+
+      // Detectar el rostro con el detector más rápido
+      const detection = await faceapi
+        .detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      if (!detection) {
+        setState(prev => ({
+          ...prev,
+          isDetecting: false,
+          descriptor: null,
+          error: 'No se detectó ningún rostro en la imagen'
+        }));
+        return null;
+      }
+
+      const descriptor = detection.descriptor;
+      setState(prev => ({
+        ...prev,
+        isDetecting: false,
+        descriptor,
+        error: null
+      }));
+
+      return descriptor;
+    } catch (error) {
+      console.error('Error detectando rostro:', error);
+      setState(prev => ({
+        ...prev,
+        isDetecting: false,
+        descriptor: null,
+        error: error instanceof Error ? error.message : 'Error desconocido al detectar rostro'
+      }));
+      return null;
+    }
+  }, [state.isModelLoaded]);
+
+  /**
+   * Detiene la detección en curso
+   */
+  const stopDetection = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      isDetecting: false
+    }));
+  }, []);
+
+  return {
+    state,
+    loadModels,
+    detectFace,
+    stopDetection
+  };
+}
+
