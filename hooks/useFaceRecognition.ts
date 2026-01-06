@@ -26,21 +26,30 @@ const loadFaceApi = async () => {
       script.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
       script.async = true;
       
-      // Esperar a que se cargue y verificar diferentes formas de exposición
+      // Esperar a que se cargue
       script.onload = () => {
-        // face-api.js puede exponerse de diferentes formas
-        const faceApi = (window as any).faceapi || 
-                       (window as any).faceApi || 
-                       (window as any).face_api;
+        // face-api.js desde CDN puede tardar un momento en inicializarse
+        // Intentar varias veces con un pequeño delay
+        let attempts = 0;
+        const maxAttempts = 10;
         
-        if (faceApi) {
-          resolve(faceApi);
-        } else {
-          // Si no está disponible globalmente, intentar import dinámico como fallback
-          import('face-api.js').then(resolve).catch(() => {
-            reject(new Error('face-api.js no se cargó correctamente desde CDN'));
-          });
-        }
+        const checkFaceApi = () => {
+          attempts++;
+          const faceApi = (window as any).faceapi || 
+                         (window as any).faceApi ||
+                         (window as any).face_api;
+          
+          if (faceApi && faceApi.nets) {
+            resolve(faceApi);
+          } else if (attempts < maxAttempts) {
+            setTimeout(checkFaceApi, 50);
+          } else {
+            reject(new Error('face-api.js se cargó pero no está disponible. Intenta recargar la página.'));
+          }
+        };
+        
+        // Empezar a verificar después de un pequeño delay
+        setTimeout(checkFaceApi, 50);
       };
       
       script.onerror = () => {
