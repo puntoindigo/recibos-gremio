@@ -63,6 +63,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
   const [recibos, setRecibos] = useState<any[]>([]);
   const [registros, setRegistros] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadFichaData();
