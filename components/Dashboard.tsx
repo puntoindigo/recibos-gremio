@@ -345,7 +345,8 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
               >
                 <Plus className="h-3 w-3 text-blue-600" />
               </Button>
-            </CardContent>
+            </div>
+          </CardContent>
         </Card>
         )}
 

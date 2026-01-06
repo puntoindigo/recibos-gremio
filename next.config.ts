@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
     ],
   },
   // Excluir paquetes pesados del bundle del servidor
-  serverComponentsExternalPackages: ['face-api.js', 'pdfjs-dist'],
+  // serverComponentsExternalPackages removido - no es válido en Next.js 15.5.9
 };
 
 export default nextConfig;
