@@ -21,7 +21,8 @@ import {
   LogIn,
   LogOut,
   Clock,
-  MapPin
+  MapPin,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -435,6 +436,26 @@ export default function TestFaceRecognitionContent() {
     setLastRegistration(null);
     setIsRegistered(false);
     lastRecognizedLegajoRef.current = null;
+  };
+
+  const handleDeleteRegistro = async (id: string) => {
+    if (!confirm('¿Estás seguro de eliminar este registro?')) {
+      return;
+    }
+
+    setDeletingId(id);
+    try {
+      await dataManager.deleteRegistro(id);
+      // Recargar registros
+      const registros = await dataManager.getAllRegistros(true);
+      setAllRegistros(registros || []);
+      toast.success('Registro eliminado exitosamente');
+    } catch (error) {
+      console.error('Error eliminando registro:', error);
+      toast.error('Error al eliminar el registro');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (

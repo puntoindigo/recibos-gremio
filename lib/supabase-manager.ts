@@ -1544,6 +1544,38 @@ export class SupabaseManager {
       loadingState.setLoading('registros', false);
     }
   }
+
+  async deleteRegistro(id: string): Promise<void> {
+    loadingState.setLoading('registros', true);
+    
+    try {
+      const { error } = await this.client
+        .from('registros')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('❌ Error eliminando registro:', {
+          id,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          error: JSON.stringify(error, null, 2)
+        });
+        throw error;
+      }
+      
+      // Limpiar cache relacionado
+      dataCache.delete('registros_all');
+      // Limpiar cache por legajo (necesitamos obtener el legajo primero)
+      // Por ahora limpiamos todos los caches de registros
+      const cacheKeys = Array.from(dataCache['cache'].keys()).filter(key => key.startsWith('registros_'));
+      cacheKeys.forEach(key => dataCache.delete(key));
+    } finally {
+      loadingState.setLoading('registros', false);
+    }
+  }
 }
 
 // Singleton del manager

@@ -168,10 +168,44 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
         // Modo edición
         await updateEmpleado(empleado.legajo, empleadoData);
         toast.success('Empleado actualizado exitosamente');
+        
+        // Si se guardaron datos biométricos, crear registro de "alta"
+        if (empleadoData.faceDescriptor && empleadoData.faceDescriptor.length > 0) {
+          try {
+            await dataManager.createRegistro({
+              legajo: empleadoData.legajo,
+              nombre: empleadoData.nombre,
+              empresa: empleadoData.empresa,
+              accion: 'alta',
+              sede: 'CENTRAL',
+              fecha_hora: new Date().toISOString()
+            });
+          } catch (error) {
+            console.error('Error creando registro de alta:', error);
+            // No mostrar error al usuario, solo loguear
+          }
+        }
       } else {
         // Modo creación
         await createEmpleado(empleadoData);
         toast.success('Empleado creado exitosamente');
+        
+        // Si se guardaron datos biométricos, crear registro de "alta"
+        if (empleadoData.faceDescriptor && empleadoData.faceDescriptor.length > 0) {
+          try {
+            await dataManager.createRegistro({
+              legajo: empleadoData.legajo,
+              nombre: empleadoData.nombre,
+              empresa: empleadoData.empresa,
+              accion: 'alta',
+              sede: 'CENTRAL',
+              fecha_hora: new Date().toISOString()
+            });
+          } catch (error) {
+            console.error('Error creando registro de alta:', error);
+            // No mostrar error al usuario, solo loguear
+          }
+        }
       }
       
       onSave();

@@ -148,7 +148,7 @@ export interface SupabaseRegistro {
   legajo: string;
   nombre: string;
   empresa: string;
-  accion: 'entrada' | 'salida';
+  accion: 'entrada' | 'salida' | 'alta';
   sede: string;
   fecha_hora: string;
   created_at: string;

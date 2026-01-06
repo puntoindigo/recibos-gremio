@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS public.registros (
   legajo TEXT NOT NULL,
   nombre TEXT NOT NULL,
   empresa TEXT NOT NULL,
-  accion TEXT NOT NULL CHECK (accion IN ('entrada', 'salida')),
+  accion TEXT NOT NULL CHECK (accion IN ('entrada', 'salida', 'alta')),
   sede TEXT NOT NULL DEFAULT 'CENTRAL',
   fecha_hora TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

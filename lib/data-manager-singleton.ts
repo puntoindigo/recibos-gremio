@@ -151,6 +151,7 @@ export interface DataManager {
   getAllRegistros(forceRefresh?: boolean): Promise<any[]>;
   getRegistrosByLegajo(legajo: string): Promise<any[]>;
   createRegistro(registro: any): Promise<void>;
+  deleteRegistro(id: string): Promise<void>;
 }
 
 /**
