@@ -271,7 +271,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
     });
     
     return filteredItems;
-  }, [config]);
+  }, [config, session]);
 
   return (
     <ConfigurationContext.Provider value={{
