@@ -379,7 +379,9 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {canAccess('descuentos') && (
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => onNavigateToTab?.('descuentos')}
@@ -412,7 +414,9 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {canAccess('descuentos') && (
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => onNavigateToTab?.('descuentos')}
