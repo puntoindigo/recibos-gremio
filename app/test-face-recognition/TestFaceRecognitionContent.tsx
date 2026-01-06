@@ -35,6 +35,8 @@ export default function TestFaceRecognitionContent() {
     confidence: number;
   } | null>(null);
   const [isRecognizing, setIsRecognizing] = useState(false);
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -46,12 +48,31 @@ export default function TestFaceRecognitionContent() {
   // Limpiar stream al desmontar
   useEffect(() => {
     return () => {
-      stopStream();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
     };
   }, []);
 
   const startCamera = async () => {
+    // Verificar que getUserMedia esté disponible
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      const errorMsg = 'Tu navegador no soporta acceso a la cámara. Usa Chrome, Firefox o Safari.';
+      console.error(errorMsg);
+      toast.error(errorMsg);
+      setCameraError(errorMsg);
+      return;
+    }
+
+    setIsStartingCamera(true);
+    setCameraError(null);
+
     try {
+      console.log('Solicitando acceso a la cámara...');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { 
           width: { ideal: 640 },
@@ -60,15 +81,52 @@ export default function TestFaceRecognitionContent() {
         }
       });
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        setIsStreaming(true);
-        setRecognizedEmployee(null);
+      console.log('Stream obtenido:', stream);
+      console.log('Tracks activos:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
+
+      if (!videoRef.current) {
+        throw new Error('El elemento de video no está disponible');
       }
-    } catch (error) {
+
+      videoRef.current.srcObject = stream;
+      streamRef.current = stream;
+      setIsStreaming(true);
+      setRecognizedEmployee(null);
+      setIsStartingCamera(false);
+
+      // Esperar a que el video esté listo
+      videoRef.current.onloadedmetadata = () => {
+        console.log('Video metadata cargado');
+        if (videoRef.current) {
+          videoRef.current.play().catch(err => {
+            console.error('Error reproduciendo video:', err);
+            toast.error('Error iniciando el video');
+          });
+        }
+      };
+
+    } catch (error: any) {
       console.error('Error accediendo a la cámara:', error);
-      toast.error('No se pudo acceder a la cámara. Verifica los permisos.');
+      setIsStartingCamera(false);
+      
+      let errorMessage = 'No se pudo acceder a la cámara.';
+      
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        errorMessage = 'Permiso de cámara denegado. Por favor, permite el acceso a la cámara en la configuración de tu navegador.';
+      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+        errorMessage = 'No se encontró ninguna cámara disponible.';
+      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+        errorMessage = 'La cámara está siendo usada por otra aplicación.';
+      } else if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
+        errorMessage = 'Las restricciones de la cámara no se pueden satisfacer.';
+      } else if (error.name === 'SecurityError') {
+        errorMessage = 'Error de seguridad. Asegúrate de estar usando HTTPS.';
+      } else {
+        errorMessage = `Error: ${error.message || error.toString()}`;
+      }
+      
+      toast.error(errorMessage);
+      setCameraError(errorMessage);
     }
   };
 
@@ -204,15 +262,31 @@ export default function TestFaceRecognitionContent() {
               )}
             </div>
 
+            {cameraError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                <XCircle className="h-4 w-4 inline mr-2" />
+                {cameraError}
+              </div>
+            )}
+
             <div className="flex gap-2">
               {!isStreaming ? (
                 <Button
                   onClick={startCamera}
-                  disabled={!state.isModelLoaded}
+                  disabled={!state.isModelLoaded || isStartingCamera}
                   className="flex-1"
                 >
-                  <Video className="h-4 w-4 mr-2" />
-                  Activar Cámara
+                  {isStartingCamera ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Activando cámara...
+                    </>
+                  ) : (
+                    <>
+                      <Video className="h-4 w-4 mr-2" />
+                      Activar Cámara
+                    </>
+                  )}
                 </Button>
               ) : (
                 <>
