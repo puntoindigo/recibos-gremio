@@ -109,8 +109,8 @@ export function useFaceRecognition(): UseFaceRecognitionReturn {
       const faceapi = await loadFaceApi();
 
       // Cargar los modelos necesarios desde CDN
-      // Usamos unpkg CDN que tiene los modelos de face-api.js
-      const MODEL_URL = 'https://unpkg.com/face-api.js@0.22.2/weights';
+      // Usamos jsdelivr CDN que tiene mejor soporte CORS
+      const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
 
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
