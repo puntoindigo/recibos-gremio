@@ -26,7 +26,7 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 
 export default function TestFaceRecognitionContent() {
-  const { state, loadModels, detectFace, stopDetection } = useFaceRecognition();
+  const { state, loadModels, detectFace, detectFaceBox, stopDetection } = useFaceRecognition();
   const { dataManager } = useCentralizedDataManager();
   const [isStreaming, setIsStreaming] = useState(false);
   const [recognizedEmployee, setRecognizedEmployee] = useState<{
@@ -40,9 +40,12 @@ export default function TestFaceRecognitionContent() {
   const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [autoRecognitionEnabled, setAutoRecognitionEnabled] = useState(true);
+  const [faceDetection, setFaceDetection] = useState<any | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recognitionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastRecognizedLegajoRef = useRef<string | null>(null);
 
   // Cargar modelos al montar
@@ -57,6 +60,10 @@ export default function TestFaceRecognitionContent() {
         clearInterval(recognitionIntervalRef.current);
         recognitionIntervalRef.current = null;
       }
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+        detectionIntervalRef.current = null;
+      }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
@@ -66,6 +73,71 @@ export default function TestFaceRecognitionContent() {
       }
     };
   }, []);
+
+  // Detección continua de rostros para mostrar encuadres visuales
+  useEffect(() => {
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+    }
+
+    if (isStreaming && state.isModelLoaded && videoRef.current && canvasRef.current) {
+      detectionIntervalRef.current = setInterval(async () => {
+        if (videoRef.current && canvasRef.current) {
+          const detection = await detectFaceBox(videoRef.current);
+          setFaceDetection(detection);
+          
+          // Dibujar encuadre en el canvas
+          const canvas = canvasRef.current;
+          const video = videoRef.current;
+          const ctx = canvas.getContext('2d');
+          
+          if (ctx && video.videoWidth && video.videoHeight) {
+            // Ajustar tamaño del canvas al video
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // Limpiar canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (detection && detection.detection) {
+              const box = detection.detection.box;
+              const landmarks = detection.landmarks;
+              
+              // Dibujar rectángulo del rostro
+              ctx.strokeStyle = detection.detection.score > 0.5 ? '#22c55e' : '#ef4444';
+              ctx.lineWidth = 3;
+              ctx.strokeRect(box.x, box.y, box.width, box.height);
+              
+              // Dibujar puntos de referencia faciales
+              if (landmarks) {
+                ctx.fillStyle = '#3b82f6';
+                landmarks.positions.forEach((point: any) => {
+                  ctx.beginPath();
+                  ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
+                  ctx.fill();
+                });
+              }
+              
+              // Mostrar score de confianza
+              ctx.fillStyle = detection.detection.score > 0.5 ? '#22c55e' : '#ef4444';
+              ctx.font = '16px Arial';
+              ctx.fillText(
+                `Confianza: ${Math.round(detection.detection.score * 100)}%`,
+                box.x,
+                box.y - 10
+              );
+            }
+          }
+        }
+      }, 100); // Detectar cada 100ms para fluidez
+    }
+
+    return () => {
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+      }
+    };
+  }, [isStreaming, state.isModelLoaded, detectFaceBox]);
 
   // Reconocimiento automático continuo
   useEffect(() => {
@@ -203,10 +275,14 @@ export default function TestFaceRecognitionContent() {
   };
 
   const stopStream = () => {
-    // Limpiar intervalo de reconocimiento automático
+    // Limpiar intervalos
     if (recognitionIntervalRef.current) {
       clearInterval(recognitionIntervalRef.current);
       recognitionIntervalRef.current = null;
+    }
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
     }
     
     if (streamRef.current) {
@@ -216,8 +292,15 @@ export default function TestFaceRecognitionContent() {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
     setIsStreaming(false);
     setRecognizedEmployee(null);
+    setFaceDetection(null);
     lastRecognizedLegajoRef.current = null;
     stopDetection();
   };
@@ -333,6 +416,14 @@ export default function TestFaceRecognitionContent() {
                 muted
                 className={`w-full h-full object-cover ${isStreaming ? 'block' : 'hidden'}`}
               />
+              {/* Canvas overlay para dibujar encuadres */}
+              {isStreaming && (
+                <canvas
+                  ref={canvasRef}
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                  style={{ objectFit: 'cover' }}
+                />
+              )}
               {/* Overlay cuando no está activo */}
               {!isStreaming && (
                 <div className="absolute inset-0 flex items-center justify-center text-gray-400">
@@ -340,6 +431,18 @@ export default function TestFaceRecognitionContent() {
                     <VideoOff className="h-16 w-16 mx-auto mb-4" />
                     <p className="text-lg">Cámara no activa</p>
                     <p className="text-sm mt-2">Haz clic en "Activar Cámara" para comenzar</p>
+                  </div>
+                </div>
+              )}
+              {/* Indicador visual de detección */}
+              {isStreaming && faceDetection && (
+                <div className="absolute top-2 left-2">
+                  <div className={`px-2 py-1 rounded text-xs font-medium ${
+                    faceDetection.detection.score > 0.5 
+                      ? 'bg-green-500 text-white' 
+                      : 'bg-yellow-500 text-white'
+                  }`}>
+                    {faceDetection.detection.score > 0.5 ? '✓ Rostro detectado' : '⏳ Ajustando...'}
                   </div>
                 </div>
               )}
