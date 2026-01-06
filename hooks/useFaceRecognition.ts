@@ -2,7 +2,21 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import * as faceapi from 'face-api.js';
+
+// face-api.js se carga dinámicamente solo cuando se necesita
+let faceapiPromise: Promise<any> | null = null;
+
+const loadFaceApi = async () => {
+  if (typeof window === 'undefined') {
+    throw new Error('face-api.js solo puede usarse en el cliente');
+  }
+  
+  if (!faceapiPromise) {
+    faceapiPromise = import('face-api.js');
+  }
+  
+  return faceapiPromise;
+};
 
 export interface FaceRecognitionState {
   isModelLoaded: boolean;
@@ -46,6 +60,9 @@ export function useFaceRecognition(): UseFaceRecognitionReturn {
     try {
       setState(prev => ({ ...prev, error: null }));
 
+      // Cargar face-api.js dinámicamente solo en el cliente
+      const faceapi = await loadFaceApi();
+
       // Cargar los modelos necesarios
       // Estos archivos deben estar en /public/models/
       const MODEL_URL = '/models';
@@ -84,6 +101,9 @@ export function useFaceRecognition(): UseFaceRecognitionReturn {
 
     try {
       setState(prev => ({ ...prev, isDetecting: true, error: null }));
+
+      // Cargar face-api.js dinámicamente
+      const faceapi = await loadFaceApi();
 
       // Detectar el rostro con el detector más rápido
       const detection = await faceapi
