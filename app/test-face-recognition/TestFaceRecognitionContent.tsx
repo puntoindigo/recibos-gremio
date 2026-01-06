@@ -274,14 +274,26 @@ export default function TestFaceRecognitionContent() {
         setRegistrationType(null);
       }, 3000);
     } catch (error: any) {
-      console.error('Error guardando registro:', error);
+      console.error('❌ Error guardando registro:', {
+        error,
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        fullError: JSON.stringify(error, null, 2)
+      });
+      
       // Si es error de tabla no existe, mostrar mensaje específico
-      if (error?.code === 'PGRST116' || error?.message?.includes('404') || error?.message?.includes('does not exist')) {
-        toast.error('La tabla de registros no existe. Ejecuta el script SQL en Supabase.', {
+      if (error?.code === 'PGRST116' || error?.code === '42P01' || error?.message?.includes('404') || error?.message?.includes('does not exist') || error?.message?.includes('relation') || error?.message?.includes('not found')) {
+        toast.error('La tabla de registros no existe o no es accesible. Verifica permisos RLS en Supabase.', {
           duration: 5000,
         });
+        console.error('🔍 Verifica en Supabase:');
+        console.error('1. Tabla "registros" existe');
+        console.error('2. RLS está habilitado pero con políticas que permiten acceso');
+        console.error('3. Error completo:', error);
       } else {
-        toast.error('Error al guardar el registro. Intenta nuevamente.');
+        toast.error(`Error al guardar el registro: ${error?.message || 'Error desconocido'}`);
       }
       // Permitir reintentar
       setIsRegistered(false);

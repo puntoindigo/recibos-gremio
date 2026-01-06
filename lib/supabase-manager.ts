@@ -1415,9 +1415,22 @@ export class SupabaseManager {
         .single();
       
       if (error) {
+        // Log detallado del error
+        console.error('❌ Error creando registro:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          error: JSON.stringify(error, null, 2)
+        });
+        
         // Si la tabla no existe (404), mostrar mensaje útil pero no romper la app
-        if (error.code === 'PGRST116' || error.message?.includes('404') || error.message?.includes('does not exist')) {
-          console.warn('⚠️ Tabla de registros no existe. Ejecuta el script SQL create_registros_table.sql en Supabase.');
+        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404') || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('not found')) {
+          console.warn('⚠️ Tabla de registros no existe o no es accesible. Verifica:');
+          console.warn('1. Que ejecutaste el script SQL create_registros_table.sql');
+          console.warn('2. Que la tabla se llama exactamente "registros"');
+          console.warn('3. Que tienes permisos RLS configurados correctamente');
+          console.warn('4. Error completo:', error);
           // Retornar un objeto simulado para que la app no se rompa
           return {
             ...registroData,
@@ -1455,9 +1468,22 @@ export class SupabaseManager {
         .order('fecha_hora', { ascending: false });
       
       if (error) {
+        // Log detallado del error
+        console.error('❌ Error obteniendo todos los registros:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          error: JSON.stringify(error, null, 2)
+        });
+        
         // Si la tabla no existe (404), retornar array vacío sin romper la app
-        if (error.code === 'PGRST116' || error.message?.includes('404') || error.message?.includes('does not exist')) {
-          console.warn('⚠️ Tabla de registros no existe. Ejecuta el script SQL create_registros_table.sql en Supabase.');
+        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404') || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('not found')) {
+          console.warn('⚠️ Tabla de registros no existe o no es accesible. Verifica:');
+          console.warn('1. Que ejecutaste el script SQL create_registros_table.sql');
+          console.warn('2. Que la tabla se llama exactamente "registros"');
+          console.warn('3. Que tienes permisos RLS configurados correctamente');
+          console.warn('4. Error completo:', error);
           return [];
         }
         throw error;

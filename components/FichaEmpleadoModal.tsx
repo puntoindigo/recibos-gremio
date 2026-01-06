@@ -96,10 +96,33 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
       setRecibos(empleadoData.recibos);
       
       // Cargar registros de entrada/salida
-      const registrosData = await dataManager.getRegistrosByLegajo(legajo);
-      setRegistros(registrosData || []);
-    } catch (error) {
-      console.error('Error cargando ficha del empleado:', error);
+      try {
+        const registrosData = await dataManager.getRegistrosByLegajo(legajo);
+        setRegistros(registrosData || []);
+      } catch (registrosError: any) {
+        console.error('❌ Error cargando registros en ficha:', {
+          legajo,
+          error: registrosError,
+          code: registrosError?.code,
+          message: registrosError?.message,
+          details: registrosError?.details,
+          hint: registrosError?.hint,
+          fullError: JSON.stringify(registrosError, null, 2)
+        });
+        // No romper la ficha si falla cargar registros
+        setRegistros([]);
+      }
+    } catch (error: any) {
+      console.error('❌ Error cargando ficha del empleado:', {
+        error,
+        legajo,
+        empresa,
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        fullError: JSON.stringify(error, null, 2)
+      });
     } finally {
       setIsLoading(false);
     }
