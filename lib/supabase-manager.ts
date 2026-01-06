@@ -147,7 +147,10 @@ export class SupabaseManager {
       
       // Limpiar cache relacionado
       dataCache.delete('receipts_all');
-      dataCache.delete(`receipts_empresa_${receipt.empresa}`);
+      const empresa = receipt.data?.EMPRESA || '';
+      if (empresa) {
+        dataCache.delete(`receipts_empresa_${empresa}`);
+      }
       
       return data;
     } finally {
@@ -1398,9 +1401,10 @@ export class SupabaseManager {
     loadingState.setLoading('registros', true);
     
     try {
+      const registroId = `${registro.legajo}-${registro.fecha_hora || new Date().toISOString()}-${Date.now()}`;
       const registroData = {
         ...registro,
-        id: `${registro.legajo}-${registro.fecha_hora}-${Date.now()}`,
+        id: registroId,
         fecha_hora: registro.fecha_hora || new Date().toISOString()
       };
 
@@ -1416,7 +1420,6 @@ export class SupabaseManager {
           console.warn('⚠️ Tabla de registros no existe. Ejecuta el script SQL create_registros_table.sql en Supabase.');
           // Retornar un objeto simulado para que la app no se rompa
           return {
-            id: registroData.id,
             ...registroData,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
