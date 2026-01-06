@@ -74,6 +74,7 @@ export interface UseFaceRecognitionReturn {
   state: FaceRecognitionState;
   loadModels: () => Promise<void>;
   detectFace: (videoElement: HTMLVideoElement) => Promise<Float32Array | null>;
+  detectFaceBox: (videoElement: HTMLVideoElement) => Promise<any | null>;
   stopDetection: () => void;
 }
 
@@ -188,6 +189,33 @@ export function useFaceRecognition(): UseFaceRecognitionReturn {
   }, [state.isModelLoaded]);
 
   /**
+   * Detecta un rostro y retorna solo el bounding box (sin descriptor)
+   * Útil para mostrar encuadres visuales en tiempo real
+   */
+  const detectFaceBox = useCallback(async (
+    videoElement: HTMLVideoElement
+  ): Promise<any | null> => {
+    if (!state.isModelLoaded) {
+      return null;
+    }
+
+    try {
+      // Cargar face-api.js dinámicamente
+      const faceapi = await loadFaceApi();
+
+      // Detectar solo el bounding box (más rápido que con descriptor)
+      const detection = await faceapi
+        .detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks();
+
+      return detection;
+    } catch (error) {
+      console.error('Error detectando bounding box:', error);
+      return null;
+    }
+  }, [state.isModelLoaded]);
+
+  /**
    * Detiene la detección en curso
    */
   const stopDetection = useCallback(() => {
@@ -201,6 +229,7 @@ export function useFaceRecognition(): UseFaceRecognitionReturn {
     state,
     loadModels,
     detectFace,
+    detectFaceBox,
     stopDetection
   };
 }
