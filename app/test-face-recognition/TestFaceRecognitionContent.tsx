@@ -53,6 +53,7 @@ export default function TestFaceRecognitionContent() {
   } | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
   const [allRegistros, setAllRegistros] = useState<any[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
