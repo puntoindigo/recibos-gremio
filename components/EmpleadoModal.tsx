@@ -255,7 +255,7 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
         legajo: data.legajo,
         nombre: data.nombre,
         cuil: data.cuil,
-        cuilNorm: data.cuil ? data.cuil.replace(/-/g, '') : '',
+        cuil_norm: data.cuil ? data.cuil.replace(/-/g, '') : '',
         periodo: periodo,
         data: {
           ...emp.data,
