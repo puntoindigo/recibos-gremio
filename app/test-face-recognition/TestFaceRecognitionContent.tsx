@@ -26,7 +26,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
+import ConfirmLogoutModal from '@/components/ConfirmLogoutModal';
 
 type RegistrationType = 'entrada' | 'salida' | null;
 
@@ -50,6 +51,7 @@ export default function TestFaceRecognitionContent() {
   const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [faceDetection, setFaceDetection] = useState<any | null>(null);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [lastRegistration, setLastRegistration] = useState<{
     tipo: 'entrada' | 'salida';
     empleado: string;
