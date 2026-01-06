@@ -1243,27 +1243,34 @@ export class SupabaseManager {
     loadingState.setLoading('empresas', true);
     
     try {
-      // Preparar datos para insertar
+      // La tabla empresas solo tiene: id, nombre, descripcion, logo_url, created_at, updated_at
+      // Filtrar solo los campos válidos
       const empresaData: any = {
         nombre: empresa.nombre,
-        descripcion: empresa.descripcion || '',
+        descripcion: empresa.descripcion || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
 
-      // Si se proporciona un id, usarlo; si no, Supabase generará uno automáticamente
+      // El id es requerido (PRIMARY KEY), usar el proporcionado o generar uno
       if (empresa.id) {
         empresaData.id = empresa.id;
+      } else {
+        // Generar un ID único si no se proporciona
+        empresaData.id = `empresa-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       }
 
-      // Si hay logo_url, incluirlo
+      // Manejar logo_url (la tabla usa logo_url, no logo)
       if (empresa.logo_url !== undefined) {
-        empresaData.logo_url = empresa.logo_url;
+        empresaData.logo_url = empresa.logo_url || null;
       } else if (empresa.logo !== undefined) {
         empresaData.logo_url = empresa.logo || null;
+      } else {
+        empresaData.logo_url = null;
       }
 
-      console.log('🔍 SupabaseManager.addEmpresa() - Insertando:', empresaData);
+      console.log('🔍 SupabaseManager.addEmpresa() - Insertando:', JSON.stringify(empresaData, null, 2));
+      console.log('🔍 Campos recibidos:', JSON.stringify(empresa, null, 2));
 
       const { data, error } = await this.client
         .from('empresas')
@@ -1271,13 +1278,13 @@ export class SupabaseManager {
         .select();
       
       if (error) {
-        console.error('❌ SupabaseManager.addEmpresa() - Error:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          error: JSON.stringify(error, null, 2)
-        });
+        console.error('❌ SupabaseManager.addEmpresa() - Error completo:', error);
+        console.error('❌ Código de error:', error.code);
+        console.error('❌ Mensaje:', error.message);
+        console.error('❌ Detalles:', error.details);
+        console.error('❌ Hint:', error.hint);
+        console.error('❌ Error JSON:', JSON.stringify(error, null, 2));
+        console.error('❌ Datos que intentó insertar:', JSON.stringify(empresaData, null, 2));
         throw error;
       }
 
