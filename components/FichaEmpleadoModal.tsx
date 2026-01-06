@@ -114,6 +114,19 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
         // No romper la ficha si falla cargar registros
         setRegistros([]);
       }
+    } catch (error: any) {
+      console.error('❌ Error cargando ficha del empleado:', {
+        error,
+        legajo,
+        empresa,
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        fullError: JSON.stringify(error, null, 2)
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -134,20 +147,6 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
       toast.error('Error al eliminar el registro');
     } finally {
       setDeletingId(null);
-    }
-    } catch (error: any) {
-      console.error('❌ Error cargando ficha del empleado:', {
-        error,
-        legajo,
-        empresa,
-        code: error?.code,
-        message: error?.message,
-        details: error?.details,
-        hint: error?.hint,
-        fullError: JSON.stringify(error, null, 2)
-      });
-    } finally {
-      setIsLoading(false);
     }
   };
 
