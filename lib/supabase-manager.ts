@@ -1410,7 +1410,20 @@ export class SupabaseManager {
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        // Si la tabla no existe (404), mostrar mensaje útil pero no romper la app
+        if (error.code === 'PGRST116' || error.message?.includes('404') || error.message?.includes('does not exist')) {
+          console.warn('⚠️ Tabla de registros no existe. Ejecuta el script SQL create_registros_table.sql en Supabase.');
+          // Retornar un objeto simulado para que la app no se rompa
+          return {
+            id: registroData.id,
+            ...registroData,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          } as SupabaseRegistro;
+        }
+        throw error;
+      }
       
       // Limpiar cache relacionado
       dataCache.delete('registros_all');
@@ -1438,7 +1451,14 @@ export class SupabaseManager {
         .select('*')
         .order('fecha_hora', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        // Si la tabla no existe (404), retornar array vacío sin romper la app
+        if (error.code === 'PGRST116' || error.message?.includes('404') || error.message?.includes('does not exist')) {
+          console.warn('⚠️ Tabla de registros no existe. Ejecuta el script SQL create_registros_table.sql en Supabase.');
+          return [];
+        }
+        throw error;
+      }
       
       const result = data || [];
       dataCache.set(cacheKey, result);
@@ -1462,7 +1482,14 @@ export class SupabaseManager {
         .eq('legajo', legajo)
         .order('fecha_hora', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        // Si la tabla no existe (404), retornar array vacío sin romper la app
+        if (error.code === 'PGRST116' || error.message?.includes('404') || error.message?.includes('does not exist')) {
+          console.warn('⚠️ Tabla de registros no existe. Ejecuta el script SQL create_registros_table.sql en Supabase.');
+          return [];
+        }
+        throw error;
+      }
       
       const result = data || [];
       dataCache.set(cacheKey, result);

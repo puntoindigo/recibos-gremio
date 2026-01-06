@@ -49,6 +49,7 @@ export default function TestFaceRecognitionContent() {
     legajo: string;
     timestamp: Date;
   } | null>(null);
+  const [isRegistered, setIsRegistered] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -169,9 +170,10 @@ export default function TestFaceRecognitionContent() {
     // - La cámara está activa
     // - Los modelos están cargados
     // - No hay un reconocimiento en curso
-    if (isStreaming && state.isModelLoaded && !isRecognizing && registrationType) {
+    // - No se ha registrado ya
+    if (isStreaming && state.isModelLoaded && !isRecognizing && registrationType && !isRegistered) {
       recognitionIntervalRef.current = setInterval(async () => {
-        if (!videoRef.current || isRecognizing || !state.isModelLoaded) {
+        if (!videoRef.current || isRecognizing || !state.isModelLoaded || isRegistered) {
           return;
         }
 
@@ -188,12 +190,19 @@ export default function TestFaceRecognitionContent() {
 
           if (match && match.distance < 0.6) {
             // Solo registrar si es un empleado diferente o si pasó suficiente tiempo
-            if (lastRecognizedLegajoRef.current !== match.legajo) {
+            if (lastRecognizedLegajoRef.current !== match.legajo && !isRegistered) {
+              // Detener reconocimiento inmediatamente para evitar múltiples registros
+              if (recognitionIntervalRef.current) {
+                clearInterval(recognitionIntervalRef.current);
+                recognitionIntervalRef.current = null;
+              }
+              
+              setIsRegistered(true);
               setRecognizedEmployee(match);
               lastRecognizedLegajoRef.current = match.legajo;
               
               // Registrar entrada/salida
-              registerAttendance(match, registrationType);
+              await registerAttendance(match, registrationType);
             }
           } else {
             // Si no hay coincidencia, limpiar después de un tiempo
@@ -214,7 +223,7 @@ export default function TestFaceRecognitionContent() {
         recognitionIntervalRef.current = null;
       }
     };
-  }, [isStreaming, state.isModelLoaded, isRecognizing, registrationType, detectFace, dataManager]);
+  }, [isStreaming, state.isModelLoaded, isRecognizing, registrationType, isRegistered, detectFace, dataManager]);
 
   const registerAttendance = async (employee: {
     legajo: string;
@@ -250,16 +259,32 @@ export default function TestFaceRecognitionContent() {
         }
       );
 
+      // Detener reconocimiento y cámara inmediatamente después de registrar
+      if (recognitionIntervalRef.current) {
+        clearInterval(recognitionIntervalRef.current);
+        recognitionIntervalRef.current = null;
+      }
+      
       // Resetear después de 3 segundos para permitir otro registro
       setTimeout(() => {
         setRecognizedEmployee(null);
         lastRecognizedLegajoRef.current = null;
+        setIsRegistered(false);
         stopStream();
         setRegistrationType(null);
       }, 3000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error guardando registro:', error);
-      toast.error('Error al guardar el registro. Intenta nuevamente.');
+      // Si es error de tabla no existe, mostrar mensaje específico
+      if (error?.code === 'PGRST116' || error?.message?.includes('404') || error?.message?.includes('does not exist')) {
+        toast.error('La tabla de registros no existe. Ejecuta el script SQL en Supabase.', {
+          duration: 5000,
+        });
+      } else {
+        toast.error('Error al guardar el registro. Intenta nuevamente.');
+      }
+      // Permitir reintentar
+      setIsRegistered(false);
     }
   };
 
@@ -371,6 +396,8 @@ export default function TestFaceRecognitionContent() {
     setRegistrationType(type);
     setRecognizedEmployee(null);
     setLastRegistration(null);
+    setIsRegistered(false);
+    lastRecognizedLegajoRef.current = null;
   };
 
   const handleCancel = () => {
@@ -378,6 +405,8 @@ export default function TestFaceRecognitionContent() {
     setRegistrationType(null);
     setRecognizedEmployee(null);
     setLastRegistration(null);
+    setIsRegistered(false);
+    lastRecognizedLegajoRef.current = null;
   };
 
   return (

@@ -538,6 +538,7 @@ class SupabaseDataManager implements DataManager {
 
   async createRegistro(registro: any): Promise<void> {
     await getSupabaseManager().createRegistro(registro);
+    // No necesitamos retornar el registro creado
   }
 
   async clearSavedControls(): Promise<void> {
