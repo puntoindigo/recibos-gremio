@@ -483,28 +483,96 @@ export default function TestFaceRecognitionContent() {
 
         {/* Selección de tipo de registro */}
         {!registrationType && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-8">
-            <Button
-              onClick={() => handleTypeSelection('entrada')}
-              disabled={!state.isModelLoaded}
-              className="h-32 text-xl font-semibold bg-green-600 hover:bg-green-700 text-white"
-            >
-              <div className="flex flex-col items-center gap-3">
-                <LogIn className="h-12 w-12" />
-                <span>ENTRADA</span>
-              </div>
-            </Button>
-            <Button
-              onClick={() => handleTypeSelection('salida')}
-              disabled={!state.isModelLoaded}
-              className="h-32 text-xl font-semibold bg-red-600 hover:bg-red-700 text-white"
-            >
-              <div className="flex flex-col items-center gap-3">
-                <LogOut className="h-12 w-12" />
-                <span>SALIDA</span>
-              </div>
-            </Button>
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-8">
+              <Button
+                onClick={() => handleTypeSelection('entrada')}
+                disabled={!state.isModelLoaded}
+                className="h-32 text-xl font-semibold bg-green-600 hover:bg-green-700 text-white"
+              >
+                <div className="flex flex-col items-center gap-3">
+                  <LogIn className="h-12 w-12" />
+                  <span>ENTRADA</span>
+                </div>
+              </Button>
+              <Button
+                onClick={() => handleTypeSelection('salida')}
+                disabled={!state.isModelLoaded}
+                className="h-32 text-xl font-semibold bg-red-600 hover:bg-red-700 text-white"
+              >
+                <div className="flex flex-col items-center gap-3">
+                  <LogOut className="h-12 w-12" />
+                  <span>SALIDA</span>
+                </div>
+              </Button>
+            </div>
+
+            {/* Listado de registros */}
+            {allRegistros.length > 0 && (
+              <Card className="max-w-4xl mx-auto">
+                <CardContent className="p-6">
+                  <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    Registros Recientes
+                  </h2>
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {allRegistros.map((registro) => (
+                      <div
+                        key={registro.id}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          registro.accion === 'entrada' 
+                            ? 'bg-green-50 border-green-200' 
+                            : 'bg-red-50 border-red-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 flex-1">
+                          {registro.accion === 'entrada' ? (
+                            <LogIn className="h-5 w-5 text-green-600 flex-shrink-0" />
+                          ) : (
+                            <LogOut className="h-5 w-5 text-red-600 flex-shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-semibold text-sm">{registro.nombre}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {registro.legajo}
+                              </Badge>
+                              <span className="text-xs text-gray-500">•</span>
+                              <span className="text-xs text-gray-600">{registro.empresa}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <Badge className={
+                                  registro.accion === 'entrada' 
+                                    ? 'bg-green-600 text-white' 
+                                    : 'bg-red-600 text-white'
+                                }>
+                                  {registro.accion === 'entrada' ? 'ENTRADA' : 'SALIDA'}
+                                </Badge>
+                                <span className="text-sm text-gray-600">
+                                  {new Date(registro.fecha_hora).toLocaleString('es-AR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3 text-gray-400" />
+                                <span className="text-xs text-gray-500">{registro.sede || 'CENTRAL'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
         )}
 
         {/* Cámara - solo se muestra cuando se selecciona tipo */}
