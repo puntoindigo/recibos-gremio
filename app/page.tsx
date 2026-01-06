@@ -62,6 +62,7 @@ import { EmpresasPanel } from "@/components/EmpresasPanel";
 import SidebarNavigation from "@/components/SidebarNavigation";
 import Dashboard, { DashboardRef } from "@/components/Dashboard";
 import BackupPanel from "@/components/BackupPanel";
+import AccesosPanel from "@/components/AccesosPanel";
 import ProcessingProgress from "@/components/ProcessingProgress";
 import PersistentUploadProgress from "@/components/PersistentUploadProgress";
 import DocumentationPanel from "@/components/DocumentationPanel";
@@ -94,6 +95,14 @@ export default function Page() {
   const { config, saveConfiguration: updateConfig } = useConfiguration();
   const { dataManager } = useCentralizedDataManager();
   const [activeTab, setActiveTab] = useState<string>("tablero");
+  
+  // Redirigir registro@recibos.com automáticamente a la página de registro
+  useEffect(() => {
+    if (session?.user?.email === 'registro@recibos.com' && activeTab !== 'registro') {
+      // Redirigir a la página de registro
+      window.location.href = '/test-face-recognition';
+    }
+  }, [session, activeTab]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showUploadLog, setShowUploadLog] = useState(false);
   const [showTestTools, setShowTestTools] = useState(false);
@@ -3276,6 +3285,9 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             {activeTab === 'control' && 'Control'}
             {activeTab === 'export' && 'Exportar'}
             {activeTab === 'descuentos' && 'Descuentos'}
+            {activeTab === 'empleados' && 'Empleados'}
+            {activeTab === 'empresas' && 'Empresas'}
+            {activeTab === 'accesos' && 'Accesos'}
             {activeTab === 'usuarios' && 'Usuarios'}
             {activeTab === 'backup' && 'Backup'}
             {activeTab === 'documentacion' && 'Documentación'}
@@ -3287,6 +3299,9 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             {activeTab === 'control' && 'Control de nóminas y comparaciones'}
             {activeTab === 'export' && 'Exportación de datos'}
             {activeTab === 'descuentos' && 'Gestión de descuentos'}
+            {activeTab === 'empleados' && 'Gestión de empleados'}
+            {activeTab === 'empresas' && 'Gestión de empresas'}
+            {activeTab === 'accesos' && 'Registros de entradas y salidas'}
             {activeTab === 'usuarios' && 'Administración de usuarios'}
             {activeTab === 'backup' && 'Respaldo de base de datos'}
             {activeTab === 'documentacion' && 'Documentación del proyecto'}
@@ -3694,6 +3709,11 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
           {/* Empresas Tab */}
           <TabsContent value="empresas" className="space-y-4">
             <EmpresasPanel empresaFiltro={empresaFiltro} />
+          </TabsContent>
+
+          {/* Accesos Tab */}
+          <TabsContent value="accesos" className="space-y-4">
+            <AccesosPanel />
           </TabsContent>
 
           {/* Usuarios Tab */}

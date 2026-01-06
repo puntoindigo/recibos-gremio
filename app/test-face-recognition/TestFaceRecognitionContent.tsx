@@ -26,12 +26,17 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 
 type RegistrationType = 'entrada' | 'salida' | null;
 
 export default function TestFaceRecognitionContent() {
   const { state, loadModels, detectFace, detectFaceBox, stopDetection } = useFaceRecognition();
   const { dataManager } = useCentralizedDataManager();
+  const { data: session } = useSession();
+  
+  // Verificar si el usuario puede eliminar registros
+  const canDelete = session?.user?.email !== 'registro@recibos.com';
   const [registrationType, setRegistrationType] = useState<RegistrationType>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [recognizedEmployee, setRecognizedEmployee] = useState<{
@@ -155,9 +160,9 @@ export default function TestFaceRecognitionContent() {
                 });
               }
               
-              // Mostrar score de confianza
-              ctx.fillStyle = detection.detection.score > 0.5 ? '#22c55e' : '#ef4444';
-              ctx.font = '16px Arial';
+              // Mostrar score de confianza en negro
+              ctx.fillStyle = '#000000';
+              ctx.font = 'bold 16px Arial';
               ctx.fillText(
                 `Confianza: ${Math.round(detection.detection.score * 100)}%`,
                 box.x,
@@ -592,19 +597,21 @@ export default function TestFaceRecognitionContent() {
                                   <MapPin className="h-3 w-3 text-gray-400" />
                                   <span className="text-xs text-gray-500">{registro.sede || 'CENTRAL'}</span>
                                 </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-100"
-                                  onClick={() => handleDeleteRegistro(registro.id)}
-                                  disabled={deletingId === registro.id}
-                                >
-                                  {deletingId === registro.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <Trash2 className="h-3 w-3" />
-                                  )}
-                                </Button>
+                                {canDelete && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-100"
+                                    onClick={() => handleDeleteRegistro(registro.id)}
+                                    disabled={deletingId === registro.id}
+                                  >
+                                    {deletingId === registro.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           </div>

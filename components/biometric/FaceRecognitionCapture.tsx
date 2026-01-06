@@ -114,9 +114,9 @@ export default function FaceRecognitionCapture({
                 });
               }
               
-              // Mostrar score de confianza
-              ctx.fillStyle = detection.detection.score > 0.5 ? '#22c55e' : '#ef4444';
-              ctx.font = '16px Arial';
+              // Mostrar score de confianza en negro
+              ctx.fillStyle = '#000000';
+              ctx.font = 'bold 16px Arial';
               ctx.fillText(
                 `Confianza: ${Math.round(detection.detection.score * 100)}%`,
                 box.x,

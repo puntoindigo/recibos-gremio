@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Users, FileText, CreditCard, Building2, TrendingUp, Calendar, Plus, ChevronDown, ChevronRight, Clock, LogIn, LogOut } from 'lucide-react';
 import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { useConfiguration } from '@/contexts/ConfigurationContext';
+import { useSession } from 'next-auth/react';
 import { getEstadisticasDescuentos } from '@/lib/descuentos-manager';
 import type { ConsolidatedEntity } from '@/lib/repo';
 import UploadManagerModal from './UploadManagerModal';
@@ -55,6 +56,13 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
   const { dataManager } = useCentralizedDataManager();
   const { config } = useConfiguration();
   const { isLoading: isLoadingEmpresas, loadEmpresas } = useEmpresasLoading();
+  const { data: session } = useSession();
+  
+  // Función para verificar permisos
+  const canAccess = (permission: string) => {
+    if (!session?.user?.permissions) return false;
+    return session.user.permissions.includes(permission) || session.user.permissions.includes('*');
+  };
   
   const [stats, setStats] = useState<DashboardStats>({
     totalEmployees: 0,
@@ -69,7 +77,7 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showUploadManager, setShowUploadManager] = useState(false);
-  const [showCreateEmployee, setShowCreateEmployee] = useState(false);
+  const [showCreateEmployee, setShowCreateEmployee] = useState<boolean>(false);
   const [expandedCompany, setExpandedCompany] = useState<string | null>(null);
   const [employeesByCategory, setEmployeesByCategory] = useState<Record<string, Array<{
     categoria: string;
@@ -310,6 +318,7 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
 
       {/* Estadísticas principales */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-6">
+        {canAccess('empleados') && (
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => onNavigateToTab?.('empleados')}
@@ -336,10 +345,11 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
               >
                 <Plus className="h-3 w-3 text-blue-600" />
               </Button>
-            </div>
-          </CardContent>
+            </CardContent>
         </Card>
+        )}
 
+        {canAccess('recibos') && (
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => onNavigateToTab?.('recibos')}
@@ -427,10 +437,11 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
               >
                 <TrendingUp className="h-3 w-3 text-orange-600" />
               </Button>
-            </div>
-          </CardContent>
+            </CardContent>
         </Card>
+        )}
 
+        {canAccess('empresas') && (
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => onNavigateToTab?.('empresas')}
@@ -456,9 +467,9 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
               >
                 <Plus className="h-3 w-3 text-orange-600" />
               </Button>
-            </div>
-          </CardContent>
+            </CardContent>
         </Card>
+        )}
 
         {/* Items Pendientes - Card destacada */}
         <Card 
@@ -645,6 +656,7 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
         </Card>
 
         {/* Registros de Entrada/Salida */}
+        {(canAccess('accesos') || canAccess('registro')) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -710,6 +722,7 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
 
       {/* Actividad reciente */}
@@ -755,7 +768,7 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
       {/* Modal de Registrar Empleado */}
       {showCreateEmployee && (
         <EmpleadoModal
-          empleado={null}
+          empleado={undefined}
           onClose={() => setShowCreateEmployee(false)}
           onSave={() => {
             console.log('✅ Empleado registrado');
