@@ -243,16 +243,17 @@ export default function TestFaceRecognitionContent() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
-              {isStreaming ? (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full text-gray-400">
+              {/* Elemento video siempre presente para que el ref funcione */}
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`w-full h-full object-cover ${isStreaming ? 'block' : 'hidden'}`}
+              />
+              {/* Overlay cuando no está activo */}
+              {!isStreaming && (
+                <div className="absolute inset-0 flex items-center justify-center text-gray-400">
                   <div className="text-center">
                     <VideoOff className="h-16 w-16 mx-auto mb-4" />
                     <p className="text-lg">Cámara no activa</p>
