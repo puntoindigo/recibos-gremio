@@ -1243,11 +1243,11 @@ export class SupabaseManager {
     loadingState.setLoading('empresas', true);
     
     try {
-      // La tabla empresas solo tiene: id, nombre, descripcion, logo_url, created_at, updated_at
+      // La tabla empresas solo tiene: id, nombre, logo_url, created_at, updated_at
+      // NOTA: La columna 'descripcion' no existe en la tabla real de Supabase
       // Filtrar solo los campos válidos
       const empresaData: any = {
         nombre: empresa.nombre,
-        descripcion: empresa.descripcion || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
