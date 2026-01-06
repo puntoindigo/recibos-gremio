@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import { 
   BarChart3, 
   FileText, 
@@ -253,6 +254,14 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
     ];
 
     const filteredItems = items.filter(item => {
+      // Si tiene permiso definido, verificar primero el permiso
+      if (item.permission) {
+        if (!canAccess(item.permission)) {
+          return false;
+        }
+      }
+      
+      // Luego verificar si está habilitado en la configuración
       if (item.enabledConfigKey === null) {
         return true;
       }
