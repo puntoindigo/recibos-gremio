@@ -773,38 +773,53 @@ export class SupabaseManager {
     loadingState.setLoading('consolidated', true);
     
     try {
-      // Intentar primero con id
-      let { data, error } = await this.client
-        .from('consolidated')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', key)
-        .select()
-        .maybeSingle();
+      // Determinar si el key parece ser un UUID (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+      // o un key compuesto (formato: legajo-periodo-empresa)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key);
       
-      // Si no encontramos por id, intentar con key
-      if (error || !data) {
-        console.log(`⚠️ No se encontró registro con id="${key}", intentando por key...`);
-        const result = await this.client
+      let data: SupabaseConsolidated | null = null;
+      let error: any = null;
+      
+      // Si parece ser un UUID, intentar primero por id, luego por key
+      // Si no parece ser un UUID, buscar directamente por key
+      if (isUUID) {
+        // Intentar primero con id (UUID)
+        const resultById = await this.client
+          .from('consolidated')
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq('id', key)
+          .select()
+          .maybeSingle();
+        
+        if (resultById.data) {
+          data = resultById.data;
+          console.log(`✅ Registro actualizado exitosamente por id="${key}"`);
+        } else if (resultById.error) {
+          error = resultById.error;
+        }
+      }
+      
+      // Si no encontramos por id o no es UUID, intentar con key
+      if (!data) {
+        const resultByKey = await this.client
           .from('consolidated')
           .update({ ...updates, updated_at: new Date().toISOString() })
           .eq('key', key)
           .select()
           .maybeSingle();
         
-        if (result.error) {
-          console.error(`❌ Error actualizando consolidated con key="${key}":`, result.error);
-          throw result.error;
+        if (resultByKey.error) {
+          console.error(`❌ Error actualizando consolidated con key="${key}":`, resultByKey.error);
+          throw resultByKey.error;
         }
         
-        if (!result.data) {
+        if (!resultByKey.data) {
           console.error(`❌ No se encontró registro consolidated con key="${key}"`);
           return null;
         }
         
-        data = result.data;
+        data = resultByKey.data;
         console.log(`✅ Registro actualizado exitosamente por key="${key}"`);
-      } else {
-        console.log(`✅ Registro actualizado exitosamente por id="${key}"`);
       }
       
       // Limpiar cache relacionado
