@@ -18,12 +18,15 @@ const nextConfig: NextConfig = {
         'node_modules/@tensorflow/**',
         'node_modules/face-api.js/**',
         'public/models/**',
+        'public/recibos/**',
         'node_modules/.cache/**',
+        '.next/cache/**',
+        'node_modules/pdfjs-dist/**',
       ],
     },
   },
   // Excluir paquetes pesados del bundle del servidor
-  serverComponentsExternalPackages: ['face-api.js'],
+  serverComponentsExternalPackages: ['face-api.js', 'pdfjs-dist'],
 };
 
 export default nextConfig;
