@@ -1425,12 +1425,13 @@ export class SupabaseManager {
         });
         
         // Si la tabla no existe (404), mostrar mensaje útil pero no romper la app
-        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404') || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('not found')) {
+        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404') || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('not found') || error.message?.includes('schema cache')) {
           console.warn('⚠️ Tabla de registros no existe o no es accesible. Verifica:');
-          console.warn('1. Que ejecutaste el script SQL create_registros_table.sql');
-          console.warn('2. Que la tabla se llama exactamente "registros"');
-          console.warn('3. Que tienes permisos RLS configurados correctamente');
-          console.warn('4. Error completo:', error);
+          console.warn('1. Ejecuta el script SQL: sql/create_registros_table_complete.sql');
+          console.warn('2. Verifica que la tabla existe con: sql/verify_registros_table.sql');
+          console.warn('3. Si la tabla existe pero sigue el error, refresca el schema cache en Supabase');
+          console.warn('4. Verifica que RLS está habilitado y tiene políticas que permiten acceso');
+          console.warn('5. Error completo:', error);
           // Retornar un objeto simulado para que la app no se rompa
           return {
             ...registroData,
@@ -1478,12 +1479,13 @@ export class SupabaseManager {
         });
         
         // Si la tabla no existe (404), retornar array vacío sin romper la app
-        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404') || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('not found')) {
+        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404') || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('not found') || error.message?.includes('schema cache')) {
           console.warn('⚠️ Tabla de registros no existe o no es accesible. Verifica:');
-          console.warn('1. Que ejecutaste el script SQL create_registros_table.sql');
-          console.warn('2. Que la tabla se llama exactamente "registros"');
-          console.warn('3. Que tienes permisos RLS configurados correctamente');
-          console.warn('4. Error completo:', error);
+          console.warn('1. Ejecuta el script SQL: sql/create_registros_table_complete.sql');
+          console.warn('2. Verifica que la tabla existe con: sql/verify_registros_table.sql');
+          console.warn('3. Si la tabla existe pero sigue el error, refresca el schema cache en Supabase');
+          console.warn('4. Verifica que RLS está habilitado y tiene políticas que permiten acceso');
+          console.warn('5. Error completo:', error);
           return [];
         }
         throw error;
@@ -1523,12 +1525,13 @@ export class SupabaseManager {
         });
         
         // Si la tabla no existe (404), retornar array vacío sin romper la app
-        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404') || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('not found')) {
+        if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('404') || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('not found') || error.message?.includes('schema cache')) {
           console.warn('⚠️ Tabla de registros no existe o no es accesible. Verifica:');
-          console.warn('1. Que ejecutaste el script SQL create_registros_table.sql');
-          console.warn('2. Que la tabla se llama exactamente "registros"');
-          console.warn('3. Que tienes permisos RLS configurados correctamente');
-          console.warn('4. Error completo:', error);
+          console.warn('1. Ejecuta el script SQL: sql/create_registros_table_complete.sql');
+          console.warn('2. Verifica que la tabla existe con: sql/verify_registros_table.sql');
+          console.warn('3. Si la tabla existe pero sigue el error, refresca el schema cache en Supabase');
+          console.warn('4. Verifica que RLS está habilitado y tiene políticas que permiten acceso');
+          console.warn('5. Error completo:', error);
           return [];
         }
         throw error;
