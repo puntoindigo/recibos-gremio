@@ -28,7 +28,8 @@ import {
   LogOut,
   Clock,
   MapPin,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { getFichaEmpleado } from '@/lib/descuentos-manager';
 // import { db } from '@/lib/db'; // Removido - usar dataManager en su lugar
