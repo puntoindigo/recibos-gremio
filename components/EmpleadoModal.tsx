@@ -52,10 +52,11 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
     faceDescriptor: null as number[] | null
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [observacionesExpanded, setObservacionesExpanded] = useState(false);
   const empleadoRef = useRef(empleado);
 
   // Verificar permisos
-  const canRegister = canManageUsers(session?.user);
+  const canRegister = session?.user ? canManageUsers(session.user) : false;
 
   // Actualizar ref cuando cambie el empleado
   useEffect(() => {
@@ -79,6 +80,8 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
       };
       console.log('🔍 Debug estableciendo formData:', newFormData);
       setFormData(newFormData);
+      // Si hay observaciones, expandir automáticamente
+      setObservacionesExpanded(!!empleado.data?.OBSERVACIONES);
     } else {
       // Modo creación - resetear formulario
       setFormData({
@@ -89,6 +92,7 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
         observaciones: '',
         faceDescriptor: null
       });
+      setObservacionesExpanded(false);
     }
     setErrors({});
   }, [empleado]);
@@ -471,18 +475,55 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
             {/* Campos de período y salario removidos para empleados manuales */}
           </div>
 
-          {/* Observaciones */}
+          {/* Observaciones - Con toggle */}
           <div className="space-y-2">
-            <Label htmlFor="observaciones">
-              Observaciones
-            </Label>
-            <Textarea
-              id="observaciones"
-              value={formData.observaciones}
-              onChange={(e) => handleInputChange('observaciones', e.target.value)}
-              placeholder="Notas adicionales sobre el empleado..."
-              rows={3}
-            />
+            <div 
+              className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors"
+              onClick={() => {
+                if (!observacionesExpanded) {
+                  setObservacionesExpanded(true);
+                  // Focus en el textarea después de un pequeño delay
+                  setTimeout(() => {
+                    const textarea = document.getElementById('observaciones') as HTMLTextAreaElement;
+                    if (textarea) {
+                      textarea.focus();
+                    }
+                  }, 100);
+                }
+              }}
+            >
+              <Label htmlFor="observaciones" className="cursor-pointer">
+                Observaciones
+              </Label>
+              {!observacionesExpanded && !formData.observaciones.trim() && (
+                <span className="text-xs text-gray-400">Click para agregar</span>
+              )}
+            </div>
+            {(observacionesExpanded || formData.observaciones.trim()) ? (
+              <Textarea
+                id="observaciones"
+                value={formData.observaciones}
+                onChange={(e) => handleInputChange('observaciones', e.target.value)}
+                placeholder="Notas adicionales sobre el empleado..."
+                rows={3}
+                className="min-h-[80px]"
+              />
+            ) : (
+              <div 
+                className="border border-dashed border-gray-300 rounded-md p-3 text-sm text-gray-400 cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                onClick={() => {
+                  setObservacionesExpanded(true);
+                  setTimeout(() => {
+                    const textarea = document.getElementById('observaciones') as HTMLTextAreaElement;
+                    if (textarea) {
+                      textarea.focus();
+                    }
+                  }, 100);
+                }}
+              >
+                Click para agregar observaciones...
+              </div>
+            )}
           </div>
 
           {/* Reconocimiento Facial - Sección Colapsable */}
@@ -523,7 +564,7 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
           {/* Información para empleados con recibos */}
           {empleado && empleado.recibosCount > 0 && (
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Badge className="bg-green-100 text-green-800">
                     Con Recibos
@@ -531,9 +572,9 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
                   Información del Sistema
                 </CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-gray-600">
+              <CardContent className="text-sm text-gray-600 pt-0 pb-3">
                 <p>Este empleado tiene <strong>{empleado.recibosCount} recibo(s)</strong> y <strong>{empleado.descuentosCount} descuento(s)</strong> vinculados.</p>
-                <p className="mt-2">Puedes ver los detalles completos en la ficha del empleado.</p>
+                <p className="mt-1">Puedes ver los detalles completos en la ficha del empleado.</p>
               </CardContent>
             </Card>
           )}

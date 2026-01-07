@@ -320,7 +320,7 @@ export default function FaceRecognitionCapture({
       </CardHeader>
 
       {isExpanded && (
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 pb-6">
           {/* Estado de carga de modelos */}
           {!state.isModelLoaded && (
             <div className="flex items-center gap-2 text-sm text-gray-600">
