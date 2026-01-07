@@ -50,9 +50,10 @@ interface DashboardProps {
   onOpenNewEmpresa?: () => void;
   onFilterByPeriod?: (period: string) => void;
   onFilterByCompany?: (company: string) => void;
+  onOpenFicha?: (legajo: string, empresa: string) => void;
 }
 
-const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, onResumeSession, onOpenNewDescuento, onOpenNewEmployee, onOpenNewEmpresa, onFilterByPeriod, onFilterByCompany }, ref) => {
+const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, onResumeSession, onOpenNewDescuento, onOpenNewEmployee, onOpenNewEmpresa, onFilterByPeriod, onFilterByCompany, onOpenFicha }, ref) => {
   const { dataManager } = useCentralizedDataManager();
   const { config } = useConfiguration();
   const { isLoading: isLoadingEmpresas, loadEmpresas } = useEmpresasLoading();
@@ -693,7 +694,17 @@ const Dashboard = forwardRef<DashboardRef, DashboardProps>(({ onNavigateToTab, o
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">{registro.nombre}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onOpenFicha) {
+                              onOpenFicha(registro.legajo, registro.empresa);
+                            }
+                          }}
+                          className="font-medium truncate text-left hover:text-blue-600 hover:underline transition-colors cursor-pointer"
+                        >
+                          {registro.nombre}
+                        </button>
                         <Badge variant="outline" className="text-xs flex-shrink-0">
                           {registro.legajo}
                         </Badge>

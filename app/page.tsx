@@ -61,6 +61,7 @@ import { EmpleadosPanel } from "@/components/EmpleadosPanel";
 import { EmpresasPanel } from "@/components/EmpresasPanel";
 import SidebarNavigation from "@/components/SidebarNavigation";
 import Dashboard, { DashboardRef } from "@/components/Dashboard";
+import FichaEmpleadoModal from "@/components/FichaEmpleadoModal";
 import BackupPanel from "@/components/BackupPanel";
 import AccesosPanel from "@/components/AccesosPanel";
 import ProcessingProgress from "@/components/ProcessingProgress";
@@ -351,6 +352,9 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
   
   // Estados para modal de empresa
   const [showEmpresaModal, setShowEmpresaModal] = useState<boolean>(false);
+  const [showFichaModal, setShowFichaModal] = useState<boolean>(false);
+  const [selectedLegajo, setSelectedLegajo] = useState<string>('');
+  const [selectedEmpresa, setSelectedEmpresa] = useState<string>('');
 
   // Debug: verificar cuándo se cambia showEmpresaModal
   // useEffect(() => {
@@ -3461,6 +3465,11 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
                 setEmpresaFiltro(company);
                 setActiveTab('recibos');
               }}
+              onOpenFicha={(legajo, empresa) => {
+                setSelectedLegajo(legajo);
+                setSelectedEmpresa(empresa);
+                setShowFichaModal(true);
+              }}
             />
           </TabsContent>
 
@@ -4509,6 +4518,19 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
           onClose={() => setShowLogoutModal(false)}
           userName={session?.user?.name}
         />
+
+        {/* Ficha del Empleado Modal */}
+        {showFichaModal && (
+          <FichaEmpleadoModal
+            legajo={selectedLegajo}
+            empresa={selectedEmpresa}
+            onClose={() => {
+              setShowFichaModal(false);
+              setSelectedLegajo('');
+              setSelectedEmpresa('');
+            }}
+          />
+        )}
 
         {/* DevTools - Solo para admin general, no para ADMIN_REGISTRO */}
         {showDevTools && session?.user?.role !== 'ADMIN_REGISTRO' && <PersistentDevTools />}
