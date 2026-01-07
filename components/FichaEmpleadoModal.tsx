@@ -68,6 +68,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
   const [registros, setRegistros] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [hasBiometricData, setHasBiometricData] = useState<boolean>(false);
   const [expandedModules, setExpandedModules] = useState<{
     registros: boolean;
     descuentosActivos: boolean;
@@ -112,6 +113,12 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
       console.log('🔍 Debug ficha creada:', ficha);
       setFichaData(ficha);
       setRecibos(empleadoData.recibos);
+      
+      // Verificar si tiene datos biométricos registrados
+      const hasFaceDescriptor = empleadoData.data?.FACE_DESCRIPTOR && 
+                                Array.isArray(empleadoData.data.FACE_DESCRIPTOR) && 
+                                empleadoData.data.FACE_DESCRIPTOR.length > 0;
+      setHasBiometricData(hasFaceDescriptor || false);
       
       // Cargar registros de entrada/salida
       try {
@@ -259,14 +266,35 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
         <div className="space-y-6">
           {/* Botón rápido de registro biométrico */}
           {onOpenEdit && (
-            <Card className="border-blue-200 bg-blue-50">
+            <Card className={hasBiometricData ? "border-green-200 bg-green-50" : "border-orange-200 bg-orange-50"}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Camera className="h-6 w-6 text-blue-600" />
+                    {hasBiometricData ? (
+                      <CheckCircle className="h-6 w-6 text-green-600" />
+                    ) : (
+                      <XCircle className="h-6 w-6 text-orange-600" />
+                    )}
                     <div>
-                      <p className="font-semibold text-blue-900">Registro Biométrico</p>
-                      <p className="text-sm text-blue-700">Registra o actualiza los datos de reconocimiento facial</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-gray-900">Registro Biométrico</p>
+                        {hasBiometricData ? (
+                          <Badge className="bg-green-600 text-white">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Registrado
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-orange-600 text-white">
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Pendiente
+                          </Badge>
+                        )}
+                      </div>
+                      <p className={`text-sm ${hasBiometricData ? 'text-green-700' : 'text-orange-700'}`}>
+                        {hasBiometricData 
+                          ? 'Datos biométricos registrados. Puedes actualizarlos.'
+                          : 'Falta registrar los datos de reconocimiento facial'}
+                      </p>
                     </div>
                   </div>
                   <Button
@@ -275,10 +303,12 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
                         onOpenEdit(legajo, empresa);
                       }
                     }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    className={hasBiometricData 
+                      ? "bg-green-600 hover:bg-green-700 text-white" 
+                      : "bg-orange-600 hover:bg-orange-700 text-white"}
                   >
                     <Camera className="h-4 w-4 mr-2" />
-                    Registrar/Actualizar
+                    {hasBiometricData ? 'Actualizar' : 'Registrar'}
                   </Button>
                 </div>
               </CardContent>
