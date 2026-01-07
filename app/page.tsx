@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { Download, FileUp, Loader2, CheckCircle2, XCircle, Menu, X, Plus, User, FileText, Bug, RefreshCw, Database, Wrench, ListTodo, Trash2, Settings, Square, AlertTriangle, Camera } from "lucide-react";
+import { Download, FileUp, Loader2, CheckCircle2, XCircle, Menu, X, Plus, User, FileText, Bug, RefreshCw, Database, Wrench, ListTodo, Trash2, Settings, Square, AlertTriangle, Camera, LogOut } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useConfiguration } from "@/contexts/ConfigurationContext";
@@ -93,7 +93,7 @@ const makeKey = (r: ConsolidatedEntity) => `${r.legajo}||${r.periodo}||${r.data?
 
 export default function Page() {
   const { data: session, status } = useSession();
-  const { config, saveConfiguration: updateConfig } = useConfiguration();
+  const { config, saveConfiguration: updateConfig, getFilteredNavigationItems } = useConfiguration();
   const { dataManager } = useCentralizedDataManager();
   const [activeTab, setActiveTab] = useState<string>("tablero");
   
@@ -327,7 +327,6 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
   const [showDebug, setShowDebug] = useState<boolean>(true); // Activado para debug
   const [showDebugModal, setShowDebugModal] = useState<boolean>(false);
   const [showHelpModal, setShowHelpModal] = useState<boolean>(false);
-  const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
   
   // Estados para persistencia de subidas
   const [currentUploadSessionId, setCurrentUploadSessionId] = useState<string | null>(null);
@@ -3134,11 +3133,11 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => toast.info("Presiona H para ver shortcuts disponibles")}
-              className="text-xs text-gray-500 hover:text-gray-700"
-              title="Shortcuts disponibles"
+              onClick={() => setShowLogoutModal(true)}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              title="Cerrar Sesión"
             >
-              ⌨️
+              <LogOut className="h-4 w-4" />
             </Button>
             <div className="text-sm text-gray-600">
               {session?.user?.name}
@@ -3160,86 +3159,34 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       {isMobileMenuOpen && (
         <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-2">
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant={activeTab === "tablero" ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setActiveTab("tablero");
-                setIsMobileMenuOpen(false);
-              }}
-              className="text-xs"
-            >
-              Tablero
-            </Button>
-            <Button
-              variant={activeTab === "recibos" ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setActiveTab("recibos");
-                setIsMobileMenuOpen(false);
-              }}
-              className="text-xs"
-            >
-              Recibos
-            </Button>
-            <Button
-              variant={activeTab === "control" ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setActiveTab("control");
-                setIsMobileMenuOpen(false);
-              }}
-              className="text-xs"
-            >
-              Control
-            </Button>
-            <Button
-              variant={activeTab === "export" ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setActiveTab("export");
-                setIsMobileMenuOpen(false);
-              }}
-              className="text-xs"
-            >
-              Exportar
-            </Button>
-            <Button
-              variant={activeTab === "descuentos" ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setActiveTab("descuentos");
-                setIsMobileMenuOpen(false);
-              }}
-              className="text-xs"
-            >
-              Descuentos
-            </Button>
-            <Button
-              variant={activeTab === "usuarios" ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setActiveTab("usuarios");
-                setIsMobileMenuOpen(false);
-              }}
-              className="text-xs"
-            >
-              Usuarios
-            </Button>
-            <Button
-              variant={activeTab === "documentacion" ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setActiveTab("documentacion");
-                setIsMobileMenuOpen(false);
-              }}
-              className="text-xs"
-            >
-              Documentación
-            </Button>
+            {getFilteredNavigationItems().map((item) => {
+              const Icon = item.icon;
+              return (
+                <Button
+                  key={item.id}
+                  variant={activeTab === item.id ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="text-xs flex items-center gap-1"
+                >
+                  {Icon && <Icon className="h-3 w-3" />}
+                  {item.label}
+                </Button>
+              );
+            })}
           </div>
         </div>
       )}
+
+      {/* Modal de confirmación de logout */}
+      <ConfirmLogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        userName={session?.user?.name}
+      />
 
       <main className="mx-auto max-w-7xl 2xl:max-w-full p-4 lg:p-6 lg:ml-64">
         {/* Banner temporal de prueba de reconocimiento facial */}
