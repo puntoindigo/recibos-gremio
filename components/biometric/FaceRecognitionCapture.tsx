@@ -311,7 +311,7 @@ export default function FaceRecognitionCapture({
             </Badge>
           )}
         </div>
-        <CardDescription className="text-xs">
+        <CardDescription className="text-xs mb-2">
           {hasSavedDescriptor 
             ? 'Datos biométricos registrados. Puedes actualizarlos.'
             : 'Registra los datos biométricos del empleado para reconocimiento facial.'
@@ -320,7 +320,7 @@ export default function FaceRecognitionCapture({
       </CardHeader>
 
       {isExpanded && (
-        <CardContent className="space-y-4 pb-6">
+        <CardContent className="space-y-4 pb-6 pt-4">
           {/* Estado de carga de modelos */}
           {!state.isModelLoaded && (
             <div className="flex items-center gap-2 text-sm text-gray-600">

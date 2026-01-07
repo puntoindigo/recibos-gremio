@@ -546,7 +546,7 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
           {/* Información adicional para empleados manuales */}
           {empleado && empleado.recibosCount === 0 && (
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-2 pt-4">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Badge className="bg-blue-100 text-blue-800">
                     Manual
@@ -554,9 +554,9 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
                   Información del Sistema
                 </CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-gray-600">
-                <p>Este empleado será registrado como <strong>manual</strong>, lo que significa que fue creado sin recibos de sueldo asociados.</p>
-                <p className="mt-2">Podrás agregar recibos posteriormente o gestionar descuentos independientemente.</p>
+              <CardContent className="text-sm text-gray-600 pt-0 pb-3 px-6">
+                <p className="leading-tight">Este empleado será registrado como <strong>manual</strong>, lo que significa que fue creado sin recibos de sueldo asociados.</p>
+                <p className="mt-1 leading-tight">Podrás agregar recibos posteriormente o gestionar descuentos independientemente.</p>
               </CardContent>
             </Card>
           )}
@@ -564,7 +564,7 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
           {/* Información para empleados con recibos */}
           {empleado && empleado.recibosCount > 0 && (
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-2 pt-4">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Badge className="bg-green-100 text-green-800">
                     Con Recibos
@@ -572,9 +572,9 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
                   Información del Sistema
                 </CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-gray-600 pt-0 pb-3">
-                <p>Este empleado tiene <strong>{empleado.recibosCount} recibo(s)</strong> y <strong>{empleado.descuentosCount} descuento(s)</strong> vinculados.</p>
-                <p className="mt-1">Puedes ver los detalles completos en la ficha del empleado.</p>
+              <CardContent className="text-sm text-gray-600 pt-0 pb-3 px-6">
+                <p className="leading-tight">Este empleado tiene <strong>{empleado.recibosCount} recibo(s)</strong> y <strong>{empleado.descuentosCount} descuento(s)</strong> vinculados.</p>
+                <p className="mt-1 leading-tight">Puedes ver los detalles completos en la ficha del empleado.</p>
               </CardContent>
             </Card>
           )}
