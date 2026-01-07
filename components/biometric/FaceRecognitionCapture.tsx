@@ -311,7 +311,7 @@ export default function FaceRecognitionCapture({
             </Badge>
           )}
         </div>
-        <CardDescription className="text-xs mb-2">
+        <CardDescription className="text-xs mb-3 pb-2">
           {hasSavedDescriptor 
             ? 'Datos biométricos registrados. Puedes actualizarlos.'
             : 'Registra los datos biométricos del empleado para reconocimiento facial.'
