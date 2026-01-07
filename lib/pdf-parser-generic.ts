@@ -573,7 +573,7 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   for (const pattern of categoriaPatterns) {
     const categoriaMatch = rawText.match(pattern);
     if (categoriaMatch) {
-      const categoria = categoriaMatch[1].trim();
+      let categoria = categoriaMatch[1].trim();
       if (categoria && categoria.length > 0 && !categoria.match(/^[\s\-]+$/)) {
         data["CATEGORIA"] = categoria;
         break;
@@ -583,6 +583,28 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   
   // Procesamiento específico por empresa
   if (empresaDetectada === "ESTRATEGIA AMBIENTAL") {
+        // Limpiar CATEGORIA para ESTRATEGIA AMBIENTAL - remover texto extra
+        if (data["CATEGORIA"]) {
+          let categoria = data["CATEGORIA"];
+          // Remover "LUGAR Y FECHA DE PAGO" si aparece al inicio
+          categoria = categoria.replace(/^LUGAR\s+Y\s+FECHA\s+DE\s+PAGO\s+/i, '');
+          // Remover "CATEGORIA" si aparece en el texto
+          categoria = categoria.replace(/CATEGORIA\s*/gi, '');
+          // Remover "LUGAR Y FECHA DE PAGO" si aparece en el medio
+          categoria = categoria.replace(/\s*LUGAR\s+Y\s+FECHA\s+DE\s+PAGO\s*/gi, ' ');
+          // Remover fechas y lugares comunes (ej: "Rosario - 03")
+          categoria = categoria.replace(/\s*Rosario\s*-\s*\d+\s*/gi, '');
+          categoria = categoria.replace(/\s*\d{2}\/\d{2}\/\d{4}\s*/g, '');
+          // Remover duplicados de palabras consecutivas
+          categoria = categoria.split(/\s+/).filter((word, index, arr) => {
+            return index === 0 || word !== arr[index - 1];
+          }).join(' ').trim();
+          // Limitar a máximo 50 caracteres (las categorías suelen ser cortas)
+          if (categoria.length > 50) {
+            categoria = categoria.substring(0, 50).trim();
+          }
+          data["CATEGORIA"] = categoria;
+        }
         
         // Para ESTRATEGIA AMBIENTAL, usar CUIL como legajo
         if (data["CUIL"]) {
@@ -590,64 +612,110 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
         }
         
         // Extraer descuentos y montos para ESTRATEGIA AMBIENTAL
-        // Buscar descuentos (valores negativos o con signo menos)
-        const descuentosMatch = rawText.match(/(?:descuento|deduccion|retencion).*?(-?\d+[.,]\d+)/gi);
-        if (descuentosMatch) {
-          data["DESCUENTOS"] = descuentosMatch.map(d => d.replace(/[^\d.,-]/g, '')).join('; ');
+        // Buscar descuentos (valores negativos o con signo menos, o campo "DESCUENTOS")
+        const descuentosPatterns = [
+          /DESCUENTOS?\s*:?\s*(\d+[.,]\d+)/i,
+          /TOTAL\s+DESCUENTOS?\s*:?\s*(\d+[.,]\d+)/i,
+          /(?:descuento|deduccion|retencion)\s*:?\s*(\d+[.,]\d+)/gi
+        ];
+        for (const pattern of descuentosPatterns) {
+          const match = rawText.match(pattern);
+          if (match) {
+            data["DESCUENTOS"] = match[1]?.replace(/[^\d.,]/g, '') || match.map(m => m.replace(/[^\d.,-]/g, '')).join('; ');
+            break;
+          }
         }
         
         // Buscar sueldo básico
-        const sueldoMatch = rawText.match(/SUELDO\s+BASICO.*?(\d+[.,]\d+)/i);
-        if (sueldoMatch) {
-          data["SUELDO_BASICO"] = sueldoMatch[1].replace(/[^\d.,]/g, '');
+        const sueldoPatterns = [
+          /SUELDO\s+BASICO\s*:?\s*(\d+[.,]\d+)/i,
+          /SUELDO\s+BÁSICO\s*:?\s*(\d+[.,]\d+)/i,
+          /SUELDO\s+BASICO\s+(\d+[.,]\d+)/i
+        ];
+        for (const pattern of sueldoPatterns) {
+          const match = rawText.match(pattern);
+          if (match) {
+            data["SUELDO_BASICO"] = match[1].replace(/[^\d.,]/g, '');
+            break;
+          }
+        }
+        
+        // Buscar sueldo bruto
+        const sueldoBrutoPatterns = [
+          /SUELDO\s+BRUTO\s*:?\s*(\d+[.,]\d+)/i,
+          /SUELDO\s+BRUTO\s+(\d+[.,]\d+)/i
+        ];
+        for (const pattern of sueldoBrutoPatterns) {
+          const match = rawText.match(pattern);
+          if (match) {
+            data["SUELDO_BRUTO"] = match[1].replace(/[^\d.,]/g, '');
+            break;
+          }
         }
         
         // Buscar totales
-        const totalMatch = rawText.match(/TOTAL.*?(\d+[.,]\d+)/i);
-        if (totalMatch) {
-          data["TOTAL"] = totalMatch[1].replace(/[^\d.,]/g, '');
+        const totalPatterns = [
+          /TOTAL\s*:?\s*(\d+[.,]\d+)/i,
+          /TOTAL\s+A\s+COBRAR\s*:?\s*(\d+[.,]\d+)/i,
+          /TOTAL\s+(\d+[.,]\d+)/i
+        ];
+        for (const pattern of totalPatterns) {
+          const match = rawText.match(pattern);
+          if (match) {
+            data["TOTAL"] = match[1].replace(/[^\d.,]/g, '');
+            break;
+          }
+        }
+        
+        // Buscar horas extras
+        const horasExtrasPatterns = [
+          /HORAS\s+EXTRAS?\s*:?\s*(\d+[.,]\d+)/i,
+          /H\.?\s*EXTRA\s*:?\s*(\d+[.,]\d+)/i,
+          /HORAS\s+EXTRAS?\s+(\d+[.,]\d+)/i
+        ];
+        for (const pattern of horasExtrasPatterns) {
+          const match = rawText.match(pattern);
+          if (match) {
+            data["HORAS_EXTRAS"] = match[1].replace(/[^\d.,]/g, '');
+            break;
+          }
+        }
+        
+        // Buscar inasistencias
+        const inasistenciasPatterns = [
+          /INASISTENCIAS?\s*:?\s*(\d+[.,]\d+)/i,
+          /INASISTENCIAS?\s+(\d+[.,]\d+)/i
+        ];
+        for (const pattern of inasistenciasPatterns) {
+          const match = rawText.match(pattern);
+          if (match) {
+            data["INASISTENCIAS"] = match[1].replace(/[^\d.,]/g, '');
+            break;
+          }
         }
         
         // Buscar presentismo
-        const presentismoMatch = rawText.match(/PRESENTISMO.*?(\d+[.,]\d+)/i);
+        const presentismoMatch = rawText.match(/PRESENTISMO\s*:?\s*(\d+[.,]\d+)/i);
         if (presentismoMatch) {
           data["PRESENTISMO"] = presentismoMatch[1].replace(/[^\d.,]/g, '');
         }
         
         // Buscar antigüedad
-        const antiguedadMatch = rawText.match(/ANTIGÜEDAD.*?(\d+[.,]\d+)/i);
+        const antiguedadMatch = rawText.match(/ANTIGÜEDAD\s*:?\s*(\d+[.,]\d+)/i);
         if (antiguedadMatch) {
           data["ANTIGUEDAD"] = antiguedadMatch[1].replace(/[^\d.,]/g, '');
         }
         
         // Buscar jornal
-        const jornalMatch = rawText.match(/JORNAL.*?(\d+[.,]\d+)/i);
+        const jornalMatch = rawText.match(/JORNAL\s*:?\s*(\d+[.,]\d+)/i);
         if (jornalMatch) {
           data["JORNAL"] = jornalMatch[1].replace(/[^\d.,]/g, '');
         }
         
-        // Buscar horas extras
-        const horasExtrasMatch = rawText.match(/HORAS\s+EXTRAS.*?(\d+[.,]\d+)/i);
-        if (horasExtrasMatch) {
-          data["HORAS_EXTRAS"] = horasExtrasMatch[1].replace(/[^\d.,]/g, '');
-        }
-        
         // Buscar adicionales
-        const adicionalesMatch = rawText.match(/ADICIONAL.*?(\d+[.,]\d+)/i);
+        const adicionalesMatch = rawText.match(/ADICIONAL\s*:?\s*(\d+[.,]\d+)/i);
         if (adicionalesMatch) {
           data["ADICIONALES"] = adicionalesMatch[1].replace(/[^\d.,]/g, '');
-        }
-        
-        // Buscar inasistencias
-        const inasistenciasMatch = rawText.match(/INASISTENCIA.*?(\d+[.,]\d+)/i);
-        if (inasistenciasMatch) {
-          data["INASISTENCIAS"] = inasistenciasMatch[1].replace(/[^\d.,]/g, '');
-        }
-        
-        // Buscar sueldo bruto
-        const sueldoBrutoMatch = rawText.match(/SUELDO\s+BRUTO.*?(\d+[.,]\d+)/i);
-        if (sueldoBrutoMatch) {
-          data["SUELDO_BRUTO"] = sueldoBrutoMatch[1].replace(/[^\d.,]/g, '');
         }
         
         // Debug: mostrar datos detectados

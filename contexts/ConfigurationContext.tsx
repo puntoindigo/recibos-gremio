@@ -143,6 +143,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         bgColor: 'bg-blue-50',
         activeBgColor: 'bg-blue-100',
         shortcut: 'R',
+        permission: 'recibos',
         enabledConfigKey: 'enableReceiptsSystem'
       },
       { 
@@ -153,6 +154,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         bgColor: 'bg-green-50',
         activeBgColor: 'bg-green-100',
         shortcut: 'C',
+        permission: 'controles',
         enabledConfigKey: 'enableControlSystem'
       },
       { 
@@ -163,6 +165,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         bgColor: 'bg-purple-50',
         activeBgColor: 'bg-purple-100',
         shortcut: 'X',
+        permission: 'export',
         enabledConfigKey: 'enableExportSystem'
       },
       { 
@@ -173,6 +176,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         bgColor: 'bg-orange-50',
         activeBgColor: 'bg-orange-100',
         shortcut: 'D',
+        permission: 'descuentos',
         enabledConfigKey: 'enableDiscountsSystem'
       },
       { 
@@ -216,6 +220,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         bgColor: 'bg-red-50',
         activeBgColor: 'bg-red-100',
         shortcut: 'U',
+        permission: 'usuarios',
         enabledConfigKey: 'enableUserManagement'
       },
       { 

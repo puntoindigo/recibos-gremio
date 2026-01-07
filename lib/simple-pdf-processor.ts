@@ -480,9 +480,8 @@ export async function processSingleFileWithData(
       console.log(`💾 Guardando archivo con datos ajustados: ${file.name}`);
     }
     
-    // Usar el nombre normalizado ya calculado
-    if (debug && file.name !== normalizedFilename) {
-    }
+    // Normalizar el nombre del archivo
+    const normalizedFilename = normalizeFileName(file.name);
     
     // Guardar recibo ajustado en Supabase usando dataManager
     try {

@@ -4253,8 +4253,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
           empresa={empresaFiltro !== 'Todas' && empresaFiltro ? empresaFiltro : undefined}
         />
 
-        {/* Panel de Debug */}
-        {config.showDebugPanel && (
+        {/* Panel de Debug - Solo para admin general, no para ADMIN_REGISTRO */}
+        {config.showDebugPanel && session?.user?.role !== 'ADMIN_REGISTRO' && (
           <Card className="mt-8 bg-yellow-50 border-yellow-200">
             <CardHeader>
               <CardTitle className="text-lg text-yellow-800 flex items-center gap-2">
@@ -4510,8 +4510,8 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
           userName={session?.user?.name}
         />
 
-        {/* DevTools */}
-        {showDevTools && <PersistentDevTools />}
+        {/* DevTools - Solo para admin general, no para ADMIN_REGISTRO */}
+        {showDevTools && session?.user?.role !== 'ADMIN_REGISTRO' && <PersistentDevTools />}
       </main>
     </div>
     );
