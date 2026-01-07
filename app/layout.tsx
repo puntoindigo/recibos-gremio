@@ -5,7 +5,7 @@ import { Toaster } from "sonner";
 import AuthProvider from "@/components/AuthProvider";
 import { ConfigurationProvider } from "@/contexts/ConfigurationContext";
 import { DataManagerProvider } from "@/contexts/DataManagerContext";
-import PersistentDevTools from "@/components/PersistentDevTools";
+import ConditionalDevTools from "@/components/ConditionalDevTools";
 import ConsoleFilter from "@/components/ConsoleFilter";
 
 const geistSans = Geist({
@@ -37,7 +37,7 @@ export default function RootLayout({
         <AuthProvider>
           <ConfigurationProvider>
             <DataManagerProvider>
-              <PersistentDevTools />
+              <ConditionalDevTools />
               <div className="pb-20">
                 {children}
               </div>
