@@ -110,24 +110,7 @@ export default function Page() {
   const [showTestConfirm, setShowTestConfirm] = useState(false);
   const [showPendingItems, setShowPendingItems] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [logoutButtonVisible, setLogoutButtonVisible] = useState(false);
   const [showDevTools, setShowDevTools] = useState(false);
-  
-  // Indicador del botón de logout
-  useEffect(() => {
-    const checkLogoutButton = () => {
-      const buttons = document.querySelectorAll('button');
-      const logoutButton = Array.from(buttons).find(button => 
-        button.textContent?.includes('Cerrar Sesión') || 
-        button.getAttribute('title')?.includes('logout')
-      );
-      setLogoutButtonVisible(!!logoutButton);
-    };
-    
-    checkLogoutButton();
-    const interval = setInterval(checkLogoutButton, 1000);
-    return () => clearInterval(interval);
-  }, []);
   const [deleteConfirmData, setDeleteConfirmData] = useState<{
     title: string;
     message: string;
@@ -3134,28 +3117,20 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
       <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            {/* Indicador del botón de logout */}
-            <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 rounded-full ${logoutButtonVisible ? 'bg-green-500' : 'bg-red-500'}`} 
-                   title={logoutButtonVisible ? '✅ Botón de logout visible' : '❌ Botón de logout no visible'}></div>
-              <span className="text-xs text-gray-600">
-                {logoutButtonVisible ? 'Logout OK' : 'Logout Missing'}
-              </span>
-            </div>
-          <Button
+            <Button
               variant="ghost"
-            size="sm"
+              size="sm"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="p-2"
-          >
+            >
               {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
+            </Button>
             <h1 className="text-lg font-semibold text-gray-900">
               Gestor de Recibos
             </h1>
           </div>
           <div className="flex items-center space-x-2">
-          <ThemeToggle />
+            <ThemeToggle />
             <Button
               variant="ghost"
               size="sm"
@@ -3167,7 +3142,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
             </Button>
             <div className="text-sm text-gray-600">
               {session?.user?.name}
-        </div>
+            </div>
           </div>
         </div>
       </div>
