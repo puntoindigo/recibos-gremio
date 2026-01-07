@@ -327,6 +327,7 @@ const [nombreFiltro, setNombreFiltro] = useState<string>("");
   const [showDebug, setShowDebug] = useState<boolean>(true); // Activado para debug
   const [showDebugModal, setShowDebugModal] = useState<boolean>(false);
   const [showHelpModal, setShowHelpModal] = useState<boolean>(false);
+  const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
   
   // Estados para persistencia de subidas
   const [currentUploadSessionId, setCurrentUploadSessionId] = useState<string | null>(null);
