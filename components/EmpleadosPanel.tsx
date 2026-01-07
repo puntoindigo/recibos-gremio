@@ -529,15 +529,18 @@ export default function EmpleadosPanel({ empresaFiltro }: EmpleadosPanelProps) {
         <EmpleadoModal
           empleado={selectedEmpleado}
           nuevaEmpresaCreada={nuevaEmpresaCreada}
+          expandFaceRecognition={expandFaceRecognition}
           onClose={() => {
             setShowModal(false);
             setSelectedEmpleado(null);
             setNuevaEmpresaCreada(null);
+            setExpandFaceRecognition(false);
           }}
           onSave={() => {
             setShowModal(false);
             setSelectedEmpleado(null);
             setNuevaEmpresaCreada(null);
+            setExpandFaceRecognition(false);
             loadEmpleados();
           }}
           onOpenFicha={(legajo, empresa) => {
@@ -576,6 +579,13 @@ export default function EmpleadosPanel({ empresaFiltro }: EmpleadosPanelProps) {
             setSelectedEmpleado(empleados.find(emp => emp.legajo === selectedLegajo) || null);
           }}
           isFromEdit={fichaFromEdit}
+          onOpenEdit={(legajo, empresa) => {
+            setShowFichaModal(false);
+            const empleadoToEdit = empleados.find(emp => emp.legajo === legajo);
+            setSelectedEmpleado(empleadoToEdit || null);
+            setExpandFaceRecognition(true);
+            setShowModal(true);
+          }}
         />
       )}
 

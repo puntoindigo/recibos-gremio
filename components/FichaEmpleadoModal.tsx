@@ -29,7 +29,10 @@ import {
   Clock,
   MapPin,
   Trash2,
-  Loader2
+  Loader2,
+  Camera,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { getFichaEmpleado } from '@/lib/descuentos-manager';
 // import { db } from '@/lib/db'; // Removido - usar dataManager en su lugar
@@ -43,6 +46,7 @@ interface FichaEmpleadoModalProps {
   onClose: () => void;
   onBack?: () => void;
   isFromEdit?: boolean;
+  onOpenEdit?: (legajo: string, empresa: string) => void;
 }
 
 interface FichaData {
@@ -57,13 +61,22 @@ interface FichaData {
   cuotasRestantes: number;
 }
 
-export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, isFromEdit }: FichaEmpleadoModalProps) {
+export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, isFromEdit, onOpenEdit }: FichaEmpleadoModalProps) {
   const { dataManager } = useCentralizedDataManager();
   const [fichaData, setFichaData] = useState<FichaData | null>(null);
   const [recibos, setRecibos] = useState<any[]>([]);
   const [registros, setRegistros] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [expandedModules, setExpandedModules] = useState<{
+    registros: boolean;
+    descuentosActivos: boolean;
+    descuentosPagados: boolean;
+  }>({
+    registros: false,
+    descuentosActivos: false,
+    descuentosPagados: false
+  });
 
   useEffect(() => {
     loadFichaData();
@@ -102,6 +115,13 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
       try {
         const registrosData = await dataManager.getRegistrosByLegajo(legajo);
         setRegistros(registrosData || []);
+        
+        // Auto-expandir módulos que tienen contenido
+        setExpandedModules({
+          registros: (registrosData || []).length > 0,
+          descuentosActivos: ficha.descuentosActivos.length > 0,
+          descuentosPagados: ficha.descuentosPagados.length > 0
+        });
       } catch (registrosError: any) {
         console.error('❌ Error cargando registros en ficha:', {
           legajo,
@@ -114,6 +134,11 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
         });
         // No romper la ficha si falla cargar registros
         setRegistros([]);
+        setExpandedModules({
+          registros: false,
+          descuentosActivos: ficha.descuentosActivos.length > 0,
+          descuentosPagados: ficha.descuentosPagados.length > 0
+        });
       }
     } catch (error: any) {
       console.error('❌ Error cargando ficha del empleado:', {
@@ -228,6 +253,34 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
 
         <div className="flex-1 overflow-y-auto px-6 py-4 pt-6 modal-content-fix">
         <div className="space-y-6">
+          {/* Botón rápido de registro biométrico */}
+          {onOpenEdit && (
+            <Card className="border-blue-200 bg-blue-50">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Camera className="h-6 w-6 text-blue-600" />
+                    <div>
+                      <p className="font-semibold text-blue-900">Registro Biométrico</p>
+                      <p className="text-sm text-blue-700">Registra o actualiza los datos de reconocimiento facial</p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      if (onOpenEdit) {
+                        onOpenEdit(legajo, empresa);
+                      }
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Camera className="h-4 w-4 mr-2" />
+                    Registrar/Actualizar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
           {/* Resumen financiero */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
@@ -288,18 +341,33 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
           </div>
 
           {/* Registros de Entrada/Salida */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Clock className="h-5 w-5" />
-                <span>Registros de Entrada/Salida</span>
-              </CardTitle>
-              <CardDescription>
-                Historial de registros de asistencia
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {registros.length > 0 ? (
+          {(registros.length > 0 || expandedModules.registros) && (
+            <Card>
+              <CardHeader 
+                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => setExpandedModules(prev => ({ ...prev, registros: !prev.registros }))}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Clock className="h-5 w-5" />
+                    <CardTitle>Registros de Entrada/Salida</CardTitle>
+                    {registros.length > 0 && (
+                      <Badge variant="outline" className="ml-2">{registros.length}</Badge>
+                    )}
+                  </div>
+                  {expandedModules.registros ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                  )}
+                </div>
+                <CardDescription>
+                  Historial de registros de asistencia
+                </CardDescription>
+              </CardHeader>
+              {expandedModules.registros && (
+                <CardContent>
+                  {registros.length > 0 ? (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {registros.map((registro) => (
                     <div
@@ -373,22 +441,39 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
                   <p>No hay registros de entrada/salida</p>
                 </div>
               )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              )}
+            </Card>
+          )}
 
           {/* Descuentos activos */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <CreditCard className="h-5 w-5" />
-                <span>Descuentos Activos</span>
-              </CardTitle>
-              <CardDescription>
-                Descuentos pendientes de pago
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {fichaData.descuentosActivos.length > 0 ? (
+          {(fichaData.descuentosActivos.length > 0 || expandedModules.descuentosActivos) && (
+            <Card>
+              <CardHeader 
+                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => setExpandedModules(prev => ({ ...prev, descuentosActivos: !prev.descuentosActivos }))}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <CreditCard className="h-5 w-5" />
+                    <CardTitle>Descuentos Activos</CardTitle>
+                    {fichaData.descuentosActivos.length > 0 && (
+                      <Badge variant="outline" className="ml-2">{fichaData.descuentosActivos.length}</Badge>
+                    )}
+                  </div>
+                  {expandedModules.descuentosActivos ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                  )}
+                </div>
+                <CardDescription>
+                  Descuentos pendientes de pago
+                </CardDescription>
+              </CardHeader>
+              {expandedModules.descuentosActivos && (
+                <CardContent>
+                  {fichaData.descuentosActivos.length > 0 ? (
                 <div className="space-y-3">
                   {fichaData.descuentosActivos.map((descuento) => (
                     <div key={descuento.id} className="border rounded-lg p-4">
@@ -416,22 +501,39 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
               ) : (
                 <p className="text-gray-500 text-center py-4">No hay descuentos activos</p>
               )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              )}
+            </Card>
+          )}
 
           {/* Descuentos pagados */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <CheckCircle className="h-5 w-5" />
-                <span>Descuentos Pagados</span>
-              </CardTitle>
-              <CardDescription>
-                Descuentos finalizados
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {fichaData.descuentosPagados.length > 0 ? (
+          {(fichaData.descuentosPagados.length > 0 || expandedModules.descuentosPagados) && (
+            <Card>
+              <CardHeader 
+                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => setExpandedModules(prev => ({ ...prev, descuentosPagados: !prev.descuentosPagados }))}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle className="h-5 w-5" />
+                    <CardTitle>Descuentos Pagados</CardTitle>
+                    {fichaData.descuentosPagados.length > 0 && (
+                      <Badge variant="outline" className="ml-2">{fichaData.descuentosPagados.length}</Badge>
+                    )}
+                  </div>
+                  {expandedModules.descuentosPagados ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                  )}
+                </div>
+                <CardDescription>
+                  Descuentos finalizados
+                </CardDescription>
+              </CardHeader>
+              {expandedModules.descuentosPagados && (
+                <CardContent>
+                  {fichaData.descuentosPagados.length > 0 ? (
                 <div className="space-y-3">
                   {fichaData.descuentosPagados.map((descuento) => (
                     <div key={descuento.id} className="border rounded-lg p-4 bg-gray-50">
@@ -459,8 +561,10 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
               ) : (
                 <p className="text-gray-500 text-center py-4">No hay descuentos pagados</p>
               )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              )}
+            </Card>
+          )}
 
           {/* Recibos de sueldo */}
           <Card>

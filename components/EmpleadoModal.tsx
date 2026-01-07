@@ -36,9 +36,11 @@ interface EmpleadoModalProps {
   onOpenFicha?: (legajo: string, empresa: string) => void;
   onOpenNuevaEmpresa?: () => void;
   onEmpresaCreated?: (nombreEmpresa: string) => void;
+  /** Si debe iniciarse con el reconocimiento facial expandido */
+  expandFaceRecognition?: boolean;
 }
 
-export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, onSave, onOpenFicha, onOpenNuevaEmpresa, onEmpresaCreated }: EmpleadoModalProps) {
+export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, onSave, onOpenFicha, onOpenNuevaEmpresa, onEmpresaCreated, expandFaceRecognition = false }: EmpleadoModalProps) {
   const { dataManager } = useCentralizedDataManager();
   const { data: session } = useSession();
   const { empresas: empresasFromReceipts } = useEmpresasFromReceipts();
@@ -475,31 +477,31 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
             {/* Campos de período y salario removidos para empleados manuales */}
           </div>
 
-          {/* Observaciones - Con toggle */}
-          <div className="space-y-2">
-            <div 
-              className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors"
-              onClick={() => {
-                if (!observacionesExpanded) {
-                  setObservacionesExpanded(true);
-                  // Focus en el textarea después de un pequeño delay
-                  setTimeout(() => {
-                    const textarea = document.getElementById('observaciones') as HTMLTextAreaElement;
-                    if (textarea) {
-                      textarea.focus();
-                    }
-                  }, 100);
-                }
-              }}
-            >
-              <Label htmlFor="observaciones" className="cursor-pointer">
-                Observaciones
-              </Label>
-              {!observacionesExpanded && !formData.observaciones.trim() && (
-                <span className="text-xs text-gray-400">Click para agregar</span>
-              )}
-            </div>
-            {(observacionesExpanded || formData.observaciones.trim()) ? (
+          {/* Observaciones - Solo aparece si está expandido o tiene contenido */}
+          {(observacionesExpanded || formData.observaciones.trim()) && (
+            <div className="space-y-2">
+              <div 
+                className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors"
+                onClick={() => {
+                  if (!observacionesExpanded) {
+                    setObservacionesExpanded(true);
+                    // Focus en el textarea después de un pequeño delay
+                    setTimeout(() => {
+                      const textarea = document.getElementById('observaciones') as HTMLTextAreaElement;
+                      if (textarea) {
+                        textarea.focus();
+                      }
+                    }, 100);
+                  }
+                }}
+              >
+                <Label htmlFor="observaciones" className="cursor-pointer">
+                  Observaciones
+                </Label>
+                {!observacionesExpanded && !formData.observaciones.trim() && (
+                  <span className="text-xs text-gray-400">Click para agregar</span>
+                )}
+              </div>
               <Textarea
                 id="observaciones"
                 value={formData.observaciones}
@@ -508,23 +510,28 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
                 rows={3}
                 className="min-h-[80px]"
               />
-            ) : (
-              <div 
-                className="border border-dashed border-gray-300 rounded-md p-3 text-sm text-gray-400 cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors"
-                onClick={() => {
-                  setObservacionesExpanded(true);
-                  setTimeout(() => {
-                    const textarea = document.getElementById('observaciones') as HTMLTextAreaElement;
-                    if (textarea) {
-                      textarea.focus();
-                    }
-                  }, 100);
-                }}
-              >
-                Click para agregar observaciones...
-              </div>
-            )}
-          </div>
+            </div>
+          )}
+          
+          {/* Botón para agregar observaciones si está cerrado y vacío */}
+          {!observacionesExpanded && !formData.observaciones.trim() && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full text-left text-gray-500 hover:text-gray-700 hover:bg-gray-50 justify-start"
+              onClick={() => {
+                setObservacionesExpanded(true);
+                setTimeout(() => {
+                  const textarea = document.getElementById('observaciones') as HTMLTextAreaElement;
+                  if (textarea) {
+                    textarea.focus();
+                  }
+                }, 100);
+              }}
+            >
+              <span className="text-sm">+ Agregar observaciones</span>
+            </Button>
+          )}
 
           {/* Reconocimiento Facial - Sección Colapsable */}
           <FaceRecognitionCapture
@@ -541,6 +548,7 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
                 faceDescriptor: null
               }));
             }}
+            defaultExpanded={expandFaceRecognition}
           />
 
           {/* Información adicional para empleados manuales */}

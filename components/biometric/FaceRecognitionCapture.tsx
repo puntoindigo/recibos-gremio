@@ -27,6 +27,8 @@ interface FaceRecognitionCaptureProps {
   onDescriptorRemoved?: () => void;
   /** Si está en modo lectura (solo mostrar estado) */
   readOnly?: boolean;
+  /** Si debe iniciarse expandido */
+  defaultExpanded?: boolean;
 }
 
 /**
@@ -39,10 +41,11 @@ export default function FaceRecognitionCapture({
   savedDescriptor,
   onDescriptorCaptured,
   onDescriptorRemoved,
-  readOnly = false
+  readOnly = false,
+  defaultExpanded = false
 }: FaceRecognitionCaptureProps) {
   const { state, loadModels, detectFace, detectFaceBox, stopDetection } = useFaceRecognition();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
