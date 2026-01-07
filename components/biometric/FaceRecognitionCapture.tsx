@@ -270,6 +270,8 @@ export default function FaceRecognitionCapture({
         onDescriptorCaptured(descriptorArray);
         toast.success('Rostro capturado exitosamente');
         stopStream();
+        // Colapsar automáticamente después de capturar exitosamente
+        setIsExpanded(false);
       } else {
         toast.error('No se detectó ningún rostro. Asegúrate de estar frente a la cámara.');
       }
@@ -294,8 +296,8 @@ export default function FaceRecognitionCapture({
   return (
     <Card className="w-full">
       <CardHeader 
-        className="cursor-pointer hover:bg-gray-50 transition-colors"
-        onClick={() => !readOnly && setIsExpanded(!isExpanded)}
+        className={`cursor-pointer hover:bg-gray-50 transition-colors ${hasSavedDescriptor && !isExpanded ? 'pb-4' : ''}`}
+        onClick={() => !readOnly && !hasSavedDescriptor && setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -309,9 +311,27 @@ export default function FaceRecognitionCapture({
             )}
           </div>
           {!readOnly && (
-            <Badge variant="outline" className="text-xs">
-              {isExpanded ? 'Ocultar' : 'Mostrar'}
-            </Badge>
+            <div className="flex items-center gap-2">
+              {hasSavedDescriptor && !isExpanded && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsExpanded(true);
+                  }}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <Camera className="h-3 w-3 mr-1" />
+                  Actualizar
+                </Button>
+              )}
+              {!hasSavedDescriptor && (
+                <Badge variant="outline" className="text-xs">
+                  {isExpanded ? 'Ocultar' : 'Mostrar'}
+                </Badge>
+              )}
+            </div>
           )}
         </div>
         <CardDescription className="text-xs mb-3 pb-2">
