@@ -378,7 +378,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
           {(registros.length > 0 || expandedModules.registros) && (
             <Card>
               <CardHeader 
-                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                className={`cursor-pointer hover:bg-gray-50 transition-colors ${!expandedModules.registros ? 'pb-5' : ''}`}
                 onClick={() => setExpandedModules(prev => ({ ...prev, registros: !prev.registros }))}
               >
                 <div className="flex items-center justify-between">
@@ -484,7 +484,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
           {(fichaData.descuentosActivos.length > 0 || expandedModules.descuentosActivos) && (
             <Card>
               <CardHeader 
-                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                className={`cursor-pointer hover:bg-gray-50 transition-colors ${!expandedModules.descuentosActivos ? 'pb-5' : ''}`}
                 onClick={() => setExpandedModules(prev => ({ ...prev, descuentosActivos: !prev.descuentosActivos }))}
               >
                 <div className="flex items-center justify-between">
@@ -544,7 +544,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
           {(fichaData.descuentosPagados.length > 0 || expandedModules.descuentosPagados) && (
             <Card>
               <CardHeader 
-                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                className={`cursor-pointer hover:bg-gray-50 transition-colors ${!expandedModules.descuentosPagados ? 'pb-5' : ''}`}
                 onClick={() => setExpandedModules(prev => ({ ...prev, descuentosPagados: !prev.descuentosPagados }))}
               >
                 <div className="flex items-center justify-between">
@@ -604,7 +604,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
           {(recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0).length > 0 || expandedModules.recibos) && (
             <Card>
               <CardHeader 
-                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                className={`cursor-pointer hover:bg-gray-50 transition-colors ${!expandedModules.recibos ? 'pb-5' : ''}`}
                 onClick={() => setExpandedModules(prev => ({ ...prev, recibos: !prev.recibos }))}
               >
                 <div className="flex items-center justify-between">
