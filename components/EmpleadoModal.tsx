@@ -102,7 +102,7 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
     if (nuevaEmpresaCreada) {
       console.log('🔍 Debug - Seleccionando empresa automáticamente:', nuevaEmpresaCreada);
       console.log('🔍 Debug - Empresas disponibles:', empresasFromReceipts);
-      console.log('🔍 Debug - Empresa existe en lista:', empresasFromReceipts.some(emp => emp.nombre === nuevaEmpresaCreada));
+      console.log('🔍 Debug - Empresa existe en lista:', empresasFromReceipts.some(emp => emp === nuevaEmpresaCreada));
       
       setFormData(prev => ({
         ...prev,
