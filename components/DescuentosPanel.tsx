@@ -212,7 +212,7 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
     setShowFichaModal(true);
   };
 
-  const filteredDescuentos = descuentos
+  const filteredDescuentos = (descuentos || [])
     .filter(descuento => {
       const matchesSearch = descuento.legajo.includes(searchTerm) || 
                            descuento.nombre.toLowerCase().includes(searchTerm.toLowerCase());
@@ -241,7 +241,7 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
   });
 
   // Usar datos paginados si hay 25+ registros, sino mostrar todos
-  const displayDescuentos = applyPaginationRule(filteredDescuentos, pagination);
+  const displayDescuentos = applyPaginationRule(filteredDescuentos || [], pagination) || [];
 
   const getEstadoBadgeColor = (estado: string) => {
     switch (estado) {
@@ -362,7 +362,7 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {estadisticas.descuentosPorEmpresa.map((empresa, index) => (
+              {estadisticas?.descuentosPorEmpresa?.map((empresa, index) => (
                 <div 
                   key={empresa.empresa} 
                   className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors duration-200"
@@ -464,7 +464,7 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
                 disabled={empresasLoading}
               >
                 <option value="TODOS">Todas</option>
-                {empresasFromReceipts.map((empresa) => (
+                {empresasFromReceipts?.map((empresa) => (
                   <option key={empresa} value={empresa}>
                     {empresa}
                   </option>
@@ -561,7 +561,7 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {displayDescuentos.map((descuento) => (
+                {displayDescuentos?.map((descuento) => (
                   <tr key={descuento.id} className="hover:bg-gray-50">
                     {visibleColumns.includes('legajo') && (
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -584,7 +584,7 @@ export default function DescuentosPanel({ empresaFiltro, employees, onCreateDesc
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex flex-wrap gap-1">
                           {descuento.tags && descuento.tags.length > 0 ? (
-                            descuento.tags.map((tag, index) => (
+                            descuento.tags?.map((tag, index) => (
                               <Badge key={index} variant="secondary" className="text-xs">
                                 {tag}
                               </Badge>
