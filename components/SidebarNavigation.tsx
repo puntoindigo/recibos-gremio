@@ -212,7 +212,7 @@ export default function SidebarNavigation({ activeTab, onTabChange, onDebugClick
                   <Badge className={`text-xs ${getRoleBadgeColor(session?.user?.role || '')}`}>
                     {session?.user?.role}
                   </Badge>
-                  {onDebugClick && (
+                  {onDebugClick && session?.user?.role !== 'ADMIN_REGISTRO' && (
                     <Button
                       variant="ghost"
                       size="sm"

@@ -189,7 +189,9 @@ export default function PersistentUploadProgress({
 
   // Retomar automáticamente si hay archivos pendientes
   useEffect(() => {
-    console.log('🔍 useEffect ejecutándose con:', {
+    // Solo loggear si hay sessionId, evitar spam de logs
+    if (sessionId) {
+      console.log('🔍 useEffect ejecutándose con:', {
       sessionState: !!sessionState,
       sessionId,
       hasAutoResumed: hasAutoResumed.current,

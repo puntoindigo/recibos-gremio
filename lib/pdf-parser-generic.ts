@@ -563,20 +563,41 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
   data["EMPRESA"] = empresaDetectada;
   
   // Extraer CATEGORIA
-  const categoriaPatterns = [
-    /Categoría\s*:?\s*([A-ZÁÉÍÓÚÑ\s\d\-]+)/i,
-    /CATEGORIA\s*:?\s*([A-ZÁÉÍÓÚÑ\s\d\-]+)/i,
-    /Categoría\s+([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s|$)/i,
-    /CATEGORIA\s+([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s|$)/i
-  ];
-  
-  for (const pattern of categoriaPatterns) {
-    const categoriaMatch = rawText.match(pattern);
-    if (categoriaMatch) {
-      let categoria = categoriaMatch[1].trim();
-      if (categoria && categoria.length > 0 && !categoria.match(/^[\s\-]+$/)) {
+  // Para ESTRATEGIA AMBIENTAL, usar patrón más específico que termine antes de "PERIODO DE PAGO"
+  if (empresaDetectada === "ESTRATEGIA AMBIENTAL") {
+    // Patrón específico: CATEGORIA seguido de texto hasta PERIODO DE PAGO o LUGAR Y FECHA
+    const categoriaPatternEA = /CATEGORIA\s+([A-ZÁÉÍÓÚÑ\s]+?)(?:\s+PERIODO\s+DE\s+PAGO|\s+LUGAR\s+Y\s+FECHA\s+DE\s+PAGO|\s+sept-|\s+ago-|\s+oct-|\s+nov-|\s+dic-|\s+ene-|\s+feb-|\s+mar-|\s+abr-|\s+may-|\s+jun-|\s+jul-)/i;
+    const categoriaMatchEA = rawText.match(categoriaPatternEA);
+    if (categoriaMatchEA) {
+      let categoria = categoriaMatchEA[1].trim();
+      // Limpiar espacios múltiples y caracteres extra
+      categoria = categoria.replace(/\s+/g, ' ').trim();
+      // Remover palabras comunes que no son parte de la categoría
+      categoria = categoria.replace(/\s*(DE|DEL|LA|EL|LOS|LAS)\s+/gi, ' ');
+      categoria = categoria.trim();
+      if (categoria && categoria.length > 0 && categoria.length < 100) {
         data["CATEGORIA"] = categoria;
-        break;
+      }
+    }
+  }
+  
+  // Si no se encontró con el patrón específico, usar patrones genéricos
+  if (!data["CATEGORIA"]) {
+    const categoriaPatterns = [
+      /Categoría\s*:?\s*([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s+PERIODO|\s+LUGAR|\s+sept-|\s+ago-|\s+oct-|\s+nov-|\s+dic-|\s+ene-|\s+feb-|\s+mar-|\s+abr-|\s+may-|\s+jun-|\s+jul-|$)/i,
+      /CATEGORIA\s*:?\s*([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s+PERIODO|\s+LUGAR|\s+sept-|\s+ago-|\s+oct-|\s+nov-|\s+dic-|\s+ene-|\s+feb-|\s+mar-|\s+abr-|\s+may-|\s+jun-|\s+jul-|$)/i,
+      /Categoría\s+([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s+PERIODO|\s+LUGAR|\s+sept-|\s+ago-|\s+oct-|\s+nov-|\s+dic-|\s+ene-|\s+feb-|\s+mar-|\s+abr-|\s+may-|\s+jun-|\s+jul-|$)/i,
+      /CATEGORIA\s+([A-ZÁÉÍÓÚÑ\s\d\-]+?)(?:\s+PERIODO|\s+LUGAR|\s+sept-|\s+ago-|\s+oct-|\s+nov-|\s+dic-|\s+ene-|\s+feb-|\s+mar-|\s+abr-|\s+may-|\s+jun-|\s+jul-|$)/i
+    ];
+    
+    for (const pattern of categoriaPatterns) {
+      const categoriaMatch = rawText.match(pattern);
+      if (categoriaMatch) {
+        let categoria = categoriaMatch[1].trim();
+        if (categoria && categoria.length > 0 && !categoria.match(/^[\s\-]+$/)) {
+          data["CATEGORIA"] = categoria;
+          break;
+        }
       }
     }
   }
@@ -590,9 +611,12 @@ export async function parsePdfReceiptToRecord(file: File, debug: boolean = false
           categoria = categoria.replace(/^LUGAR\s+Y\s+FECHA\s+DE\s+PAGO\s+/i, '');
           // Remover "CATEGORIA" si aparece en el texto
           categoria = categoria.replace(/CATEGORIA\s*/gi, '');
+          // Remover "PERIODO DE PAGO" si aparece
+          categoria = categoria.replace(/\s*PERIODO\s+DE\s+PAGO\s*/gi, ' ');
           // Remover "LUGAR Y FECHA DE PAGO" si aparece en el medio
           categoria = categoria.replace(/\s*LUGAR\s+Y\s+FECHA\s+DE\s+PAGO\s*/gi, ' ');
-          // Remover fechas y lugares comunes (ej: "Rosario - 03")
+          // Remover fechas y lugares comunes (ej: "Rosario - 03/10/2025")
+          categoria = categoria.replace(/\s*Rosario\s*-\s*\d+\/\d+\/\d+\s*/gi, '');
           categoria = categoria.replace(/\s*Rosario\s*-\s*\d+\s*/gi, '');
           categoria = categoria.replace(/\s*\d{2}\/\d{2}\/\d{4}\s*/g, '');
           // Remover duplicados de palabras consecutivas

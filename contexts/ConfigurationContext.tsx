@@ -231,6 +231,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         bgColor: 'bg-teal-50',
         activeBgColor: 'bg-teal-100',
         shortcut: 'B',
+        permission: 'backup',
         enabledConfigKey: 'enableBackupSystem'
       },
       { 
@@ -241,6 +242,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         bgColor: 'bg-emerald-50',
         activeBgColor: 'bg-emerald-100',
         shortcut: 'P',
+        permission: 'pendientes',
         enabledConfigKey: 'enablePendingItems'
       },
       { 
@@ -251,6 +253,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         bgColor: 'bg-cyan-50',
         activeBgColor: 'bg-cyan-100',
         shortcut: 'O',
+        permission: 'documentacion',
         enabledConfigKey: 'enableDocumentation'
       },
       { 
@@ -261,6 +264,7 @@ export const ConfigurationProvider: React.FC<{ children: React.ReactNode }> = ({
         bgColor: 'bg-gray-50',
         activeBgColor: 'bg-gray-100',
         shortcut: 'F',
+        permission: 'configuracion',
         enabledConfigKey: null
       },
     ];
