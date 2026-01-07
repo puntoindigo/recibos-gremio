@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { 
   Dialog, 
   DialogContent, 
@@ -63,6 +64,7 @@ interface FichaData {
 
 export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, isFromEdit, onOpenEdit }: FichaEmpleadoModalProps) {
   const { dataManager } = useCentralizedDataManager();
+  const { data: session } = useSession();
   const [fichaData, setFichaData] = useState<FichaData | null>(null);
   const [recibos, setRecibos] = useState<any[]>([]);
   const [registros, setRegistros] = useState<any[]>([]);
@@ -70,16 +72,42 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [hasBiometricData, setHasBiometricData] = useState<boolean>(false);
   const [expandedModules, setExpandedModules] = useState<{
+    descuentos: boolean;
     registros: boolean;
     descuentosActivos: boolean;
     descuentosPagados: boolean;
     recibos: boolean;
   }>({
+    descuentos: false,
     registros: false,
     descuentosActivos: false,
     descuentosPagados: false,
     recibos: false
   });
+
+  // Función para verificar permisos
+  const canAccess = (permission: string) => {
+    if (!session?.user?.permissions) return false;
+    return session.user.permissions.includes(permission) || session.user.permissions.includes('*');
+  };
+
+  // Verificar qué módulos puede ver el usuario
+  // REGISTRO y ADMIN_REGISTRO: no ven descuentos
+  const canViewDescuentos = canAccess('descuentos') && session?.user?.role !== 'REGISTRO' && session?.user?.role !== 'ADMIN_REGISTRO';
+  
+  // Operador de recibos (solo tiene permiso 'recibos'): no ve registros ni descuentos
+  // REGISTRO y ADMIN_REGISTRO: no ven registros
+  const isOnlyReceiptsOperator = session?.user?.permissions && 
+                                  session.user.permissions.length === 1 && 
+                                  session.user.permissions.includes('recibos') &&
+                                  session.user.role !== 'REGISTRO' && 
+                                  session.user.role !== 'ADMIN_REGISTRO';
+  const canViewRegistros = !isOnlyReceiptsOperator && 
+                           session?.user?.role !== 'REGISTRO' && 
+                           session?.user?.role !== 'ADMIN_REGISTRO';
+  
+  // Todos pueden ver recibos si tienen el permiso o son roles de registro
+  const canViewRecibos = canAccess('recibos') || session?.user?.role === 'REGISTRO' || session?.user?.role === 'ADMIN_REGISTRO';
 
   useEffect(() => {
     loadFichaData();
@@ -126,8 +154,10 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
         setRegistros(registrosData || []);
         
         // Auto-expandir módulos que tienen contenido
-        const recibosConArchivos = recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0);
+        const recibosConArchivos = empleadoData.recibos.filter((recibo: any) => recibo.archivos && recibo.archivos.length > 0);
+        const hasDescuentosData = ficha.totalDescontar > 0 || ficha.totalPagado > 0 || ficha.saldoPendiente > 0 || ficha.cuotasRestantes > 0 || ficha.descuentosActivos.length > 0 || ficha.descuentosPagados.length > 0;
         setExpandedModules({
+          descuentos: hasDescuentosData,
           registros: (registrosData || []).length > 0,
           descuentosActivos: ficha.descuentosActivos.length > 0,
           descuentosPagados: ficha.descuentosPagados.length > 0,
@@ -315,67 +345,97 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
             </Card>
           )}
           
-          {/* Resumen financiero */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Módulo de Descuentos - Resumen financiero */}
+          {canViewDescuentos && (fichaData.totalDescontar > 0 || fichaData.totalPagado > 0 || fichaData.saldoPendiente > 0 || fichaData.cuotasRestantes > 0 || fichaData.descuentosActivos.length > 0 || fichaData.descuentosPagados.length > 0 || expandedModules.descuentos) && (
             <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-2">
-                  <Wallet className="h-5 w-5 text-red-600" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total a Descontar</p>
-                    <p className="text-2xl font-bold text-red-600">
-                      ${fichaData.totalDescontar.toLocaleString()}
-                    </p>
+              <CardHeader 
+                className={`cursor-pointer hover:bg-gray-50 transition-colors ${!expandedModules.descuentos ? 'pb-5' : ''}`}
+                onClick={() => setExpandedModules(prev => ({ ...prev, descuentos: !prev.descuentos }))}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <CreditCard className="h-5 w-5" />
+                    <CardTitle>Descuentos</CardTitle>
+                    {(fichaData.totalDescontar > 0 || fichaData.totalPagado > 0 || fichaData.saldoPendiente > 0 || fichaData.cuotasRestantes > 0) && (
+                      <Badge variant="outline" className="ml-2">Resumen</Badge>
+                    )}
                   </div>
+                  {expandedModules.descuentos ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-2">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Pagado</p>
-                    <p className="text-2xl font-bold text-green-600">
-                      ${fichaData.totalPagado.toLocaleString()}
-                    </p>
+                <CardDescription>
+                  Resumen financiero y descuentos del empleado
+                </CardDescription>
+              </CardHeader>
+              {expandedModules.descuentos && (
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <Wallet className="h-5 w-5 text-red-600" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Total a Descontar</p>
+                            <p className="text-2xl font-bold text-red-600">
+                              ${fichaData.totalDescontar.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Total Pagado</p>
+                            <p className="text-2xl font-bold text-green-600">
+                              ${fichaData.totalPagado.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <TrendingDown className="h-5 w-5 text-orange-600" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Saldo Pendiente</p>
+                            <p className="text-2xl font-bold text-orange-600">
+                              ${fichaData.saldoPendiente.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="h-5 w-5 text-blue-600" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Cuotas Restantes</p>
+                            <p className="text-2xl font-bold text-blue-600">
+                              {fichaData.cuotasRestantes}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                </div>
-              </CardContent>
+                </CardContent>
+              )}
             </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-2">
-                  <TrendingDown className="h-5 w-5 text-orange-600" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Saldo Pendiente</p>
-                    <p className="text-2xl font-bold text-orange-600">
-                      ${fichaData.saldoPendiente.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-2">
-                  <Calendar className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Cuotas Restantes</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {fichaData.cuotasRestantes}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          )}
 
           {/* Registros de Entrada/Salida */}
-          {(registros.length > 0 || expandedModules.registros) && (
+          {canViewRegistros && (registros.length > 0 || expandedModules.registros) && (
             <Card>
               <CardHeader 
                 className={`cursor-pointer hover:bg-gray-50 transition-colors ${!expandedModules.registros ? 'pb-5' : ''}`}
@@ -481,7 +541,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
           )}
 
           {/* Descuentos activos */}
-          {(fichaData.descuentosActivos.length > 0 || expandedModules.descuentosActivos) && (
+          {canViewDescuentos && (fichaData.descuentosActivos.length > 0 || expandedModules.descuentosActivos) && (
             <Card>
               <CardHeader 
                 className={`cursor-pointer hover:bg-gray-50 transition-colors ${!expandedModules.descuentosActivos ? 'pb-5' : ''}`}
@@ -541,7 +601,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
           )}
 
           {/* Descuentos pagados */}
-          {(fichaData.descuentosPagados.length > 0 || expandedModules.descuentosPagados) && (
+          {canViewDescuentos && (fichaData.descuentosPagados.length > 0 || expandedModules.descuentosPagados) && (
             <Card>
               <CardHeader 
                 className={`cursor-pointer hover:bg-gray-50 transition-colors ${!expandedModules.descuentosPagados ? 'pb-5' : ''}`}
@@ -601,7 +661,7 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
           )}
 
           {/* Recibos de sueldo */}
-          {(recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0).length > 0 || expandedModules.recibos) && (
+          {canViewRecibos && (recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0).length > 0 || expandedModules.recibos) && (
             <Card>
               <CardHeader 
                 className={`cursor-pointer hover:bg-gray-50 transition-colors ${!expandedModules.recibos ? 'pb-5' : ''}`}
