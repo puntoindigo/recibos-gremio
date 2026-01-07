@@ -77,6 +77,7 @@ export default function EmpleadosPanel({ empresaFiltro }: EmpleadosPanelProps) {
   const [selectedLegajo, setSelectedLegajo] = useState<string>('');
   const [empleadoToDelete, setEmpleadoToDelete] = useState<EmpleadoData | null>(null);
   const [nuevaEmpresaCreada, setNuevaEmpresaCreada] = useState<string | null>(null);
+  const [expandFaceRecognition, setExpandFaceRecognition] = useState(false);
 
   const canManage = session?.user ? canManageUsers(session.user) : false;
 
