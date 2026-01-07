@@ -189,18 +189,25 @@ export default function PersistentUploadProgress({
 
   // Retomar automáticamente si hay archivos pendientes
   useEffect(() => {
-    // Solo loggear si hay sessionId, evitar spam de logs
-    if (sessionId) {
+    // Evitar ejecución si ya se está procesando o si ya se auto-resumió
+    if (!sessionState || !sessionId) {
+      // No loggear si no hay sessionId para evitar spam
+      return;
+    }
+    
+    // Solo loggear en desarrollo para evitar spam en producción
+    if (process.env.NODE_ENV === 'development') {
       console.log('🔍 useEffect ejecutándose con:', {
-      sessionState: !!sessionState,
-      sessionId,
-      hasAutoResumed: hasAutoResumed.current,
-      status: sessionState?.status,
-      pendingFiles: sessionState?.pendingFiles,
-      autoResuming,
-      isResuming,
-      isProcessing
-    });
+        sessionState: !!sessionState,
+        sessionId,
+        hasAutoResumed: hasAutoResumed.current,
+        status: sessionState?.status,
+        pendingFiles: sessionState?.pendingFiles,
+        autoResuming,
+        isResuming,
+        isProcessing
+      });
+    }
 
     // Evitar ejecución si ya se está procesando o si ya se auto-resumó
     if (!sessionState || !sessionId) {
@@ -209,24 +216,32 @@ export default function PersistentUploadProgress({
     }
 
     if (hasAutoResumed.current) {
-      console.log('❌ Ya se auto-resumió');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('❌ Ya se auto-resumió');
+      }
       return;
     }
 
     if (autoResuming || isResuming || isProcessing) {
-      console.log('❌ Ya se está procesando');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('❌ Ya se está procesando');
+      }
       return;
     }
 
     // Evitar auto-resume en sesiones que se acaban de cargar sin archivos pendientes
     if (sessionState.status === 'active' && sessionState.pendingFiles === 0) {
-      console.log('❌ Sesión activa sin archivos pendientes, no se auto-resumirá');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('❌ Sesión activa sin archivos pendientes, no se auto-resumirá');
+      }
       return;
     }
 
     // Evitar auto-resume si es una reanudación manual o desde modal
     if (isManualResume.current || isResumeFromModal.current) {
-      console.log('❌ Reanudación manual o desde modal detectada, no se auto-resumirá');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('❌ Reanudación manual o desde modal detectada, no se auto-resumirá');
+      }
       return;
     }
 
@@ -236,7 +251,9 @@ export default function PersistentUploadProgress({
       const actualPendingFiles = (sessionState.files || []).filter(f => f.status === 'pending');
       
       if (actualPendingFiles.length > 0) {
-        console.log('🔄 Subida pendiente detectada, retomando automáticamente en 2 segundos...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔄 Subida pendiente detectada, retomando automáticamente en 2 segundos...');
+        }
         setAutoResuming(true);
         hasAutoResumed.current = true;
         
@@ -247,18 +264,24 @@ export default function PersistentUploadProgress({
         
         // Crear nuevo timer
         autoResumeTimerRef.current = setTimeout(() => {
-          console.log('🚀 Iniciando retomar automático...');
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🚀 Iniciando retomar automático...');
+          }
           setIsProcessing(true);
           handleResumeUpload();
         }, 2000);
       } else {
-        console.log('❌ No hay archivos pendientes reales, no se auto-resumirá');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('❌ No hay archivos pendientes reales, no se auto-resumirá');
+        }
       }
     } else {
-      console.log('❌ Condiciones no cumplidas para retomar automático:', {
-        status: sessionState.status,
-        pendingFiles: sessionState.pendingFiles
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('❌ Condiciones no cumplidas para retomar automático:', {
+          status: sessionState.status,
+          pendingFiles: sessionState.pendingFiles
+        });
+      }
     }
   }, [sessionState?.status, sessionState?.pendingFiles, sessionId, handleResumeUpload]);
 
