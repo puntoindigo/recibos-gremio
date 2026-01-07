@@ -72,10 +72,12 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
     registros: boolean;
     descuentosActivos: boolean;
     descuentosPagados: boolean;
+    recibos: boolean;
   }>({
     registros: false,
     descuentosActivos: false,
-    descuentosPagados: false
+    descuentosPagados: false,
+    recibos: false
   });
 
   useEffect(() => {
@@ -117,10 +119,12 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
         setRegistros(registrosData || []);
         
         // Auto-expandir módulos que tienen contenido
+        const recibosConArchivos = recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0);
         setExpandedModules({
           registros: (registrosData || []).length > 0,
           descuentosActivos: ficha.descuentosActivos.length > 0,
-          descuentosPagados: ficha.descuentosPagados.length > 0
+          descuentosPagados: ficha.descuentosPagados.length > 0,
+          recibos: recibosConArchivos.length > 0
         });
       } catch (registrosError: any) {
         console.error('❌ Error cargando registros en ficha:', {
@@ -567,42 +571,61 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
           )}
 
           {/* Recibos de sueldo */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <FileText className="h-5 w-5" />
-                <span>Recibos de Sueldo</span>
-              </CardTitle>
-              <CardDescription>
-                Historial de recibos procesados
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0).length > 0 ? (
-                <div className="space-y-2">
-                  {recibos
-                    .filter(recibo => recibo.archivos && recibo.archivos.length > 0)
-                    .map((recibo) => (
-                    <div key={recibo.key} className="border rounded-lg p-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="font-medium">Período: {recibo.periodo}</span>
-                          <p className="text-sm text-gray-600">
-                            Archivos: {(recibo.archivos || []).filter((a: any) => a).join(', ')}
-                          </p>
-                        </div>
-                        <Badge variant="outline">
-                          {recibo.data?.EMPRESA || 'Sin empresa'}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
+          {(recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0).length > 0 || expandedModules.recibos) && (
+            <Card>
+              <CardHeader 
+                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => setExpandedModules(prev => ({ ...prev, recibos: !prev.recibos }))}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <FileText className="h-5 w-5" />
+                    <CardTitle>Recibos de Sueldo</CardTitle>
+                    {recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0).length > 0 && (
+                      <Badge variant="outline" className="ml-2">
+                        {recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0).length}
+                      </Badge>
+                    )}
+                  </div>
+                  {expandedModules.recibos ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                  )}
                 </div>
-              ) : (
-                <p className="text-gray-500 text-center py-4">No hay recibos procesados</p>
+                <CardDescription>
+                  Historial de recibos procesados
+                </CardDescription>
+              </CardHeader>
+              {expandedModules.recibos && (
+                <CardContent>
+                  {recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0).length > 0 ? (
+                    <div className="space-y-2">
+                      {recibos
+                        .filter(recibo => recibo.archivos && recibo.archivos.length > 0)
+                        .map((recibo) => (
+                        <div key={recibo.key} className="border rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-medium">Período: {recibo.periodo}</span>
+                              <p className="text-sm text-gray-600">
+                                Archivos: {(recibo.archivos || []).filter((a: any) => a).join(', ')}
+                              </p>
+                            </div>
+                            <Badge variant="outline">
+                              {recibo.data?.EMPRESA || 'Sin empresa'}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-center py-4">No hay recibos procesados</p>
+                  )}
+                </CardContent>
               )}
-            </CardContent>
-          </Card>
+            </Card>
+          )}
         </div>
         </div>
 
