@@ -510,6 +510,32 @@ export async function processSingleFileWithData(
 
       await getSupabaseManager().createRecibo(reciboData);
       
+      // También crear el registro consolidado para que el empleado aparezca en la lista
+      try {
+        const consolidatedData = {
+          id: `${adjustedData.LEGAJO}-${adjustedData.PERIODO}-${adjustedData.EMPRESA || ''}`,
+          key: `${adjustedData.LEGAJO}-${adjustedData.PERIODO}-${adjustedData.EMPRESA || ''}`,
+          legajo: adjustedData.LEGAJO,
+          nombre: adjustedData.NOMBRE,
+          periodo: adjustedData.PERIODO,
+          cuil: adjustedData.CUIL || '',
+          cuil_norm: adjustedData.CUIL ? adjustedData.CUIL.replace(/-/g, '') : '',
+          archivos: [normalizedFilename],
+          data: {
+            ...adjustedData,
+            filename: normalizedFilename,
+            fileHash: hash,
+            EMPRESA: adjustedData.EMPRESA || ''
+          }
+        };
+        
+        await getSupabaseManager().createConsolidated(consolidatedData);
+        console.log('✅ Registro consolidado creado exitosamente');
+      } catch (consolidatedError) {
+        // No fallar si el consolidated ya existe o hay error - solo loggear
+        console.warn('⚠️ Error creando registro consolidado (puede que ya exista):', consolidatedError);
+      }
+      
       console.log('✅ Recibo ajustado guardado exitosamente en Supabase');
     } catch (error) {
       console.error('❌ Error guardando recibo ajustado en Supabase:', error);
