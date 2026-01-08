@@ -72,22 +72,33 @@ export default function OnPage() {
 
     if (isStreaming && state.isModelLoaded && videoRef.current && !showConfirmModal && !isSaving) {
       recognitionIntervalRef.current = setInterval(async () => {
-        if (videoRef.current && faceDetection?.detection?.score > 0.5) {
+        if (videoRef.current && !showConfirmModal && !isSaving) {
           try {
-            const descriptor = await detectFace(videoRef.current);
-            if (descriptor) {
-              const employee = await findEmployeeByFace(descriptor, dataManager);
-              if (employee) {
-                setDetectedEmployee(employee);
-                setShowConfirmModal(true);
-                // Pausar detección mientras se muestra el modal
-                if (recognitionIntervalRef.current) {
-                  clearInterval(recognitionIntervalRef.current);
+            // Primero verificar si hay un rostro con detectFaceBox (más rápido)
+            const quickDetection = await detectFaceBox(videoRef.current);
+            if (quickDetection?.detection?.score > 0.5) {
+              console.log('🔍 Rostro detectado, iniciando reconocimiento...');
+              // Si hay rostro, hacer reconocimiento completo
+              const descriptor = await detectFace(videoRef.current);
+              if (descriptor) {
+                console.log('✅ Descriptor obtenido, buscando empleado...');
+                const employee = await findEmployeeByFace(descriptor, dataManager);
+                if (employee) {
+                  console.log('✅ Empleado encontrado:', employee);
+                  setDetectedEmployee(employee);
+                  setShowConfirmModal(true);
+                  // Pausar detección mientras se muestra el modal
+                  if (recognitionIntervalRef.current) {
+                    clearInterval(recognitionIntervalRef.current);
+                    recognitionIntervalRef.current = null;
+                  }
+                } else {
+                  console.log('❌ No se encontró empleado coincidente');
                 }
               }
             }
           } catch (error) {
-            console.error('Error en reconocimiento:', error);
+            console.error('❌ Error en reconocimiento:', error);
           }
         }
       }, 2000); // Cada 2 segundos
@@ -96,9 +107,10 @@ export default function OnPage() {
     return () => {
       if (recognitionIntervalRef.current) {
         clearInterval(recognitionIntervalRef.current);
+        recognitionIntervalRef.current = null;
       }
     };
-  }, [isStreaming, state.isModelLoaded, faceDetection, showConfirmModal, isSaving, detectFace, dataManager]);
+  }, [isStreaming, state.isModelLoaded, showConfirmModal, isSaving, detectFace, detectFaceBox, dataManager]);
 
   const startCamera = async () => {
     if (isStreaming || isStartingCamera) return;
