@@ -26,6 +26,7 @@ export default function OnPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [selectedAction, setSelectedAction] = useState<'entrada' | 'salida' | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRecognizing, setIsRecognizing] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   // Cargar modelos al montar
@@ -70,19 +71,23 @@ export default function OnPage() {
       clearInterval(recognitionIntervalRef.current);
     }
 
-    if (isStreaming && state.isModelLoaded && videoRef.current && !showConfirmModal && !isSaving) {
+    if (isStreaming && state.isModelLoaded && videoRef.current && !showConfirmModal && !isSaving && !isRecognizing) {
       recognitionIntervalRef.current = setInterval(async () => {
-        if (videoRef.current && !showConfirmModal && !isSaving) {
+        if (videoRef.current && !showConfirmModal && !isSaving && !isRecognizing) {
           try {
             // Primero verificar si hay un rostro con detectFaceBox (más rápido)
             const quickDetection = await detectFaceBox(videoRef.current);
             if (quickDetection?.detection?.score > 0.5) {
               console.log('🔍 Rostro detectado, iniciando reconocimiento...');
+              setIsRecognizing(true);
+              
               // Si hay rostro, hacer reconocimiento completo
               const descriptor = await detectFace(videoRef.current);
               if (descriptor) {
                 console.log('✅ Descriptor obtenido, buscando empleado...');
                 const employee = await findEmployeeByFace(descriptor, dataManager);
+                setIsRecognizing(false);
+                
                 if (employee) {
                   console.log('✅ Empleado encontrado:', employee);
                   setDetectedEmployee(employee);
@@ -95,10 +100,13 @@ export default function OnPage() {
                 } else {
                   console.log('❌ No se encontró empleado coincidente');
                 }
+              } else {
+                setIsRecognizing(false);
               }
             }
           } catch (error) {
             console.error('❌ Error en reconocimiento:', error);
+            setIsRecognizing(false);
           }
         }
       }, 2000); // Cada 2 segundos
@@ -110,7 +118,7 @@ export default function OnPage() {
         recognitionIntervalRef.current = null;
       }
     };
-  }, [isStreaming, state.isModelLoaded, showConfirmModal, isSaving, detectFace, detectFaceBox, dataManager]);
+  }, [isStreaming, state.isModelLoaded, showConfirmModal, isSaving, isRecognizing, detectFace, detectFaceBox, dataManager]);
 
   const startCamera = async () => {
     if (isStreaming || isStartingCamera) return;
@@ -310,22 +318,37 @@ export default function OnPage() {
           )}
 
           {/* Indicador visual de detección */}
-          {isStreaming && faceDetection && (
-            <div className="absolute top-2 left-2">
-              <div className={`px-3 py-1 rounded text-sm font-medium ${
-                faceDetection.detection.score > 0.5 
-                  ? 'bg-green-500 text-white' 
-                  : 'bg-yellow-500 text-white'
-              }`}>
-                {faceDetection.detection.score > 0.5 ? '✓ Rostro detectado' : '⏳ Ajustando...'}
-              </div>
+          {isStreaming && (
+            <div className="absolute top-2 left-2 flex flex-col gap-2">
+              {isRecognizing && (
+                <div className="px-3 py-1 rounded text-sm font-medium bg-blue-500 text-white flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Detectando empleado...</span>
+                </div>
+              )}
+              {faceDetection && !isRecognizing && (
+                <div className={`px-3 py-1 rounded text-sm font-medium ${
+                  faceDetection.detection.score > 0.5 
+                    ? 'bg-green-500 text-white' 
+                    : 'bg-yellow-500 text-white'
+                }`}>
+                  {faceDetection.detection.score > 0.5 ? '✓ Rostro detectado' : '⏳ Ajustando...'}
+                </div>
+              )}
             </div>
           )}
         </div>
 
         {/* Instrucciones */}
         <div className="mt-4 text-center text-gray-400 text-sm">
-          <p>Posiciona tu rostro frente a la cámara para registro automático</p>
+          {isRecognizing ? (
+            <p className="flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Detectando empleado, por favor espere...</span>
+            </p>
+          ) : (
+            <p>Posiciona tu rostro frente a la cámara para registro automático</p>
+          )}
         </div>
       </div>
 
