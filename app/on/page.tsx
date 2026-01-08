@@ -28,6 +28,81 @@ export default function OnPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const connectionCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Detectar pérdida de conexión y errores críticos
+  useEffect(() => {
+    // Verificar conexión cada 5 segundos
+    connectionCheckIntervalRef.current = setInterval(() => {
+      if (!navigator.onLine) {
+        console.warn('⚠️ Conexión perdida, redirigiendo a inicio...');
+        // Limpiar intervalos antes de redirigir
+        if (detectionIntervalRef.current) {
+          clearInterval(detectionIntervalRef.current);
+        }
+        if (recognitionIntervalRef.current) {
+          clearInterval(recognitionIntervalRef.current);
+        }
+        if (connectionCheckIntervalRef.current) {
+          clearInterval(connectionCheckIntervalRef.current);
+        }
+        window.location.href = '/';
+      }
+    }, 5000);
+
+    // Manejador de errores críticos de JavaScript
+    const handleError = (event: ErrorEvent) => {
+      console.error('❌ Error crítico detectado:', event.error);
+      // Limpiar intervalos antes de redirigir
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+      }
+      if (recognitionIntervalRef.current) {
+        clearInterval(recognitionIntervalRef.current);
+      }
+      if (connectionCheckIntervalRef.current) {
+        clearInterval(connectionCheckIntervalRef.current);
+      }
+      // Redirigir a inicio después de un breve delay para permitir que el error se registre
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1000);
+    };
+
+    // Manejador de promesas rechazadas no capturadas
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('❌ Promesa rechazada no capturada:', event.reason);
+      // Solo redirigir si es un error crítico (no errores menores)
+      if (event.reason?.message?.includes('Network') || 
+          event.reason?.message?.includes('Failed to fetch') ||
+          event.reason?.code === 'NETWORK_ERROR') {
+        if (detectionIntervalRef.current) {
+          clearInterval(detectionIntervalRef.current);
+        }
+        if (recognitionIntervalRef.current) {
+          clearInterval(recognitionIntervalRef.current);
+        }
+        if (connectionCheckIntervalRef.current) {
+          clearInterval(connectionCheckIntervalRef.current);
+        }
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1000);
+      }
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    // Limpiar al desmontar
+    return () => {
+      if (connectionCheckIntervalRef.current) {
+        clearInterval(connectionCheckIntervalRef.current);
+      }
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
 
   // Cargar modelos al montar
   useEffect(() => {
