@@ -2,9 +2,10 @@
 // Endpoint API para recibir UID de tarjetas NFC desde el script Node.js
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getSupabaseClient } from '@/lib/supabase-client';
 
-// Almacenar el último UID leído en memoria (en producción usar Redis o DB)
-let lastCardData: { uid: string; timestamp: string } | null = null;
+// Clave fija para almacenar el último UID en app_config
+const NFC_CARD_CONFIG_KEY = 'nfc_last_card';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,18 +19,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Almacenar el último UID leído
-    lastCardData = {
+    const cardData = {
       uid: String(uid),
       timestamp: timestamp || new Date().toISOString()
     };
 
-    console.log('📱 Tarjeta recibida:', lastCardData);
+    console.log('📱 Tarjeta recibida:', cardData);
+
+    // Guardar en Supabase usando app_config
+    const supabase = getSupabaseClient();
+    
+    // Intentar actualizar o insertar en app_config
+    const { error: upsertError } = await supabase
+      .from('app_config')
+      .upsert({
+        id: NFC_CARD_CONFIG_KEY, // Usar la key como id también
+        key: NFC_CARD_CONFIG_KEY,
+        value: JSON.stringify(cardData),
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'key'
+      });
+
+    if (upsertError) {
+      console.error('Error guardando tarjeta en Supabase:', upsertError);
+      // Si falla, intentar crear la tabla o usar método alternativo
+      // Por ahora, continuar aunque falle para no bloquear
+    }
 
     return NextResponse.json({
       success: true,
-      uid: lastCardData.uid,
-      timestamp: lastCardData.timestamp
+      uid: cardData.uid,
+      timestamp: cardData.timestamp
     });
   } catch (error) {
     console.error('Error procesando tarjeta NFC:', error);
@@ -41,11 +62,47 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  // Endpoint para obtener el último UID leído (polling)
-  return NextResponse.json({
-    success: true,
-    card: lastCardData,
-    timestamp: new Date().toISOString()
-  });
+  try {
+    // Obtener el último UID leído desde Supabase
+    const supabase = getSupabaseClient();
+    
+    const { data, error } = await supabase
+      .from('app_config')
+      .select('value')
+      .eq('key', NFC_CARD_CONFIG_KEY)
+      .single();
+
+    if (error || !data) {
+      // Si no existe, retornar null (primera vez)
+      return NextResponse.json({
+        success: true,
+        card: null,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    try {
+      const cardData = JSON.parse(data.value);
+      return NextResponse.json({
+        success: true,
+        card: cardData,
+        timestamp: new Date().toISOString()
+      });
+    } catch (parseError) {
+      console.error('Error parseando datos de tarjeta:', parseError);
+      return NextResponse.json({
+        success: true,
+        card: null,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Error obteniendo tarjeta NFC:', error);
+    return NextResponse.json({
+      success: true,
+      card: null,
+      timestamp: new Date().toISOString()
+    });
+  }
 }
 
