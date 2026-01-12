@@ -20,6 +20,7 @@ export default function TestCardReaderPage() {
   const [isPolling, setIsPolling] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [pollCount, setPollCount] = useState(0);
+  const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Polling cada 500ms para obtener el último UID leído
@@ -32,6 +33,7 @@ export default function TestCardReaderPage() {
         const data = await response.json();
         
         setPollCount(prev => prev + 1);
+        setServerStatus('online');
         
         if (data.card) {
           // Solo actualizar si es una tarjeta nueva (UID diferente)
@@ -46,6 +48,7 @@ export default function TestCardReaderPage() {
       } catch (error) {
         console.error('Error obteniendo tarjeta:', error);
         setIsConnected(false);
+        setServerStatus('offline');
       }
     };
 
@@ -126,15 +129,30 @@ export default function TestCardReaderPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${
+                    serverStatus === 'online' ? 'bg-green-500' : 
+                    serverStatus === 'offline' ? 'bg-red-500' : 
+                    'bg-yellow-500 animate-pulse'
+                  }`} />
+                  <span className="text-sm text-gray-600">
+                    {serverStatus === 'online' ? 'Servidor conectado' : 
+                     serverStatus === 'offline' ? 'Servidor desconectado' : 
+                     'Verificando servidor...'}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-500">
+                  Polls: {pollCount}
+                </div>
+              </div>
+              
               <div className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-300'}`} />
                 <span className="text-sm text-gray-600">
-                  {isConnected ? 'Lector conectado' : 'Esperando lector...'}
+                  {isConnected ? 'Tarjeta detectada' : 'Esperando tarjeta...'}
                 </span>
-              </div>
-              <div className="text-sm text-gray-500">
-                Polls: {pollCount}
               </div>
             </div>
             
@@ -226,26 +244,65 @@ export default function TestCardReaderPage() {
           <CardHeader>
             <CardTitle>Instrucciones</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm text-gray-600">
-            <div className="flex items-start gap-2">
-              <span className="font-bold">1.</span>
-              <span>Instala las dependencias: <code className="bg-gray-100 px-1 rounded">npm install nfc-pcsc</code></span>
+          <CardContent className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 mb-2">🌐 Para Producción (Vercel)</h3>
+              <div className="space-y-2 text-sm text-blue-800">
+                <div className="flex items-start gap-2">
+                  <span className="font-bold">1.</span>
+                  <span>Instala las dependencias: <code className="bg-blue-100 px-1 rounded">npm install nfc-pcsc</code></span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold">2.</span>
+                  <span>Conecta el lector JD014 por USB a tu computadora</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold">3.</span>
+                  <span>Ejecuta el script apuntando a producción:</span>
+                </div>
+                <div className="ml-6 bg-blue-100 p-2 rounded font-mono text-xs break-all">
+                  SERVER_URL=https://v0-recibos.vercel.app node scripts/nfc-reader.js
+                </div>
+                <div className="ml-6 text-xs text-blue-600 mt-1">
+                  O usa: <code className="bg-blue-200 px-1 rounded">npm run nfc:reader:prod</code>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold">4.</span>
+                  <span>Pasa una tarjeta sobre el lector y observa el UID aquí</span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-start gap-2">
-              <span className="font-bold">2.</span>
-              <span>Conecta el lector JD014 por USB a tu computadora</span>
+            
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 mb-2">💻 Para Desarrollo Local</h3>
+              <div className="space-y-2 text-sm text-gray-600">
+                <div className="flex items-start gap-2">
+                  <span className="font-bold">1.</span>
+                  <span>Instala las dependencias: <code className="bg-gray-100 px-1 rounded">npm install nfc-pcsc</code></span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold">2.</span>
+                  <span>Conecta el lector JD014 por USB a tu computadora</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold">3.</span>
+                  <span>Inicia el servidor Next.js: <code className="bg-gray-100 px-1 rounded">npm run dev</code></span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold">4.</span>
+                  <span>En otra terminal, ejecuta: <code className="bg-gray-100 px-1 rounded">node scripts/nfc-reader.js</code></span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold">5.</span>
+                  <span>Pasa una tarjeta sobre el lector y observa el UID aquí</span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-start gap-2">
-              <span className="font-bold">3.</span>
-              <span>Inicia el servidor Next.js: <code className="bg-gray-100 px-1 rounded">npm run dev</code></span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="font-bold">4.</span>
-              <span>En otra terminal, ejecuta el script: <code className="bg-gray-100 px-1 rounded">node scripts/nfc-reader.js</code></span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="font-bold">5.</span>
-              <span>Pasa una tarjeta sobre el lector y observa el UID aquí</span>
+            
+            <div className="pt-2 border-t">
+              <p className="text-xs text-gray-500">
+                💡 El script detecta automáticamente si estás en producción o desarrollo según la URL configurada
+              </p>
             </div>
           </CardContent>
         </Card>

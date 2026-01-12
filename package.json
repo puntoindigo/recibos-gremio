@@ -11,7 +11,8 @@
     "postinstall": "cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs || true",
     "download-face-models": "node scripts/download-face-api-models.js",
     "test:sections": "node scripts/test-all-sections.js",
-    "nfc:reader": "node scripts/nfc-reader.js"
+    "nfc:reader": "node scripts/nfc-reader.js",
+    "nfc:reader:prod": "SERVER_URL=https://v0-recibos.vercel.app node scripts/nfc-reader.js"
   },
   "dependencies": {
     "@auth/core": "^0.34.2",

@@ -1,20 +1,29 @@
 // scripts/nfc-reader.js
 // Script para leer tarjetas NFC/RFID usando nfc-pcsc
 // Ejecutar con: node scripts/nfc-reader.js
+// Para producción: SERVER_URL=https://v0-recibos.vercel.app node scripts/nfc-reader.js
 
 const { NFC } = require('nfc-pcsc');
+const https = require('https');
 const http = require('http');
+const { URL } = require('url');
 
 const nfc = new NFC();
 let lastUID = null;
+
+// Configurar URL del servidor (desde variable de entorno o default)
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
+const serverUrl = new URL(SERVER_URL);
+
+console.log(`🌐 Servidor configurado: ${SERVER_URL}`);
 
 // Función para enviar UID al servidor Next.js
 function sendUIDToServer(uid) {
   const data = JSON.stringify({ uid, timestamp: new Date().toISOString() });
   
   const options = {
-    hostname: 'localhost',
-    port: 3000,
+    hostname: serverUrl.hostname,
+    port: serverUrl.port || (serverUrl.protocol === 'https:' ? 443 : 80),
     path: '/api/nfc-card',
     method: 'POST',
     headers: {
@@ -23,13 +32,37 @@ function sendUIDToServer(uid) {
     }
   };
 
-  const req = http.request(options, (res) => {
-    console.log(`✅ UID enviado al servidor. Status: ${res.statusCode}`);
+  // Usar https o http según el protocolo
+  const requestModule = serverUrl.protocol === 'https:' ? https : http;
+
+  const req = requestModule.request(options, (res) => {
+    let responseData = '';
+    
+    res.on('data', (chunk) => {
+      responseData += chunk;
+    });
+    
+    res.on('end', () => {
+      if (res.statusCode === 200) {
+        console.log(`✅ UID enviado al servidor. Status: ${res.statusCode}`);
+        try {
+          const response = JSON.parse(responseData);
+          if (response.success) {
+            console.log(`   ✓ Confirmado por el servidor`);
+          }
+        } catch (e) {
+          // Ignorar errores de parsing
+        }
+      } else {
+        console.log(`⚠️  Respuesta del servidor: ${res.statusCode}`);
+      }
+    });
   });
 
   req.on('error', (error) => {
     console.error('❌ Error enviando UID al servidor:', error.message);
-    console.log('💡 Asegúrate de que el servidor Next.js esté corriendo en http://localhost:3000');
+    console.log(`💡 Verifica que el servidor esté accesible en: ${SERVER_URL}`);
+    console.log(`💡 Si es producción, usa: SERVER_URL=${SERVER_URL} node scripts/nfc-reader.js`);
   });
 
   req.write(data);
