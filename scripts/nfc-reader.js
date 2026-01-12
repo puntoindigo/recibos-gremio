@@ -84,11 +84,28 @@ function sendUIDToServer(uid) {
 
 console.log('🔌 Iniciando lector NFC...');
 console.log('📱 Conecta tu lector JD014 y pasa una tarjeta');
-console.log(`🌐 Enviando datos a: ${SERVER_URL}/api/nfc-card\n`);
+console.log(`🌐 Enviando datos a: ${SERVER_URL}/api/nfc-card`);
+console.log(`💻 Sistema: ${process.platform} ${process.arch}`);
+console.log(`📦 Node.js: ${process.version}\n`);
+
+// Timeout para detectar si no hay lectores
+let readerTimeout = setTimeout(() => {
+  console.log('\n⚠️  No se detectó ningún lector después de 5 segundos');
+  console.log('💡 Verifica que:');
+  console.log('   1. El lector esté conectado por USB');
+  console.log('   2. El sistema lo reconozca (Información del Sistema > USB)');
+  console.log('   3. Tengas PC/SC instalado: brew install pcsc-lite');
+  console.log('   4. Ejecuta: npm run nfc:diagnose para diagnóstico completo\n');
+}, 5000);
 
 nfc.on('reader', reader => {
-  console.log(`\n✅ Lector conectado: ${reader.reader.name}`);
-  console.log(`   ATR: ${reader.ATR ? reader.ATR.toString('hex') : 'N/A'}`);
+  clearTimeout(readerTimeout);
+  console.log(`\n✅ LECTOR CONECTADO:`);
+  console.log(`   Nombre: ${reader.reader.name}`);
+  console.log(`   Estado: ${reader.reader.state || 'N/A'}`);
+  if (reader.ATR) {
+    console.log(`   ATR: ${reader.ATR.toString('hex')}`);
+  }
   console.log('⏳ Esperando tarjeta...\n');
 
   reader.on('card', card => {
