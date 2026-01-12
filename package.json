@@ -14,7 +14,8 @@
     "nfc:reader": "node scripts/nfc-reader.js",
     "nfc:reader:prod": "SERVER_URL=https://v0-recibos.vercel.app node scripts/nfc-reader.js",
     "nfc:test": "node scripts/test-nfc-detection.js",
-    "nfc:diagnose": "node scripts/diagnose-nfc.js"
+    "nfc:diagnose": "node scripts/diagnose-nfc.js",
+    "nfc:test-hid": "node scripts/test-hid-reader.js"
   },
   "dependencies": {
     "@auth/core": "^0.34.2",
@@ -38,6 +39,7 @@
     "lucide-react": "^0.539.0",
     "next": "^15.5.9",
     "next-auth": "^4.24.11",
+    "nfc-pcsc": "^0.8.1",
     "pdfjs-dist": "^5.4.54",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
