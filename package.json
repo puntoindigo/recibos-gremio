@@ -12,7 +12,8 @@
     "download-face-models": "node scripts/download-face-api-models.js",
     "test:sections": "node scripts/test-all-sections.js",
     "nfc:reader": "node scripts/nfc-reader.js",
-    "nfc:reader:prod": "SERVER_URL=https://v0-recibos.vercel.app node scripts/nfc-reader.js"
+    "nfc:reader:prod": "SERVER_URL=https://v0-recibos.vercel.app node scripts/nfc-reader.js",
+    "nfc:test": "node scripts/test-nfc-detection.js"
   },
   "dependencies": {
     "@auth/core": "^0.34.2",
