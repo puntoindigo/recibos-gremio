@@ -20,6 +20,11 @@ export default withAuth(
           return true;
         }
         
+        // Permitir acceso a páginas de prueba sin autenticación
+        if (pathname.startsWith('/test-') || pathname === '/on') {
+          return true;
+        }
+        
         // Permitir acceso a API routes sin autenticación (se manejan internamente)
         if (pathname.startsWith('/api/')) {
           return true;
