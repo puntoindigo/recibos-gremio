@@ -30,12 +30,13 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseClient();
     
     // Intentar actualizar o insertar en app_config
+    // value es JSONB, así que podemos pasar el objeto directamente
     const { error: upsertError } = await supabase
       .from('app_config')
       .upsert({
         id: NFC_CARD_CONFIG_KEY, // Usar la key como id también
         key: NFC_CARD_CONFIG_KEY,
-        value: JSON.stringify(cardData),
+        value: cardData, // JSONB acepta objetos directamente
         updated_at: new Date().toISOString()
       }, {
         onConflict: 'key'
@@ -81,20 +82,31 @@ export async function GET() {
       });
     }
 
-    try {
-      const cardData = JSON.parse(data.value);
+    // value es JSONB, así que viene como objeto directamente
+    const cardData = data.value;
+    if (cardData && typeof cardData === 'object') {
       return NextResponse.json({
         success: true,
         card: cardData,
         timestamp: new Date().toISOString()
       });
-    } catch (parseError) {
-      console.error('Error parseando datos de tarjeta:', parseError);
-      return NextResponse.json({
-        success: true,
-        card: null,
-        timestamp: new Date().toISOString()
-      });
+    } else {
+      // Si por alguna razón viene como string, intentar parsear
+      try {
+        const parsed = typeof cardData === 'string' ? JSON.parse(cardData) : cardData;
+        return NextResponse.json({
+          success: true,
+          card: parsed,
+          timestamp: new Date().toISOString()
+        });
+      } catch (parseError) {
+        console.error('Error parseando datos de tarjeta:', parseError);
+        return NextResponse.json({
+          success: true,
+          card: null,
+          timestamp: new Date().toISOString()
+        });
+      }
     }
   } catch (error) {
     console.error('Error obteniendo tarjeta NFC:', error);
