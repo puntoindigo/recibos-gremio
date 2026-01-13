@@ -137,7 +137,7 @@ export default function RfidCardsPanel({ legajo, empresa, nombre, collapsed = fa
       }
 
       // Si no existe, abrir modal para asociar
-      // Inicializar con el legajo del empleado actual
+      // Inicializar con el legajo del empleado actual del componente
       setSelectedLegajo(legajo);
       setShowAssociateModal(true);
     } catch (error) {
@@ -216,8 +216,13 @@ export default function RfidCardsPanel({ legajo, empresa, nombre, collapsed = fa
           inputRef.current.value = '';
         }
         // Recargar tarjetas si se asoció al empleado actual
+        // Siempre recargar porque estamos en el componente del empleado actual
         if (associatedLegajo === legajo) {
           await loadCards();
+        } else {
+          // Si se asoció a otro empleado, también recargar por si acaso
+          // (aunque no debería pasar si el modal se abre desde este componente)
+          console.log(`Tarjeta asociada a ${associatedLegajo}, pero componente es para ${legajo}`);
         }
       } else {
         throw new Error(data.error || 'Error asociando tarjeta');
