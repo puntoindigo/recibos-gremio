@@ -88,8 +88,8 @@ export default function RfidReaderPage() {
       } else {
         setCardData(null);
         setStatus('not_found');
-        // Abrir modal para asociar si no está registrada
-        setShowAssociateModal(true);
+        // Solo informar que no está registrada (no permitir asociar desde aquí)
+        // La asociación solo se hace desde la ficha del empleado
       }
     } catch (error) {
       console.error('Error verificando tarjeta:', error);
