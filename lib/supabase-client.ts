@@ -143,6 +143,17 @@ export interface SupabaseAppConfig {
   updated_at: string;
 }
 
+export interface SupabaseRfidCard {
+  id: string;
+  uid: string;
+  legajo: string;
+  empresa: string;
+  nombre: string;
+  activo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SupabaseRegistro {
   id: string;
   legajo: string;

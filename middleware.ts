@@ -21,7 +21,7 @@ export default withAuth(
         }
         
         // Permitir acceso a páginas de prueba sin autenticación
-        if (pathname.startsWith('/test-') || pathname === '/on') {
+        if (pathname.startsWith('/test-') || pathname === '/on' || pathname === '/rfid') {
           return true;
         }
         

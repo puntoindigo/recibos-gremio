@@ -40,6 +40,7 @@ import { getFichaEmpleado } from '@/lib/descuentos-manager';
 import { empleadoManager, type EmpleadoData } from '@/lib/empleado-manager';
 import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { formatTimestampForDisplay } from '@/lib/date-utils';
+import RfidCardsPanel from './RfidCardsPanel';
 
 interface FichaEmpleadoModalProps {
   legajo: string;
@@ -659,6 +660,14 @@ export default function FichaEmpleadoModal({ legajo, empresa, onClose, onBack, i
               )}
             </Card>
           )}
+
+          {/* Tarjetas RFID */}
+          <RfidCardsPanel
+            legajo={legajo}
+            empresa={empresa}
+            nombre={fichaData.nombre}
+            collapsed={true}
+          />
 
           {/* Recibos de sueldo */}
           {canViewRecibos && (recibos.filter(recibo => recibo.archivos && recibo.archivos.length > 0).length > 0 || expandedModules.recibos) && (
