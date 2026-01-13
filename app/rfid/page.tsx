@@ -245,9 +245,9 @@ export default function RfidReaderPage() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Volver
         </Button>
-        <h1 className="text-3xl font-bold mb-2">Lectura de Tarjeta RFID</h1>
+        <h1 className="text-3xl font-bold mb-2">Verificar Tarjeta RFID</h1>
         <p className="text-muted-foreground">
-          Acerca la tarjeta al lector para identificarla
+          Escribe el código de la tarjeta o acerca la tarjeta al lector para verificar a qué empleado pertenece
         </p>
       </div>
 
@@ -345,32 +345,52 @@ export default function RfidReaderPage() {
 
       {/* Datos del empleado si la tarjeta está registrada */}
       {status === 'found' && cardData && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Empleado Asociado
+        <Card className="mb-6 border-green-500 border-2">
+          <CardHeader className="bg-green-50">
+            <CardTitle className="flex items-center gap-2 text-green-700">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+              Tarjeta Encontrada - Empleado Asociado
             </CardTitle>
+            <CardDescription className="text-green-600">
+              Esta tarjeta está registrada y activa
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-6">
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="bg-green-100 p-3 rounded-full">
+                  <User className="h-8 w-8 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">{cardData.nombre}</p>
+                  <p className="text-sm text-muted-foreground">Legajo: {cardData.legajo}</p>
+                </div>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Nombre</p>
-                <p className="text-lg font-semibold">{cardData.nombre}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Legajo</p>
+                <p className="text-sm text-muted-foreground mb-1">Legajo</p>
                 <p className="text-lg font-semibold">{cardData.legajo}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Empresa</p>
+                <p className="text-sm text-muted-foreground mb-1">Empresa</p>
                 <p className="text-lg font-semibold">{cardData.empresa}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Estado</p>
-                <Badge variant={cardData.activo ? 'default' : 'secondary'}>
-                  {cardData.activo ? 'Activa' : 'Inactiva'}
+                <p className="text-sm text-muted-foreground mb-1">Estado de la Tarjeta</p>
+                <Badge variant={cardData.activo ? 'default' : 'secondary'} className="text-sm">
+                  {cardData.activo ? '✓ Activa' : '✗ Inactiva'}
                 </Badge>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Fecha de Registro</p>
+                <p className="text-sm font-medium">
+                  {new Date(cardData.created_at).toLocaleDateString('es-AR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                  })}
+                </p>
               </div>
             </div>
           </CardContent>

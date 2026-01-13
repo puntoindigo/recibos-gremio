@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Clock, LogIn, LogOut, UserPlus, Trash2, Loader2, MapPin } from 'lucide-react';
+import { Clock, LogIn, LogOut, UserPlus, Trash2, Loader2, MapPin, CreditCard } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 
 export default function AccesosPanel() {
+  const router = useRouter();
   const { dataManager } = useCentralizedDataManager();
   const { data: session } = useSession();
   const [registros, setRegistros] = useState<any[]>([]);
@@ -123,13 +125,25 @@ export default function AccesosPanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Clock className="h-5 w-5" />
-          Registros de Accesos
-        </CardTitle>
-        <CardDescription>
-          Historial de entradas, salidas y altas de empleados
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Registros de Accesos
+            </CardTitle>
+            <CardDescription>
+              Historial de entradas, salidas y altas de empleados
+            </CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => router.push('/rfid')}
+            className="flex items-center gap-2"
+          >
+            <CreditCard className="h-4 w-4" />
+            Verificar Tarjeta RFID
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-2 max-h-[600px] overflow-y-auto">
