@@ -22,6 +22,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import FaceRecognitionCapture from '@/components/biometric/FaceRecognitionCapture';
+import RfidCardsPanel from '@/components/RfidCardsPanel';
 import { toast } from 'sonner';
 import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 import { empleadoManager, type EmpleadoData } from '@/lib/empleado-manager';
@@ -550,6 +551,16 @@ export default function EmpleadoModal({ empleado, nuevaEmpresaCreada, onClose, o
             }}
             defaultExpanded={expandFaceRecognition}
           />
+
+          {/* Tarjetas RFID - Solo en modo edición */}
+          {empleado && formData.legajo && formData.empresa && (
+            <RfidCardsPanel
+              legajo={formData.legajo}
+              empresa={formData.empresa}
+              nombre={formData.nombre}
+              collapsed={true}
+            />
+          )}
 
           {/* Información adicional para empleados manuales */}
           {empleado && empleado.recibosCount === 0 && (
