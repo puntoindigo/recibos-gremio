@@ -25,21 +25,34 @@ export async function GET(
 
     const supabase = getSupabaseClient();
 
-    // Construir query
+    // Normalizar legajo (trim y limpiar espacios)
+    const normalizedLegajo = legajo.trim();
+
+    console.log(`[RFID API] Buscando tarjetas para legajo: "${normalizedLegajo}", empresa: "${empresa || 'sin filtrar'}"`);
+
+    // Construir query - buscar por legajo sin importar empresa
+    // (un empleado puede tener tarjetas de diferentes empresas)
     let query = supabase
       .from('rfid_cards')
       .select('*')
-      .eq('legajo', legajo);
+      .eq('legajo', normalizedLegajo);
 
-    // Filtrar por empresa si se proporciona
-    if (empresa) {
-      query = query.eq('empresa', empresa);
+    // Filtrar por empresa solo si se proporciona y no está vacía
+    if (empresa && empresa.trim()) {
+      const normalizedEmpresa = empresa.trim();
+      console.log(`[RFID API] Filtrando también por empresa: "${normalizedEmpresa}"`);
+      query = query.eq('empresa', normalizedEmpresa);
     }
 
     // Ordenar por fecha de creación (más recientes primero)
     query = query.order('created_at', { ascending: false });
 
     const { data: cards, error } = await query;
+
+    console.log(`[RFID API] Resultado: ${cards?.length || 0} tarjetas encontradas`);
+    if (cards && cards.length > 0) {
+      console.log(`[RFID API] Tarjetas encontradas:`, cards.map(c => ({ id: c.id, uid: c.uid, legajo: c.legajo, empresa: c.empresa })));
+    }
 
     if (error) {
       throw error;

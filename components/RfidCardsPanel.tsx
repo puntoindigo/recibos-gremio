@@ -79,16 +79,24 @@ export default function RfidCardsPanel({ legajo, empresa, nombre, collapsed = fa
   const loadCards = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/rfid/employee/${legajo}?empresa=${encodeURIComponent(empresa)}`);
+      const url = `/api/rfid/employee/${encodeURIComponent(legajo)}${empresa ? `?empresa=${encodeURIComponent(empresa)}` : ''}`;
+      console.log(`[RfidCardsPanel] Cargando tarjetas desde: ${url}`);
+      console.log(`[RfidCardsPanel] Legajo: "${legajo}", Empresa: "${empresa}"`);
+      
+      const response = await fetch(url);
       const data = await response.json();
       
+      console.log(`[RfidCardsPanel] Respuesta:`, data);
+      
       if (data.success) {
-        setCards(data.cards || []);
+        const cardsData = data.cards || [];
+        console.log(`[RfidCardsPanel] Tarjetas recibidas:`, cardsData.length);
+        setCards(cardsData);
       } else {
         throw new Error(data.error || 'Error cargando tarjetas');
       }
     } catch (error) {
-      console.error('Error cargando tarjetas:', error);
+      console.error('[RfidCardsPanel] Error cargando tarjetas:', error);
       toast.error('Error cargando tarjetas RFID');
     } finally {
       setIsLoading(false);
