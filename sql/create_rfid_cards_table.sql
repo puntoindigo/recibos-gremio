@@ -24,23 +24,9 @@ CREATE INDEX IF NOT EXISTS idx_rfid_cards_legajo_empresa ON rfid_cards(legajo, e
 -- Habilitar RLS (Row Level Security)
 ALTER TABLE rfid_cards ENABLE ROW LEVEL SECURITY;
 
--- Política para permitir lectura a usuarios autenticados
-CREATE POLICY "Permitir lectura de tarjetas RFID a usuarios autenticados"
-  ON rfid_cards FOR SELECT
-  USING (auth.role() = 'authenticated');
-
--- Política para permitir inserción a usuarios autenticados
-CREATE POLICY "Permitir inserción de tarjetas RFID a usuarios autenticados"
-  ON rfid_cards FOR INSERT
-  WITH CHECK (auth.role() = 'authenticated');
-
--- Política para permitir actualización a usuarios autenticados
-CREATE POLICY "Permitir actualización de tarjetas RFID a usuarios autenticados"
-  ON rfid_cards FOR UPDATE
-  USING (auth.role() = 'authenticated');
-
--- Política para permitir eliminación a usuarios autenticados
-CREATE POLICY "Permitir eliminación de tarjetas RFID a usuarios autenticados"
-  ON rfid_cards FOR DELETE
-  USING (auth.role() = 'authenticated');
+-- Política para permitir todas las operaciones (similar a otras tablas)
+CREATE POLICY "Allow all operations on rfid_cards"
+  ON rfid_cards FOR ALL
+  USING (true)
+  WITH CHECK (true);
 
