@@ -84,16 +84,20 @@ export async function POST(req: NextRequest) {
     // Crear nueva tarjeta
     const cardId = `rfid_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
+    const cardData = {
+      id: cardId,
+      uid: normalizedUid,
+      legajo: legajo.trim(),
+      empresa: empresa.trim(),
+      nombre: nombre.trim(),
+      activo: true
+    };
+
+    console.log(`[RFID Associate] Creando tarjeta:`, cardData);
+    
     const { data: newCard, error } = await supabase
       .from('rfid_cards')
-      .insert({
-        id: cardId,
-        uid: normalizedUid,
-        legajo: legajo.trim(),
-        empresa: empresa.trim(),
-        nombre: nombre.trim(),
-        activo: true
-      })
+      .insert(cardData)
       .select()
       .single();
 

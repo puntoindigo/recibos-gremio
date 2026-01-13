@@ -32,17 +32,15 @@ export async function GET(
 
     // Construir query - buscar por legajo sin importar empresa
     // (un empleado puede tener tarjetas de diferentes empresas)
+    // NO filtrar por empresa para mostrar todas las tarjetas del legajo
     let query = supabase
       .from('rfid_cards')
       .select('*')
       .eq('legajo', normalizedLegajo);
-
-    // Filtrar por empresa solo si se proporciona y no está vacía
-    if (empresa && empresa.trim()) {
-      const normalizedEmpresa = empresa.trim();
-      console.log(`[RFID API] Filtrando también por empresa: "${normalizedEmpresa}"`);
-      query = query.eq('empresa', normalizedEmpresa);
-    }
+    
+    // Nota: Removido el filtro por empresa para mostrar todas las tarjetas del legajo
+    // Si se necesita filtrar por empresa, se puede hacer en el frontend
+    console.log(`[RFID API] Buscando todas las tarjetas del legajo "${normalizedLegajo}" (sin filtrar por empresa)`);
 
     // Ordenar por fecha de creación (más recientes primero)
     query = query.order('created_at', { ascending: false });

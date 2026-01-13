@@ -199,6 +199,15 @@ export default function RfidCardsPanel({ legajo, empresa, nombre, collapsed = fa
     const employeeEmpresa = selectedEmployee.data?.EMPRESA || empresa;
     const employeeNombre = selectedEmployee.nombre || nombre;
 
+    console.log(`[RfidCardsPanel] Asociando tarjeta:`, {
+      uid: currentUid,
+      legajo: selectedLegajo,
+      empresa: employeeEmpresa,
+      nombre: employeeNombre,
+      empresaProp: empresa,
+      empresaDelEmpleado: selectedEmployee.data?.EMPRESA
+    });
+
     setIsLoading(true);
     try {
       const response = await fetch('/api/rfid/associate', {
