@@ -137,6 +137,8 @@ export default function RfidCardsPanel({ legajo, empresa, nombre, collapsed = fa
       }
 
       // Si no existe, abrir modal para asociar
+      // Inicializar con el legajo del empleado actual
+      setSelectedLegajo(legajo);
       setShowAssociateModal(true);
     } catch (error) {
       console.error('Error verificando tarjeta:', error);
@@ -208,12 +210,13 @@ export default function RfidCardsPanel({ legajo, empresa, nombre, collapsed = fa
         toast.success('Tarjeta asociada correctamente');
         setShowAssociateModal(false);
         setCurrentUid('');
+        const associatedLegajo = selectedLegajo;
         setSelectedLegajo(legajo);
         if (inputRef.current) {
           inputRef.current.value = '';
         }
-        // Recargar tarjetas si es el mismo empleado
-        if (selectedLegajo === legajo) {
+        // Recargar tarjetas si se asoció al empleado actual
+        if (associatedLegajo === legajo) {
           await loadCards();
         }
       } else {
