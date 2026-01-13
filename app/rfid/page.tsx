@@ -14,20 +14,10 @@ import {
   XCircle, 
   Loader2,
   ArrowLeft,
-  UserPlus,
   AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
-import { EmployeeSelector } from '@/components/EmployeeSelector';
-import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle
-} from '@/components/ui/dialog';
 
 interface CardData {
   id: string;
@@ -42,15 +32,10 @@ interface CardData {
 export default function RfidReaderPage() {
   const { data: session } = useSession();
   const router = useRouter();
-  const { dataManager } = useCentralizedDataManager();
   const [status, setStatus] = useState<'waiting' | 'reading' | 'found' | 'not_found' | 'error'>('waiting');
   const [cardData, setCardData] = useState<CardData | null>(null);
   const [uid, setUid] = useState<string>('');
   const [lastReadUid, setLastReadUid] = useState<string>('');
-  const [isAssociating, setIsAssociating] = useState(false);
-  const [showAssociateModal, setShowAssociateModal] = useState(false);
-  const [selectedLegajo, setSelectedLegajo] = useState<string>('');
-  const [employees, setEmployees] = useState<any[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastReadTimeRef = useRef<number>(0);
@@ -58,18 +43,6 @@ export default function RfidReaderPage() {
   // Anti-rebote: ignorar lecturas repetidas en menos de 500ms
   const DEBOUNCE_MS = 500;
 
-  // Cargar empleados para el selector
-  useEffect(() => {
-    const loadEmployees = async () => {
-      try {
-        const empleadosData = await dataManager.getConsolidated();
-        setEmployees(empleadosData || []);
-      } catch (error) {
-        console.error('Error cargando empleados:', error);
-      }
-    };
-    loadEmployees();
-  }, [dataManager]);
 
   // Enfocar el input al cargar la página
   useEffect(() => {
@@ -158,68 +131,10 @@ export default function RfidReaderPage() {
     }, 300);
   };
 
-  // Manejar asociación de tarjeta a empleado
-  const handleAssociateCard = async () => {
-    if (!uid) {
-      toast.error('No hay tarjeta para asociar');
-      return;
-    }
 
-    if (!selectedLegajo) {
-      toast.error('Debes seleccionar un empleado');
-      return;
-    }
-
-    // Buscar datos del empleado seleccionado
-    const selectedEmployee = employees.find(emp => emp.legajo === selectedLegajo);
-    if (!selectedEmployee) {
-      toast.error('Empleado no encontrado');
-      return;
-    }
-
-    const employeeEmpresa = selectedEmployee.data?.EMPRESA || 'Sin empresa';
-    const employeeNombre = selectedEmployee.nombre || 'Sin nombre';
-
-    setIsAssociating(true);
-    try {
-      const response = await fetch('/api/rfid/associate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uid: uid,
-          legajo: selectedLegajo,
-          empresa: employeeEmpresa,
-          nombre: employeeNombre
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success('Tarjeta asociada correctamente');
-        setShowAssociateModal(false);
-        setStatus('found');
-        setCardData(data.card);
-        setSelectedLegajo('');
-        setUid('');
-        if (inputRef.current) {
-          inputRef.current.value = '';
-          inputRef.current.focus();
-        }
-      } else {
-        throw new Error(data.error || 'Error asociando tarjeta');
-      }
-    } catch (error) {
-      console.error('Error asociando tarjeta:', error);
-      toast.error(error instanceof Error ? error.message : 'Error asociando tarjeta');
-    } finally {
-      setIsAssociating(false);
-    }
-  };
-
-  // Resetear estado después de un tiempo (solo si no hay modal abierto)
+  // Resetear estado después de un tiempo
   useEffect(() => {
-    if ((status === 'found' || status === 'not_found') && !showAssociateModal) {
+    if (status === 'found' || status === 'not_found') {
       const timer = setTimeout(() => {
         setStatus('waiting');
         setCardData(null);
@@ -232,7 +147,7 @@ export default function RfidReaderPage() {
 
       return () => clearTimeout(timer);
     }
-  }, [status, showAssociateModal]);
+  }, [status]);
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
@@ -410,87 +325,12 @@ export default function RfidReaderPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button
-              onClick={handleAssociateCard}
-              disabled={isAssociating}
-              className="w-full"
-            >
-              {isAssociating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Procesando...
-                </>
-              ) : (
-                <>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Asociar Tarjeta a Empleado
-                </>
-              )}
-            </Button>
+            <p className="text-sm text-muted-foreground">
+              Para asociar esta tarjeta a un empleado, ve a la ficha del empleado y agrega la tarjeta desde allí.
+            </p>
           </CardContent>
         </Card>
       )}
-
-      {/* Modal para asociar tarjeta */}
-      <Dialog open={showAssociateModal} onOpenChange={setShowAssociateModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Asociar Tarjeta RFID</DialogTitle>
-            <DialogDescription>
-              Esta tarjeta no está registrada. Selecciona un empleado para asociarla.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">UID de la Tarjeta</label>
-              <code className="block mt-1 p-2 bg-muted rounded text-sm font-mono">
-                {uid}
-              </code>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Empleado *</label>
-              <EmployeeSelector
-                employees={employees}
-                value={selectedLegajo}
-                onValueChange={setSelectedLegajo}
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowAssociateModal(false);
-                  setSelectedLegajo('');
-                  setStatus('waiting');
-                  if (inputRef.current) {
-                    inputRef.current.value = '';
-                    inputRef.current.focus();
-                  }
-                }}
-                disabled={isAssociating}
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleAssociateCard}
-                disabled={isAssociating || !selectedLegajo || !uid}
-              >
-                {isAssociating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Procesando...
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Asociar Tarjeta
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
