@@ -55,12 +55,19 @@ export async function POST(req: NextRequest) {
     const supabase = getSupabaseClient();
 
     // Verificar si el UID ya existe
-    const { data: existingCard } = await supabase
+    const { data: existingCard, error: checkError } = await supabase
       .from('rfid_cards')
       .select('id, legajo, nombre')
       .eq('uid', normalizedUid)
-      .single();
+      .maybeSingle();
 
+    // Si hay un error que no sea "no encontrado", lanzarlo
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Error verificando UID existente:', checkError);
+      throw checkError;
+    }
+
+    // Si la tarjeta ya existe, retornar error
     if (existingCard) {
       return NextResponse.json(
         { 
@@ -91,7 +98,13 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) {
+      console.error('Error insertando tarjeta RFID:', error);
+      console.error('Detalles del error:', JSON.stringify(error, null, 2));
       throw error;
+    }
+
+    if (!newCard) {
+      throw new Error('No se pudo crear la tarjeta');
     }
 
     return NextResponse.json({
@@ -109,10 +122,15 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('Error asociando tarjeta RFID:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorDetails = error && typeof error === 'object' && 'code' in error 
+      ? { code: (error as any).code, message: (error as any).message, details: (error as any).details }
+      : errorMessage;
+    
     return NextResponse.json(
       { 
         error: 'Error asociando tarjeta',
-        details: error instanceof Error ? error.message : String(error)
+        details: errorDetails
       },
       { status: 500 }
     );
