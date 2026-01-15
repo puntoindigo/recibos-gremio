@@ -50,6 +50,7 @@ import { parseDateToTimestamp, formatTimestampToDateString, getCurrentDateString
 
 export default function DescuentoModal({ descuento, onClose, onSave, employees, allDescuentos = [], onEmployeeCreated, empresaFiltro }: DescuentoModalProps) {
   const { data: session } = useSession();
+  const normalizedEmployees = Array.isArray(employees) ? employees : [];
   const [formData, setFormData] = useState({
     legajo: '',
     nombre: '',
@@ -66,7 +67,7 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
   const [isLoading, setIsLoading] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showCreateEmployee, setShowCreateEmployee] = useState(false);
-  const [localEmployees, setLocalEmployees] = useState<ConsolidatedEntity[]>(employees);
+  const [localEmployees, setLocalEmployees] = useState<ConsolidatedEntity[]>(normalizedEmployees);
   const [employeeSearchValue, setEmployeeSearchValue] = useState('');
 
   // Refs para manejo de focus
@@ -151,8 +152,8 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
 
   // Sincronizar empleados locales con el prop
   useEffect(() => {
-    setLocalEmployees(employees);
-  }, [employees]);
+    setLocalEmployees(normalizedEmployees);
+  }, [normalizedEmployees]);
 
   // Actualizar fecha inicial y valores predeterminados con los del último descuento registrado
   useEffect(() => {
@@ -178,7 +179,7 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
         descripcion: descuento.descripcion,
         tipoDescuento: descuento.tipoDescuento,
         motivo: descuento.motivo,
-        tags: descuento.tags,
+        tags: Array.isArray(descuento.tags) ? descuento.tags : [],
         observaciones: descuento.observaciones || '',
         fechaInicio: descuento.fechaInicio ? formatTimestampToDateString(descuento.fechaInicio) : getCurrentDateString()
       });
@@ -349,7 +350,7 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="sin-empresa">Sin empresa</SelectItem>
-                {Array.from(new Set(employees.map(emp => emp.data?.EMPRESA).filter(Boolean))).map(empresa => (
+                {Array.from(new Set(localEmployees.map(emp => emp.data?.EMPRESA).filter(Boolean))).map(empresa => (
                   <SelectItem key={empresa} value={empresa!}>
                     {empresa}
                   </SelectItem>
@@ -357,12 +358,12 @@ export default function DescuentoModal({ descuento, onClose, onSave, employees, 
                 {/* Debug: Mostrar todas las empresas encontradas */}
                 {process.env.NODE_ENV === 'development' && (
                   <div className="p-2 text-xs text-gray-500 border-t">
-                    <div>Debug - Empresas encontradas: {JSON.stringify(Array.from(new Set(employees.map(emp => emp.data?.EMPRESA).filter(Boolean))))}</div>
-                    <div>Debug - Total empleados: {employees.length}</div>
-                    <div>Debug - Empleados con EMPRESA: {employees.filter(emp => emp.data?.EMPRESA).length}</div>
-                    <div>Debug - Empleados LIME: {employees.filter(emp => emp.data?.EMPRESA === 'LIME').length}</div>
-                    <div>Debug - Empleados ANTUNEZ: {employees.filter(emp => emp.nombre?.includes('ANTUNEZ')).length}</div>
-                    <div>Debug - Primeros 3 empleados: {JSON.stringify(employees.slice(0, 3).map(emp => ({ legajo: emp.legajo, nombre: emp.nombre, empresa: emp.data?.EMPRESA })))}</div>
+                    <div>Debug - Empresas encontradas: {JSON.stringify(Array.from(new Set(localEmployees.map(emp => emp.data?.EMPRESA).filter(Boolean))))}</div>
+                    <div>Debug - Total empleados: {localEmployees.length}</div>
+                    <div>Debug - Empleados con EMPRESA: {localEmployees.filter(emp => emp.data?.EMPRESA).length}</div>
+                    <div>Debug - Empleados LIME: {localEmployees.filter(emp => emp.data?.EMPRESA === 'LIME').length}</div>
+                    <div>Debug - Empleados ANTUNEZ: {localEmployees.filter(emp => emp.nombre?.includes('ANTUNEZ')).length}</div>
+                    <div>Debug - Primeros 3 empleados: {JSON.stringify(localEmployees.slice(0, 3).map(emp => ({ legajo: emp.legajo, nombre: emp.nombre, empresa: emp.data?.EMPRESA })))}</div>
                   </div>
                 )}
               </SelectContent>
