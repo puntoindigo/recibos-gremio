@@ -121,7 +121,12 @@ export default function SignInPage() {
     };
 
     (window as any).AccountsLoginBeta01 = {
-      onSuccess: handleAccountsSuccess
+      onSuccess: handleAccountsSuccess,
+      onError: (data: { reason?: string }) => {
+        const reason = data?.reason ? ` (${data.reason})` : '';
+        setAccountsError(`No se pudo validar el acceso${reason}.`);
+        setAccountsLoading(false);
+      }
     };
 
     return () => {
