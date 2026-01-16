@@ -1,9 +1,10 @@
 // app/auth/signin/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { signIn, getSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import Script from 'next/script';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -71,8 +72,16 @@ export default function SignInPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [accountsError, setAccountsError] = useState('');
+  const [accountsLoading, setAccountsLoading] = useState(false);
   const [rememberPassword, setRememberPassword] = useState(false);
   const router = useRouter();
+  const accountsEmbedUrl = useMemo(
+    () =>
+      process.env.NEXT_PUBLIC_ACCOUNTS_EMBED_URL ||
+      'https://accounts.puntoindigo.com/embed/accounts-login.beta.01.js',
+    []
+  );
 
   // Cargar credenciales guardadas al montar el componente
   useEffect(() => {
@@ -86,6 +95,41 @@ export default function SignInPage() {
       setRememberPassword(savedRemember);
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleAccountsSuccess = async (data: { token?: string }) => {
+      if (!data?.token) {
+        setAccountsError('No se pudo validar el acceso con Accounts.');
+        return;
+      }
+      setAccountsLoading(true);
+      setAccountsError('');
+      const result = await signIn('accounts', {
+        token: data.token,
+        redirect: false
+      });
+      if (result?.error) {
+        setAccountsError('Acceso inválido. Reintentá nuevamente.');
+        setAccountsLoading(false);
+        return;
+      }
+      router.push('/');
+    };
+
+    (window as any).AccountsLoginBeta01 = {
+      onSuccess: handleAccountsSuccess
+    };
+
+    return () => {
+      if ((window as any).AccountsLoginBeta01?.onSuccess === handleAccountsSuccess) {
+        delete (window as any).AccountsLoginBeta01;
+      }
+    };
+  }, [router]);
 
   // Función para manejar click en card de credenciales
   const handleCredentialCardClick = async (credential: typeof defaultCredentials[0]) => {
@@ -220,7 +264,7 @@ export default function SignInPage() {
         </div>
 
         {/* Formulario Manual */}
-        <div className="max-w-md mx-auto">
+        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-bold text-center">
@@ -292,8 +336,39 @@ export default function SignInPage() {
               </form>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-2xl font-bold text-center">
+                Acceso con Accounts
+              </CardTitle>
+              <CardDescription className="text-center">
+                Solo usuarios registrados en Accounts
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {accountsError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{accountsError}</AlertDescription>
+                </Alert>
+              )}
+              <div id="accounts-login-beta-01" />
+              {accountsLoading && (
+                <div className="flex items-center justify-center text-xs text-gray-500">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Validando acceso...
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
+      <Script
+        src={accountsEmbedUrl}
+        data-accounts-embed="true"
+        data-target="accounts-login-beta-01"
+        strategy="afterInteractive"
+      />
     </div>
   );
 }

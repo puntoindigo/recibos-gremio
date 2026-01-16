@@ -1,6 +1,51 @@
 // lib/auth.ts
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import crypto from 'crypto';
+
+type AccountsEmbedPayload = {
+  email: string;
+  name: string;
+  isAdmin?: boolean;
+  iat: number;
+  exp: number;
+};
+
+const toBase64Url = (input: Buffer | string) => {
+  const buffer = Buffer.isBuffer(input) ? input : Buffer.from(input, 'utf8');
+  return buffer
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+};
+
+const fromBase64Url = (input: string) => {
+  const padded = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padLength = padded.length % 4 ? 4 - (padded.length % 4) : 0;
+  return Buffer.from(padded + '='.repeat(padLength), 'base64').toString('utf8');
+};
+
+const verifyAccountsToken = (token: string, secret: string) => {
+  const [body, signature] = token.split('.');
+  if (!body || !signature) {
+    return null;
+  }
+  const expected = toBase64Url(crypto.createHmac('sha256', secret).update(body).digest());
+  if (expected !== signature) {
+    return null;
+  }
+  try {
+    const payload = JSON.parse(fromBase64Url(body)) as AccountsEmbedPayload;
+    const now = Math.floor(Date.now() / 1000);
+    if (!payload?.email || payload.exp < now) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+};
 
 // Detectar NEXTAUTH_URL automáticamente según el entorno
 function getNextAuthUrl(): string {
@@ -25,6 +70,32 @@ function getNextAuthUrl(): string {
 
 export const authOptions: NextAuthOptions = {
   providers: [
+    CredentialsProvider({
+      id: 'accounts',
+      name: 'accounts',
+      credentials: {
+        token: { label: 'Token', type: 'text' }
+      },
+      async authorize(credentials) {
+        const token = credentials?.token;
+        const secret = process.env.ACCOUNTS_EMBED_SECRET || '';
+        if (!token || !secret) {
+          return null;
+        }
+        const payload = verifyAccountsToken(token, secret);
+        if (!payload) {
+          return null;
+        }
+        return {
+          id: `accounts_${payload.email}`,
+          email: payload.email,
+          name: payload.name || payload.email,
+          role: payload.isAdmin ? 'ACCOUNTS_ADMIN' : 'ACCOUNTS_USER',
+          empresaId: undefined,
+          permissions: ['*']
+        };
+      }
+    }),
     CredentialsProvider({
       name: 'credentials',
       credentials: {
