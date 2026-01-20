@@ -9,9 +9,13 @@ import {
   XCircle, 
   AlertCircle,
   Usb,
-  Radio
+  Radio,
+  BookOpen,
+  PenTool
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // IDs del dispositivo NSCCN Smart Reader
 const VENDOR_ID = 0x0416;
@@ -33,6 +37,10 @@ export default function RFIDReader({
   const [lastUid, setLastUid] = useState<string>('');
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [showDebug, setShowDebug] = useState(false);
+  const [mode, setMode] = useState<'read' | 'write'>('read');
+  const [writeId, setWriteId] = useState<string>('');
+  const [isWriting, setIsWriting] = useState(false);
+  const [readEmpty, setReadEmpty] = useState(false);
   const inputReportListenerRef = useRef<((event: HIDInputReportEvent) => void) | null>(null);
   const keyboardInputRef = useRef<HTMLInputElement>(null);
   const keyboardInputValueRef = useRef<string>('');
@@ -41,6 +49,99 @@ export default function RFIDReader({
 
   // Verificar si WebHID está disponible
   const isWebHIDAvailable = typeof navigator !== 'undefined' && 'hid' in navigator;
+
+  // Generar ID automático de 12 dígitos
+  const generateAutoId = useCallback(() => {
+    const timestamp = Date.now().toString();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    // Tomar últimos 9 dígitos del timestamp + 3 dígitos aleatorios = 12 dígitos
+    const id = (timestamp.slice(-9) + random).padStart(12, '0');
+    return id;
+  }, []);
+
+  // Inicializar ID automático cuando cambia a modo escritura
+  useEffect(() => {
+    if (mode === 'write' && !writeId) {
+      setWriteId(generateAutoId());
+    }
+  }, [mode, writeId, generateAutoId]);
+
+  // Escribir datos en la tarjeta
+  const writeToCard = useCallback(async () => {
+    if (!device || !device.opened) {
+      toast.error('El dispositivo no está conectado');
+      return;
+    }
+
+    const idToWrite = writeId.trim() || generateAutoId();
+    
+    if (idToWrite.length !== 12 || !/^\d+$/.test(idToWrite)) {
+      toast.error('El ID debe tener exactamente 12 dígitos numéricos');
+      return;
+    }
+
+    setIsWriting(true);
+    toast.info('Escribiendo en la tarjeta...', { duration: 2000 });
+
+    try {
+      // Convertir el ID de 12 dígitos a bytes
+      // Dividir en grupos de 2 dígitos y convertir a hexadecimal
+      const idBytes: number[] = [];
+      for (let i = 0; i < idToWrite.length; i += 2) {
+        const twoDigits = idToWrite.slice(i, i + 2);
+        idBytes.push(parseInt(twoDigits, 10));
+      }
+
+      // Crear buffer con el ID (6 bytes para 12 dígitos)
+      const writeBuffer = new Uint8Array(idBytes);
+
+      // Intentar escribir usando output reports
+      if (device.collections && device.collections.length > 0) {
+        const collection = device.collections[0];
+        if (collection.outputReports && collection.outputReports.length > 0) {
+          const outputReport = collection.outputReports[0];
+          const reportId = outputReport.reportId || 0;
+
+          try {
+            // Enviar comando de escritura
+            // Formato común: [comando, datos...]
+            const commandBuffer = new Uint8Array([0x02, ...writeBuffer]); // 0x02 = comando de escritura
+            
+            await device.sendReport(reportId, commandBuffer.buffer);
+            
+            console.log('[RFID] Datos enviados para escritura:', {
+              reportId,
+              id: idToWrite,
+              bytes: Array.from(writeBuffer).map(b => '0x' + b.toString(16).padStart(2, '0'))
+            });
+
+            // Esperar un momento para que se complete la escritura
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            setIsWriting(false);
+            toast.success(`✅ Escritura completada. ID escrito: ${idToWrite}`);
+            setWriteId(''); // Limpiar campo
+            setWriteId(generateAutoId()); // Generar nuevo ID automático
+            
+          } catch (error) {
+            console.error('[RFID] Error escribiendo:', error);
+            setIsWriting(false);
+            toast.error('Error al escribir en la tarjeta. Verifica que la tarjeta esté cerca del lector.');
+          }
+        } else {
+          setIsWriting(false);
+          toast.error('El dispositivo no soporta escritura (no hay output reports)');
+        }
+      } else {
+        setIsWriting(false);
+        toast.error('No se encontraron collections en el dispositivo');
+      }
+    } catch (error) {
+      console.error('[RFID] Error en proceso de escritura:', error);
+      setIsWriting(false);
+      toast.error('Error al escribir en la tarjeta');
+    }
+  }, [device, writeId, generateAutoId]);
 
   // Formatear buffer a UID hexadecimal
   const formatUidFromBuffer = useCallback((buffer: DataView, offset: number = 0): string => {
@@ -189,9 +290,18 @@ export default function RFIDReader({
       
       if (uid && uid.length >= 4) {
         handleCardRead(uid);
+        setReadEmpty(false);
       } else {
         if (process.env.NODE_ENV === 'development') {
           console.warn('[RFID] UID no válido o muy corto:', uid);
+        }
+        // Si recibimos un report pero el UID está vacío o es muy corto, podría ser una tarjeta sin datos
+        if (buffer.byteLength > 0) {
+          const allZeros = Array.from(new Uint8Array(event.data.buffer)).every(b => b === 0);
+          if (allZeros) {
+            setReadEmpty(true);
+            toast.warning('Tarjeta detectada pero no contiene datos');
+          }
         }
       }
     } catch (error) {
@@ -515,93 +625,154 @@ export default function RFIDReader({
 
         {status === 'connected' && (
           <>
-            <div className="flex items-center gap-2 text-green-600 text-sm">
-              <CheckCircle className="h-4 w-4" />
-              <span>Listo para escanear tarjetas</span>
-            </div>
-            <p className="text-xs text-slate-500 mt-2">
-              💡 Si el dispositivo funciona como teclado, simplemente pasa la tarjeta y se capturará automáticamente
-            </p>
-            {/* Input visible para capturar si el dispositivo funciona como teclado */}
-            <div className="mt-3 space-y-2">
-              <label className="text-xs text-slate-600">
-                Si el dispositivo funciona como teclado, el UID aparecerá aquí:
-              </label>
-              <input
-                ref={keyboardInputRef}
-                type="text"
-                autoFocus
-                placeholder="El UID aparecerá aquí cuando pases la tarjeta..."
-                className="w-full px-3 py-2 border border-slate-300 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onInput={(e) => {
-                  const target = e.target as HTMLInputElement;
-                  const value = target.value;
-                  console.log('[RFID] Input de teclado detectado (onInput):', value);
-                  
-                  if (value && value !== keyboardInputValueRef.current) {
-                    keyboardInputValueRef.current = value;
-                    setDebugInfo(`Input de teclado detectado: ${value}`);
-                    
-                    // Si el valor parece un UID (más de 4 caracteres), procesarlo
-                    if (value.length >= 4) {
-                      console.log('[RFID] Procesando UID desde teclado:', value);
-                      handleCardRead(value);
-                      // Limpiar después de un momento
-                      setTimeout(() => {
-                        if (keyboardInputRef.current) {
-                          keyboardInputRef.current.value = '';
-                          keyboardInputValueRef.current = '';
-                          keyboardInputRef.current.focus();
+            <Tabs value={mode} onValueChange={(v) => setMode(v as 'read' | 'write')} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="read" className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  Leer
+                </TabsTrigger>
+                <TabsTrigger value="write" className="flex items-center gap-2">
+                  <PenTool className="h-4 w-4" />
+                  Escribir
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="read" className="space-y-3 mt-4">
+                <div className="flex items-center gap-2 text-green-600 text-sm">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Listo para leer tarjetas</span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  💡 Si el dispositivo funciona como teclado, simplemente pasa la tarjeta y se capturará automáticamente
+                </p>
+                {/* Input visible para capturar si el dispositivo funciona como teclado */}
+                <div className="space-y-2">
+                  <label className="text-xs text-slate-600">
+                    Si el dispositivo funciona como teclado, el UID aparecerá aquí:
+                  </label>
+                  <input
+                    ref={keyboardInputRef}
+                    type="text"
+                    autoFocus={mode === 'read'}
+                    placeholder="El UID aparecerá aquí cuando pases la tarjeta..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onInput={(e) => {
+                      const target = e.target as HTMLInputElement;
+                      const value = target.value;
+                      console.log('[RFID] Input de teclado detectado (onInput):', value);
+                      
+                      if (value && value !== keyboardInputValueRef.current) {
+                        keyboardInputValueRef.current = value;
+                        setDebugInfo(`Input de teclado detectado: ${value}`);
+                        setReadEmpty(false);
+                        
+                        // Si el valor parece un UID (más de 4 caracteres), procesarlo
+                        if (value.length >= 4) {
+                          console.log('[RFID] Procesando UID desde teclado:', value);
+                          handleCardRead(value);
+                          // Limpiar después de un momento
+                          setTimeout(() => {
+                            if (keyboardInputRef.current) {
+                              keyboardInputRef.current.value = '';
+                              keyboardInputValueRef.current = '';
+                              keyboardInputRef.current.focus();
+                            }
+                          }, 500);
                         }
-                      }, 500);
-                    }
-                  }
-                }}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  console.log('[RFID] Input de teclado detectado (onChange):', value);
-                  
-                  if (value && value !== keyboardInputValueRef.current) {
-                    keyboardInputValueRef.current = value;
-                    setDebugInfo(`Input de teclado detectado: ${value}`);
-                    
-                    if (value.length >= 4) {
-                      console.log('[RFID] Procesando UID desde teclado (onChange):', value);
-                      handleCardRead(value);
-                      setTimeout(() => {
-                        if (keyboardInputRef.current) {
-                          keyboardInputRef.current.value = '';
-                          keyboardInputValueRef.current = '';
-                          keyboardInputRef.current.focus();
+                      }
+                    }}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      console.log('[RFID] Input de teclado detectado (onChange):', value);
+                      
+                      if (value && value !== keyboardInputValueRef.current) {
+                        keyboardInputValueRef.current = value;
+                        setDebugInfo(`Input de teclado detectado: ${value}`);
+                        setReadEmpty(false);
+                        
+                        if (value.length >= 4) {
+                          console.log('[RFID] Procesando UID desde teclado (onChange):', value);
+                          handleCardRead(value);
+                          setTimeout(() => {
+                            if (keyboardInputRef.current) {
+                              keyboardInputRef.current.value = '';
+                              keyboardInputValueRef.current = '';
+                              keyboardInputRef.current.focus();
+                            }
+                          }, 500);
                         }
-                      }, 500);
-                    }
-                  }
-                }}
-                onKeyDown={(e) => {
-                  console.log('[RFID] Tecla presionada:', e.key, 'Valor actual:', keyboardInputRef.current?.value);
-                  
-                  // Si presiona Enter, procesar inmediatamente
-                  if (e.key === 'Enter' && keyboardInputRef.current?.value) {
-                    const value = keyboardInputRef.current.value;
-                    console.log('[RFID] Enter presionado, procesando:', value);
-                    handleCardRead(value);
-                    keyboardInputRef.current.value = '';
-                    keyboardInputValueRef.current = '';
-                  }
-                }}
-                onKeyUp={(e) => {
-                  console.log('[RFID] Tecla soltada:', e.key);
-                }}
-                onPaste={(e) => {
-                  console.log('[RFID] Paste detectado');
-                }}
-              />
-            </div>
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && keyboardInputRef.current?.value) {
+                        const value = keyboardInputRef.current.value;
+                        handleCardRead(value);
+                        keyboardInputRef.current.value = '';
+                        keyboardInputValueRef.current = '';
+                      }
+                    }}
+                  />
+                </div>
+                {readEmpty && (
+                  <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                    ⚠️ Tarjeta detectada pero no contiene datos
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="write" className="space-y-3 mt-4">
+                <div className="flex items-center gap-2 text-blue-600 text-sm">
+                  <PenTool className="h-4 w-4" />
+                  <span>Listo para escribir en tarjetas</span>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-slate-600">
+                    ID a escribir (12 dígitos):
+                  </label>
+                  <Input
+                    type="text"
+                    value={writeId}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 12);
+                      setWriteId(value);
+                    }}
+                    placeholder={generateAutoId()}
+                    className="font-mono text-sm"
+                    maxLength={12}
+                    disabled={isWriting}
+                  />
+                  <p className="text-xs text-slate-400">
+                    Si no especificas un ID, se usará el propuesto automáticamente
+                  </p>
+                </div>
+                <Button
+                  onClick={writeToCard}
+                  disabled={isWriting || !device}
+                  className="w-full"
+                  variant="default"
+                >
+                  {isWriting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Escribiendo...
+                    </>
+                  ) : (
+                    <>
+                      <PenTool className="mr-2 h-4 w-4" />
+                      Escribir en Tarjeta
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-slate-500">
+                  💡 Acerca la tarjeta al lector y haz clic en "Escribir en Tarjeta"
+                </p>
+              </TabsContent>
+            </Tabs>
+
             <Button 
               onClick={disconnectDevice}
               variant="outline"
-              className="w-full"
+              className="w-full mt-3"
             >
               Desconectar
             </Button>
