@@ -34,6 +34,8 @@ export default function RFIDReader({
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [showDebug, setShowDebug] = useState(false);
   const inputReportListenerRef = useRef<((event: HIDInputReportEvent) => void) | null>(null);
+  const keyboardInputRef = useRef<HTMLInputElement>(null);
+  const keyboardInputValueRef = useRef<string>('');
   const lastReadTimeRef = useRef<number>(0);
   const DEBOUNCE_MS = 500;
 
@@ -95,8 +97,15 @@ export default function RFIDReader({
 
   // Manejar eventos de input report
   const handleInputReport = useCallback((event: HIDInputReportEvent) => {
+    console.log('[RFID] ⚡ EVENTO INPUT REPORT RECIBIDO!', {
+      reportId: event.reportId,
+      hasData: !!event.data,
+      dataLength: event.data?.byteLength || 0
+    });
+    
     if (!event.data) {
       console.log('[RFID] Input report sin datos');
+      setDebugInfo('Input report recibido pero sin datos');
       return;
     }
 
@@ -109,13 +118,12 @@ export default function RFIDReader({
       const debugMsg = `Report ID: ${event.reportId || 'N/A'}, Length: ${event.data.byteLength}, Data: ${rawData}`;
       setDebugInfo(debugMsg);
       
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[RFID] Input report recibido:', {
-          reportId: event.reportId,
-          dataLength: event.data.byteLength,
-          data: rawData
-        });
-      }
+      // Siempre loggear en producción también para debug
+      console.log('[RFID] Input report recibido:', {
+        reportId: event.reportId,
+        dataLength: event.data.byteLength,
+        data: rawData
+      });
 
       const buffer = new DataView(event.data.buffer);
       const dataArray = new Uint8Array(event.data.buffer);
@@ -223,14 +231,38 @@ export default function RFIDReader({
         await selectedDevice.open();
       }
 
-      // Log información del dispositivo (solo en desarrollo)
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[RFID] Dispositivo conectado:', {
-          vendorId: selectedDevice.vendorId.toString(16),
-          productId: selectedDevice.productId.toString(16),
-          productName: selectedDevice.productName,
-          collections: selectedDevice.collections
+      // Log información del dispositivo
+      console.log('[RFID] Dispositivo conectado:', {
+        vendorId: `0x${selectedDevice.vendorId.toString(16).padStart(4, '0')}`,
+        productId: `0x${selectedDevice.productId.toString(16).padStart(4, '0')}`,
+        productName: selectedDevice.productName,
+        manufacturerName: selectedDevice.manufacturerName,
+        collections: selectedDevice.collections
+      });
+
+      // Log detallado de collections y reports
+      if (selectedDevice.collections && selectedDevice.collections.length > 0) {
+        console.log('[RFID] Collections del dispositivo:');
+        selectedDevice.collections.forEach((collection, idx) => {
+          console.log(`  Collection ${idx}:`, {
+            usage: collection.usage,
+            usagePage: collection.usagePage,
+            inputReports: collection.inputReports?.map(r => ({
+              reportId: r.reportId,
+              items: r.items?.length || 0
+            })),
+            outputReports: collection.outputReports?.map(r => ({
+              reportId: r.reportId,
+              items: r.items?.length || 0
+            })),
+            featureReports: collection.featureReports?.map(r => ({
+              reportId: r.reportId,
+              items: r.items?.length || 0
+            }))
+          });
         });
+      } else {
+        console.warn('[RFID] No se encontraron collections en el dispositivo');
       }
 
       // Configurar listener para input reports
@@ -240,6 +272,35 @@ export default function RFIDReader({
 
       inputReportListenerRef.current = handleInputReport;
       selectedDevice.addEventListener('inputreport', handleInputReport);
+      
+      // Intentar recibir feature reports si están disponibles
+      if (selectedDevice.collections && selectedDevice.collections.length > 0) {
+        for (const collection of selectedDevice.collections) {
+          if (collection.featureReports && collection.featureReports.length > 0) {
+            for (const report of collection.featureReports) {
+              try {
+                const reportId = report.reportId || 0;
+                const data = await selectedDevice.receiveFeatureReport(reportId);
+                console.log(`[RFID] Feature report ${reportId} recibido:`, 
+                  Array.from(new Uint8Array(data.buffer))
+                    .map(b => b.toString(16).padStart(2, '0').toUpperCase())
+                    .join(' ')
+                );
+              } catch (error) {
+                // Ignorar errores de feature reports
+              }
+            }
+          }
+        }
+      }
+      
+      // Actualizar debug info con información del dispositivo
+      setDebugInfo(`Dispositivo: ${selectedDevice.productName || 'N/A'}\nCollections: ${selectedDevice.collections?.length || 0}\nEsperando input reports...`);
+      
+      // Si el dispositivo funciona como teclado, enfocar el input oculto
+      if (keyboardInputRef.current) {
+        keyboardInputRef.current.focus();
+      }
 
       setDevice(selectedDevice);
       setStatus('connected');
@@ -391,6 +452,43 @@ export default function RFIDReader({
               <CheckCircle className="h-4 w-4" />
               <span>Listo para escanear tarjetas</span>
             </div>
+            {/* Input oculto para capturar si el dispositivo funciona como teclado */}
+            <input
+              ref={keyboardInputRef}
+              type="text"
+              autoFocus
+              className="absolute opacity-0 pointer-events-none"
+              style={{ position: 'absolute', left: '-9999px' }}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value && value !== keyboardInputValueRef.current) {
+                  keyboardInputValueRef.current = value;
+                  console.log('[RFID] Input de teclado detectado:', value);
+                  setDebugInfo(`Input de teclado: ${value}`);
+                  
+                  // Si el valor parece un UID (más de 4 caracteres), procesarlo
+                  if (value.length >= 4) {
+                    handleCardRead(value);
+                    // Limpiar después de un momento
+                    setTimeout(() => {
+                      if (keyboardInputRef.current) {
+                        keyboardInputRef.current.value = '';
+                        keyboardInputValueRef.current = '';
+                      }
+                    }, 100);
+                  }
+                }
+              }}
+              onKeyDown={(e) => {
+                // Si presiona Enter, procesar inmediatamente
+                if (e.key === 'Enter' && keyboardInputRef.current?.value) {
+                  const value = keyboardInputRef.current.value;
+                  handleCardRead(value);
+                  keyboardInputRef.current.value = '';
+                  keyboardInputValueRef.current = '';
+                }
+              }}
+            />
             <Button 
               onClick={disconnectDevice}
               variant="outline"
