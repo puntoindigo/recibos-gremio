@@ -249,17 +249,62 @@ export default function RFIDReader({
             usagePage: collection.usagePage,
             inputReports: collection.inputReports?.map(r => ({
               reportId: r.reportId,
-              items: r.items?.length || 0
+              items: r.items?.length || 0,
+              itemsDetail: r.items?.map(item => ({
+                usage: item.usage,
+                usagePage: item.usagePage,
+                reportSize: item.reportSize,
+                reportCount: item.reportCount
+              }))
             })),
             outputReports: collection.outputReports?.map(r => ({
               reportId: r.reportId,
-              items: r.items?.length || 0
+              items: r.items?.length || 0,
+              itemsDetail: r.items?.map(item => ({
+                usage: item.usage,
+                usagePage: item.usagePage,
+                reportSize: item.reportSize,
+                reportCount: item.reportCount
+              }))
             })),
             featureReports: collection.featureReports?.map(r => ({
               reportId: r.reportId,
               items: r.items?.length || 0
             }))
           });
+          
+          // Intentar enviar comando de activación si hay output reports
+          if (collection.outputReports && collection.outputReports.length > 0) {
+            for (const outputReport of collection.outputReports) {
+              const reportId = outputReport.reportId || 0;
+              try {
+                // Intentar enviar comando de activación (común: 0x01 o 0x00)
+                // Algunos dispositivos necesitan este comando para empezar a enviar datos
+                const activationCommands = [
+                  new Uint8Array([0x01]), // Comando de activación común
+                  new Uint8Array([0x00]), // Comando de reset
+                  new Uint8Array([reportId, 0x01]), // Comando con reportId
+                ];
+                
+                for (const cmd of activationCommands) {
+                  try {
+                    await selectedDevice.sendFeatureReport(reportId, cmd.buffer);
+                    console.log(`[RFID] Comando de activación enviado (reportId: ${reportId}, cmd: ${Array.from(cmd).map(b => '0x' + b.toString(16)).join(', ')})`);
+                  } catch (err) {
+                    // Intentar con sendReport si sendFeatureReport falla
+                    try {
+                      await selectedDevice.sendReport(reportId, cmd.buffer);
+                      console.log(`[RFID] Comando enviado via sendReport (reportId: ${reportId})`);
+                    } catch (err2) {
+                      // Ignorar errores, algunos dispositivos no necesitan comandos
+                    }
+                  }
+                }
+              } catch (error) {
+                console.log(`[RFID] No se pudo enviar comando al reportId ${reportId}:`, error);
+              }
+            }
+          }
         });
       } else {
         console.warn('[RFID] No se encontraron collections en el dispositivo');
@@ -295,12 +340,18 @@ export default function RFIDReader({
       }
       
       // Actualizar debug info con información del dispositivo
-      setDebugInfo(`Dispositivo: ${selectedDevice.productName || 'N/A'}\nCollections: ${selectedDevice.collections?.length || 0}\nEsperando input reports...`);
+      const inputReportsCount = selectedDevice.collections?.[0]?.inputReports?.length || 0;
+      const outputReportsCount = selectedDevice.collections?.[0]?.outputReports?.length || 0;
+      setDebugInfo(`Dispositivo: ${selectedDevice.productName || 'N/A'}\nCollections: ${selectedDevice.collections?.length || 0}\nInput Reports: ${inputReportsCount}\nOutput Reports: ${outputReportsCount}\nEsperando datos...`);
       
       // Si el dispositivo funciona como teclado, enfocar el input oculto
-      if (keyboardInputRef.current) {
-        keyboardInputRef.current.focus();
-      }
+      // Esto es importante porque muchos lectores RFID funcionan como emuladores de teclado
+      setTimeout(() => {
+        if (keyboardInputRef.current) {
+          keyboardInputRef.current.focus();
+          console.log('[RFID] Input oculto enfocado para capturar teclado');
+        }
+      }, 500);
 
       setDevice(selectedDevice);
       setStatus('connected');
@@ -452,30 +503,38 @@ export default function RFIDReader({
               <CheckCircle className="h-4 w-4" />
               <span>Listo para escanear tarjetas</span>
             </div>
+            <p className="text-xs text-slate-500 mt-2">
+              💡 Si el dispositivo funciona como teclado, simplemente pasa la tarjeta y se capturará automáticamente
+            </p>
             {/* Input oculto para capturar si el dispositivo funciona como teclado */}
             <input
               ref={keyboardInputRef}
               type="text"
               autoFocus
+              tabIndex={-1}
               className="absolute opacity-0 pointer-events-none"
-              style={{ position: 'absolute', left: '-9999px' }}
-              onChange={(e) => {
-                const value = e.target.value;
+              style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px' }}
+              onInput={(e) => {
+                const target = e.target as HTMLInputElement;
+                const value = target.value;
+                console.log('[RFID] Input de teclado detectado:', value);
+                
                 if (value && value !== keyboardInputValueRef.current) {
                   keyboardInputValueRef.current = value;
-                  console.log('[RFID] Input de teclado detectado:', value);
-                  setDebugInfo(`Input de teclado: ${value}`);
+                  setDebugInfo(`Input de teclado detectado: ${value}`);
                   
                   // Si el valor parece un UID (más de 4 caracteres), procesarlo
                   if (value.length >= 4) {
+                    console.log('[RFID] Procesando UID desde teclado:', value);
                     handleCardRead(value);
                     // Limpiar después de un momento
                     setTimeout(() => {
                       if (keyboardInputRef.current) {
                         keyboardInputRef.current.value = '';
                         keyboardInputValueRef.current = '';
+                        keyboardInputRef.current.focus();
                       }
-                    }, 100);
+                    }, 200);
                   }
                 }
               }}
@@ -483,6 +542,7 @@ export default function RFIDReader({
                 // Si presiona Enter, procesar inmediatamente
                 if (e.key === 'Enter' && keyboardInputRef.current?.value) {
                   const value = keyboardInputRef.current.value;
+                  console.log('[RFID] Enter presionado, procesando:', value);
                   handleCardRead(value);
                   keyboardInputRef.current.value = '';
                   keyboardInputValueRef.current = '';
