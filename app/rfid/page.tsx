@@ -1,12 +1,18 @@
 // app/rfid/page.tsx
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle 
+} from '@/components/ui/dialog';
 import { 
   CreditCard, 
   User, 
@@ -14,10 +20,14 @@ import {
   XCircle, 
   Loader2,
   ArrowLeft,
-  AlertCircle
+  AlertCircle,
+  Save
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
+import RFIDReader from '@/components/RFIDReader';
+import { EmployeeSelector } from '@/components/EmployeeSelector';
+import { useCentralizedDataManager } from '@/hooks/useCentralizedDataManager';
 
 interface CardData {
   id: string;
@@ -32,31 +42,39 @@ interface CardData {
 export default function RfidReaderPage() {
   const { data: session } = useSession();
   const router = useRouter();
+  const { dataManager } = useCentralizedDataManager();
   const [status, setStatus] = useState<'waiting' | 'reading' | 'found' | 'not_found' | 'error'>('waiting');
   const [cardData, setCardData] = useState<CardData | null>(null);
   const [uid, setUid] = useState<string>('');
   const [lastReadUid, setLastReadUid] = useState<string>('');
-  const inputRef = useRef<HTMLInputElement>(null);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [showAssociateModal, setShowAssociateModal] = useState(false);
+  const [selectedLegajo, setSelectedLegajo] = useState<string>('');
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [isAssociating, setIsAssociating] = useState(false);
   const lastReadTimeRef = useRef<number>(0);
 
   // Anti-rebote: ignorar lecturas repetidas en menos de 500ms
   const DEBOUNCE_MS = 500;
 
-
-  // Enfocar el input al cargar la página
+  // Cargar empleados
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, []);
+    const loadEmployees = async () => {
+      try {
+        const empleadosData = await dataManager.getConsolidated();
+        setEmployees(empleadosData || []);
+      } catch (error) {
+        console.error('Error cargando empleados:', error);
+      }
+    };
+    loadEmployees();
+  }, [dataManager]);
 
   // Manejar lectura de tarjeta con anti-rebote
   const handleCardRead = useCallback(async (readUid: string) => {
     const now = Date.now();
     
     // Normalizar UID
-    const normalizedUid = readUid.trim().replace(/\s+/g, '').replace(/\n/g, '').replace(/\r/g, '');
+    const normalizedUid = readUid.trim().replace(/\s+/g, '').replace(/:/g, '').toUpperCase();
 
     if (!normalizedUid) {
       return;
@@ -88,8 +106,8 @@ export default function RfidReaderPage() {
       } else {
         setCardData(null);
         setStatus('not_found');
-        // Solo informar que no está registrada (no permitir asociar desde aquí)
-        // La asociación solo se hace desde la ficha del empleado
+        // Abrir modal para asociar
+        setShowAssociateModal(true);
       }
     } catch (error) {
       console.error('Error verificando tarjeta:', error);
@@ -98,39 +116,58 @@ export default function RfidReaderPage() {
     }
   }, [lastReadUid]);
 
-  // Manejar cambios en el input
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    
-    // Limpiar timer anterior
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    // Si el valor contiene Enter o es suficientemente largo, procesar inmediatamente
-    if (value.includes('\n') || value.length >= 10) {
-      const uidToProcess = value.replace(/\n/g, '').trim();
-      if (uidToProcess) {
-        handleCardRead(uidToProcess);
-        // Limpiar el input después de procesar
-        setTimeout(() => {
-          if (inputRef.current) {
-            inputRef.current.value = '';
-            inputRef.current.focus();
-          }
-        }, 100);
-      }
+  // Asociar tarjeta al empleado seleccionado
+  const handleAssociate = async () => {
+    if (!uid || !selectedLegajo) {
+      toast.error('Selecciona un empleado para asociar la tarjeta');
       return;
     }
 
-    // Debounce para valores parciales
-    debounceTimerRef.current = setTimeout(() => {
-      if (value.trim()) {
-        handleCardRead(value);
-      }
-    }, 300);
-  };
+    // Buscar datos del empleado seleccionado
+    const selectedEmployee = employees.find(emp => emp.legajo === selectedLegajo);
+    if (!selectedEmployee) {
+      toast.error('Empleado no encontrado');
+      return;
+    }
 
+    const employeeEmpresa = selectedEmployee.data?.EMPRESA || 'Sin empresa';
+    const employeeNombre = selectedEmployee.nombre || 'Sin nombre';
+
+    setIsAssociating(true);
+    try {
+      const response = await fetch('/api/rfid/associate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: uid,
+          legajo: selectedLegajo,
+          empresa: employeeEmpresa,
+          nombre: employeeNombre
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('Tarjeta asociada correctamente');
+        setShowAssociateModal(false);
+        setSelectedLegajo('');
+        // Verificar la tarjeta nuevamente para mostrar los datos
+        await handleCardRead(uid);
+      } else {
+        if (data.error && data.details) {
+          toast.error(`${data.error}: ${data.details.nombre} (${data.details.legajo})`);
+        } else {
+          toast.error(data.error || 'Error asociando tarjeta');
+        }
+      }
+    } catch (error) {
+      console.error('Error asociando tarjeta:', error);
+      toast.error('Error asociando tarjeta');
+    } finally {
+      setIsAssociating(false);
+    }
+  };
 
   // Resetear estado después de un tiempo
   useEffect(() => {
@@ -139,11 +176,8 @@ export default function RfidReaderPage() {
         setStatus('waiting');
         setCardData(null);
         setUid('');
-        if (inputRef.current) {
-          inputRef.current.value = '';
-          inputRef.current.focus();
-        }
-      }, 5000); // Resetear después de 5 segundos
+        setLastReadUid('');
+      }, 10000); // Resetear después de 10 segundos
 
       return () => clearTimeout(timer);
     }
@@ -160,43 +194,22 @@ export default function RfidReaderPage() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Volver
         </Button>
-        <h1 className="text-3xl font-bold mb-2">Verificar Tarjeta RFID</h1>
+        <h1 className="text-3xl font-bold mb-2">Asignar Tarjetas RFID</h1>
         <p className="text-muted-foreground">
-          Escribe el código de la tarjeta o acerca la tarjeta al lector para verificar a qué empleado pertenece
+          Conecta el lector RFID y acerca una tarjeta para asignarla a un empleado
         </p>
       </div>
 
-      {/* Input para capturar la lectura (automática o manual) */}
+      {/* Componente WebHID para lectura directa del hardware */}
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Lectura de Tarjeta</CardTitle>
+          <CardTitle>Lector RFID Hardware</CardTitle>
           <CardDescription>
-            Acerca la tarjeta al lector o escribe el UID manualmente
+            Conecta el lector NSCCN Smart Reader para escanear tarjetas automáticamente
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            <Input
-              ref={inputRef}
-              type="text"
-              placeholder="Escribe el UID de la tarjeta o acerca la tarjeta al lector..."
-              onChange={handleInputChange}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  if (inputRef.current?.value) {
-                    handleCardRead(inputRef.current.value);
-                    inputRef.current.value = '';
-                  }
-                }
-              }}
-              autoFocus
-              className="text-lg font-mono"
-            />
-            <p className="text-xs text-muted-foreground">
-              Presiona Enter o espera a que el lector escriba automáticamente el UID
-            </p>
-          </div>
+          <RFIDReader onCardRead={handleCardRead} />
         </CardContent>
       </Card>
 
@@ -230,8 +243,8 @@ export default function RfidReaderPage() {
             )}
             {status === 'not_found' && (
               <>
-                <XCircle className="h-6 w-6 text-red-500" />
-                <span className="text-lg text-red-600">Tarjeta no registrada</span>
+                <XCircle className="h-6 w-6 text-yellow-500" />
+                <span className="text-lg text-yellow-600">Tarjeta no registrada - Lista para asignar</span>
               </>
             )}
             {status === 'error' && (
@@ -252,7 +265,7 @@ export default function RfidReaderPage() {
           </CardHeader>
           <CardContent>
             <code className="text-lg font-mono bg-muted p-2 rounded block">
-              {uid}
+              {uid.match(/.{1,2}/g)?.join(':') || uid}
             </code>
           </CardContent>
         </Card>
@@ -312,26 +325,64 @@ export default function RfidReaderPage() {
         </Card>
       )}
 
-      {/* Mensaje si la tarjeta no está registrada */}
-      {status === 'not_found' && (
-        <Card className="mb-6 border-yellow-500">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-yellow-600">
-              <AlertCircle className="h-5 w-5" />
-              Tarjeta No Registrada
-            </CardTitle>
-            <CardDescription>
-              Esta tarjeta no está vinculada a ningún empleado
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Para asociar esta tarjeta a un empleado, ve a la ficha del empleado y agrega la tarjeta desde allí.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Modal para asociar tarjeta */}
+      <Dialog open={showAssociateModal} onOpenChange={setShowAssociateModal}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Asociar Tarjeta RFID</DialogTitle>
+            <DialogDescription>
+              Selecciona el empleado al que quieres asignar esta tarjeta
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {uid && (
+              <div className="p-3 bg-slate-100 rounded border">
+                <p className="text-xs text-slate-500 mb-1">UID de la tarjeta:</p>
+                <code className="text-sm font-mono text-slate-900">
+                  {uid.match(/.{1,2}/g)?.join(':') || uid}
+                </code>
+              </div>
+            )}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Empleado *</label>
+              <EmployeeSelector
+                employees={employees}
+                value={selectedLegajo}
+                onValueChange={setSelectedLegajo}
+                placeholder="Buscar por legajo o nombre..."
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAssociateModal(false);
+                  setSelectedLegajo('');
+                }}
+                disabled={isAssociating}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleAssociate}
+                disabled={!selectedLegajo || isAssociating}
+              >
+                {isAssociating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Asociando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Asociar Tarjeta
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
