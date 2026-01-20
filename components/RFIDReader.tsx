@@ -243,7 +243,8 @@ export default function RFIDReader({
       // Log detallado de collections y reports
       if (selectedDevice.collections && selectedDevice.collections.length > 0) {
         console.log('[RFID] Collections del dispositivo:');
-        selectedDevice.collections.forEach((collection, idx) => {
+        for (let idx = 0; idx < selectedDevice.collections.length; idx++) {
+          const collection = selectedDevice.collections[idx];
           console.log(`  Collection ${idx}:`, {
             usage: collection.usage,
             usagePage: collection.usagePage,
@@ -305,7 +306,7 @@ export default function RFIDReader({
               }
             }
           }
-        });
+        }
       } else {
         console.warn('[RFID] No se encontraron collections en el dispositivo');
       }
